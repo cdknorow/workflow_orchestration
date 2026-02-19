@@ -21,8 +21,21 @@ ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x0
 
 
 def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from terminal output."""
-    return ANSI_RE.sub("", text)
+    """Remove ANSI escape sequences from terminal output.
+
+    Replaces each sequence with a space so that cursor-movement codes
+    (e.g. ESC[C used instead of literal spaces) don't merge adjacent words.
+    """
+    return ANSI_RE.sub(" ", text)
+
+
+def clean_match(text: str) -> str:
+    """Normalize whitespace in a regex match extracted from terminal output.
+
+    Collapses runs of spaces (introduced when ANSI sequences are replaced
+    with spaces) into a single space and strips leading/trailing whitespace.
+    """
+    return " ".join(text.split())
 
 
 def discover_agents() -> list[tuple[str, Path]]:
@@ -72,7 +85,7 @@ class LogTail(Static):
                     new_entries = matches[self._seen_count:]
                     ts = datetime.now().strftime("%H:%M:%S")
                     for entry in new_entries:
-                        self._timestamped.append((ts, entry.strip()))
+                        self._timestamped.append((ts, clean_match(entry)))
                     self._seen_count = len(matches)
 
                 tail = self._timestamped[-self.max_lines:]
@@ -106,7 +119,7 @@ class StatusBox(Static):
             text = strip_ansi(raw)
             matches = STATUS_RE.findall(text)
             if matches:
-                self.status_text = matches[-1].strip()
+                self.status_text = clean_match(matches[-1])
         except OSError:
             pass
 
@@ -140,7 +153,7 @@ class SummaryBox(Static):
             text = strip_ansi(raw)
             matches = SUMMARY_RE.findall(text)
             if matches:
-                self.summary_text = matches[-1]
+                self.summary_text = clean_match(matches[-1])
         except OSError:
             pass
 
