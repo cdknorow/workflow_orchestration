@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+import argparse
+import subprocess
+import os
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -548,6 +551,25 @@ class FleetDashboard(App):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Multi-Agent Fleet Dashboard")
+    parser.add_argument("path", nargs="?", default=os.getcwd(), help="Path to worktrees root for launching agents (default: current directory)")
+    parser.add_argument("--model", "-m", default="claude", help="Model to use (claude, gemini, etc.)")
+    parser.add_argument("--no-launch", action="store_true", help="Don't launch agents, just show dashboard")
+    args = parser.parse_args()
+
+    if args.path and not args.no_launch:
+        script_path = Path(__file__).parent / "launch_agents.sh"
+        if script_path.exists():
+            print(f"[*] Launching {args.model} agents from {args.path}...")
+            env = os.environ.copy()
+            env["SKIP_DASHBOARD"] = "1"
+            try:
+                subprocess.run([str(script_path), args.path, args.model], env=env, check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"[!] Error launching agents: {e}")
+        else:
+            print(f"[!] Warning: launch_agents.sh not found at {script_path}")
+
     FleetDashboard().run()
 
 

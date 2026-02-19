@@ -16,7 +16,7 @@ authors = [
 ]
 
 [project.scripts]
-fleet-dash = "agent_fleet.dashboard:main"
+agent-fleet = "agent_fleet.dashboard:main"
 
 [tool.setuptools.package-data]
 agent_fleet = ["PROTOCOL.md", "launch_agents.sh"]

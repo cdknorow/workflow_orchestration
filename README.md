@@ -21,11 +21,16 @@ pip install -e .
 Run the launcher and it will create an agent for each worktree inside a tmux session. The status of each of your models will be displayed inside the Dashboard.
 
 ```bash
-# Launch agents and dashboard
-# Use the script directly from the package
-./src/agent_fleet/launch_agents.sh <path-to-root>
+# Launch agents and dashboard from current directory
+agent-fleet
 
-# Or launch just the dashboard if already running
-fleet-dash
+# Launch agents and dashboard from a specific path
+agent-fleet <path-to-root> --model gemini
+
+# Or use the script directly
+./src/agent_fleet/launch_agents.sh <path-to-root> claude
+
+# Or launch just the dashboard if agents are already running
+agent-fleet --no-launch
 ```
 

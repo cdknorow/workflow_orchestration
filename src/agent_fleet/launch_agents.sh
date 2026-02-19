@@ -20,13 +20,13 @@ DASHBOARD_PATH="${SCRIPT_DIR}/dashboard.py"
 # New function to launch the dashboard in a direct terminal window (No tmux)
 launch_dashboard() {
     local title="Fleet Dashboard"
-    local cmd="python3 $DASHBOARD_PATH"
+    local cmd="python3 $DASHBOARD_PATH --no-launch"
 
     # If installed as a package, use the entry point
-    if command -v fleet-dash &>/dev/null; then
-        cmd="fleet-dash"
+    if command -v agent-fleet &>/dev/null; then
+        cmd="agent-fleet --no-launch"
     elif [ ! -f "$DASHBOARD_PATH" ]; then
-        echo "  [!] Dashboard skip: dashboard.py not found and fleet-dash not in PATH."
+        echo "  [!] Dashboard skip: dashboard.py not found and agent-fleet not in PATH."
         return 1
     fi
 
@@ -58,6 +58,14 @@ EOF
     fi
     echo ""
 }
+
+# Skip dashboard launch if requested
+if [ "${SKIP_DASHBOARD:-0}" = "1" ]; then
+    echo "  [~] Skipping dashboard launch (SKIP_DASHBOARD=1)"
+    launch_dashboard() {
+        return 0
+    }
+fi
 
 # Open a new terminal window attached to a tmux session
 open_agent_terminal() {
