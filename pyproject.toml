@@ -12,7 +12,7 @@ dependencies = [
     "textual>=0.75.0",
 ]
 authors = [
-    { name = "CK Norow" }
+    { name = "Chris Knorowski" }
 ]
 
 [project.scripts]
