@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from datetime import datetime
 from glob import glob
@@ -13,11 +12,11 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Static
+from textual.widgets import Footer, Header, Label, Static
 
-TASKS_FILE = Path("fleet_tasks.json")
 LOG_PATTERN = "/tmp/claude_fleet_*.log"
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
+SUMMARY_RE = re.compile(r"\|\|SUMMARY:\s*(.+?)\|\|")
 ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
 
 
@@ -34,19 +33,6 @@ def discover_agents() -> list[tuple[str, Path]]:
         name = p.stem.removeprefix("claude_fleet_")
         results.append((name, p))
     return results
-
-
-def load_tasks() -> dict[str, list[str]]:
-    if TASKS_FILE.exists():
-        try:
-            return json.loads(TASKS_FILE.read_text())
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
-
-
-def save_tasks(data: dict[str, list[str]]) -> None:
-    TASKS_FILE.write_text(json.dumps(data, indent=2))
 
 
 def _status_css_class(status: str) -> str:
@@ -132,62 +118,38 @@ class StatusBox(Static):
         self.update(f"● {value}")
 
 
-class TaskPanel(Vertical):
-    """Per-agent task list with add/delete."""
+class SummaryBox(Static):
+    """Displays the latest ||SUMMARY: ...|| from a log file.
 
-    def __init__(self, agent_name: str, **kwargs) -> None:
+    Hidden entirely (zero height) until an agent emits a summary.
+    """
+
+    summary_text: reactive[str] = reactive("")
+
+    def __init__(self, log_path: Path, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.agent_name = agent_name
+        self.log_path = log_path
 
-    def compose(self) -> ComposeResult:
-        tasks = load_tasks().get(self.agent_name, [])
-        yield Label(
-            f"Tasks ({len(tasks)})",
-            classes="section-label",
-            id=f"tasks-label-{self.agent_name}",
-        )
-        yield ListView(
-            *[ListItem(Label(t)) for t in tasks],
-            id=f"tasks-{self.agent_name}",
-        )
-        yield Input(
-            placeholder="Add task + Enter  •  d = delete selected",
-            id=f"input-{self.agent_name}",
-        )
+    def on_mount(self) -> None:
+        self.display = False          # hidden until first summary arrives
+        self.set_interval(1.0, self._refresh_summary)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        input_id = f"input-{self.agent_name}"
-        if event.input.id != input_id:
-            return
-        text = event.value.strip()
-        if not text:
-            return
-        event.input.value = ""
-        lv: ListView = self.query_one(f"#tasks-{self.agent_name}", ListView)
-        lv.append(ListItem(Label(text)))
-        self._persist(lv)
-
-    def delete_selected(self) -> None:
-        lv: ListView = self.query_one(f"#tasks-{self.agent_name}", ListView)
-        if lv.index is not None and len(lv.children) > 0:
-            lv.children[lv.index].remove()
-            self._persist(lv)
-
-    def _persist(self, lv: ListView) -> None:
-        all_tasks = load_tasks()
-        items: list[str] = []
-        for child in lv.children:
-            labels = child.query(Label)
-            if labels:
-                items.append(str(labels.first.renderable))
-        all_tasks[self.agent_name] = items
-        save_tasks(all_tasks)
-        # Update task count label
+    def _refresh_summary(self) -> None:
         try:
-            label = self.query_one(f"#tasks-label-{self.agent_name}", Label)
-            label.update(f"Tasks ({len(items)})")
-        except Exception:
+            raw = self.log_path.read_text(errors="replace")
+            text = strip_ansi(raw)
+            matches = SUMMARY_RE.findall(text)
+            if matches:
+                self.summary_text = matches[-1].strip()
+        except OSError:
             pass
+
+    def watch_summary_text(self, value: str) -> None:
+        if value:
+            self.display = True
+            self.update(f"[bold]Goal:[/bold] {value}")
+        else:
+            self.display = False
 
 
 class AgentCard(Vertical):
@@ -200,10 +162,10 @@ class AgentCard(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Label(f" {self.agent_name.upper()} ", classes="agent-header")
+        yield SummaryBox(self.log_path, classes="summary-box")   # hidden until agent emits a summary
         yield StatusBox(self.log_path, classes="status-box")
         yield Label("History", classes="section-label")
         yield LogTail(self.log_path, classes="log-tail")
-        yield TaskPanel(self.agent_name)
 
 
 class FleetDashboard(App):
@@ -262,6 +224,14 @@ class FleetDashboard(App):
         color: $warning;
     }
 
+    .summary-box {
+        padding: 0 1;
+        margin: 0 0 1 0;
+        border: solid $primary-darken-2;
+        color: $text-muted;
+        min-height: 1;
+    }
+
     .log-tail {
         border: solid $surface-lighten-2;
         padding: 0 1;
@@ -274,16 +244,6 @@ class FleetDashboard(App):
     .section-label {
         text-style: bold;
         margin: 0 0 0 0;
-    }
-
-    ListView {
-        min-height: 3;
-        max-height: 6;
-        margin: 0 0 0 0;
-    }
-
-    Input {
-        margin: 0;
     }
 
     .no-agents {
@@ -303,7 +263,6 @@ class FleetDashboard(App):
 
     TITLE = "Claude Fleet Dashboard"
     BINDINGS = [
-        Binding("d", "delete_task", "Delete selected task"),
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh_agents", "Refresh agents"),
     ]
@@ -333,7 +292,7 @@ class FleetDashboard(App):
     def on_mount(self) -> None:
         agents = discover_agents()
         n = len(agents)
-        self.sub_title = f"{n} agent(s) active  •  q=quit  d=delete task  r=refresh"
+        self.sub_title = f"{n} agent(s) active  •  q=quit  r=refresh"
         if agents:
             cols = min(n, 3)
             self.query_one("#agents-grid").styles.grid_size_columns = cols
@@ -367,21 +326,11 @@ class FleetDashboard(App):
 
         # Update subtitle
         n = len(self._known_agents)
-        self.sub_title = f"{n} agent(s) active  •  q=quit  d=delete task  r=refresh"
+        self.sub_title = f"{n} agent(s) active  •  q=quit  r=refresh"
 
     async def action_refresh_agents(self) -> None:
         """Manually trigger agent discovery."""
         await self._auto_refresh_agents()
-
-    def action_delete_task(self) -> None:
-        for card in self.query(AgentCard):
-            panel = card.query_one(TaskPanel)
-            lv = panel.query_one(ListView)
-            if lv.has_focus or any(
-                c.has_focus for c in lv.walk_children()
-            ):
-                panel.delete_selected()
-                return
 
 
 if __name__ == "__main__":
