@@ -3,7 +3,8 @@ set -euo pipefail
 
 TARGET_DIR="${1:-.}"
 AGENT_TYPE="${2:-claude}"
-LOG_DIR="/tmp"
+LOG_DIR="${TMPDIR:-/tmp}"
+LOG_DIR="${LOG_DIR%/}" # Remove trailing slash if present
 MAX_AGENTS=3
 
 
@@ -53,8 +54,21 @@ end tell
 EOF
         fi
         echo "  [+] Dashboard launched in new window."
+    elif command -v x-terminal-emulator &>/dev/null; then
+        x-terminal-emulator -e "$cmd" &
+        echo "  [+] Dashboard launched (x-terminal-emulator)."
+    elif command -v gnome-terminal &>/dev/null; then
+        gnome-terminal -- bash -c "$cmd" &
+        echo "  [+] Dashboard launched (gnome-terminal)."
+    elif command -v konsole &>/dev/null; then
+        konsole -e "$cmd" &
+        echo "  [+] Dashboard launched (konsole)."
+    elif command -v xfce4-terminal &>/dev/null; then
+        xfce4-terminal -e "$cmd" &
+        echo "  [+] Dashboard launched (xfce4-terminal)."
     else
-        echo "  [!] Cannot open dashboard: osascript not found (macOS only)"
+        echo "  [!] Cannot open dashboard automatically: No supported terminal emulator found."
+        echo "      Run it manually: $cmd"
     fi
     echo ""
 }
@@ -92,8 +106,16 @@ tell application "Terminal"
 end tell
 EOF
         fi
+    elif command -v x-terminal-emulator &>/dev/null; then
+        x-terminal-emulator -e "tmux attach -t ${session}" &
+    elif command -v gnome-terminal &>/dev/null; then
+        gnome-terminal -- tmux attach -t "${session}" &
+    elif command -v konsole &>/dev/null; then
+        konsole -e "tmux attach -t ${session}" &
+    elif command -v xfce4-terminal &>/dev/null; then
+        xfce4-terminal -e "tmux attach -t ${session}" &
     else
-        echo "  [!] Cannot open terminal: osascript not found (macOS only)"
+        echo "  [~] No supported terminal emulator found (use: tmux attach -t $session)"
     fi
 }
 
@@ -131,7 +153,7 @@ for dir in "${worktrees[@]}"; do
     tmux new-session -d -s "$session_name" -c "$dir"
 
     # Stream stdout to log file
-    tmux pipe-pane -t "${session_name}" -o "cat >> ${log_file}"
+    tmux pipe-pane -t "${session_name}" -o "cat >> '${log_file}'"
 
     # Pane 0: agent (with PROTOCOL.md piped in as system prompt if available)
     tmux send-keys -t "${session_name}.0" "printf '\033]2;${folder_name} — ${AGENT_TYPE}\033\\\\'" Enter

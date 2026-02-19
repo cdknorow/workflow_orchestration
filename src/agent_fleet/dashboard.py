@@ -18,7 +18,8 @@ from textual.containers import Vertical, Horizontal
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Label, Static, Input, Button
 
-LOG_PATTERN = "/tmp/*_fleet_*.log"
+LOG_DIR = os.environ.get("TMPDIR", "/tmp").rstrip("/")
+LOG_PATTERN = f"{LOG_DIR}/*_fleet_*.log"
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
 SUMMARY_RE = re.compile(r"\|\|SUMMARY:\s*(.+?)\|\|")
 ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
