@@ -11,14 +11,26 @@ from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Vertical, Horizontal
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Label, Static, Input
+from textual.widgets import Footer, Header, Label, Static, Input, Button
 
 LOG_PATTERN = "/tmp/*_fleet_*.log"
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
 SUMMARY_RE = re.compile(r"\|\|SUMMARY:\s*(.+?)\|\|")
 ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+
+# Model-specific commands
+COMMAND_MAP = {
+    "claude": {
+        "compress": "/compact",
+        "clear": "/clear",
+    },
+    "gemini": {
+        "compress": "/compress",
+        "clear": "/clear",
+    }
+}
 
 
 def strip_ansi(text: str) -> str:
@@ -226,6 +238,11 @@ class AgentCard(Vertical):
         self.log_path = log_path
 
     def compose(self) -> ComposeResult:
+        agent_type_low = self.agent_type.lower()
+        commands = COMMAND_MAP.get(agent_type_low, COMMAND_MAP["gemini"])
+        compress_cmd = commands["compress"]
+        clear_cmd = commands["clear"]
+
         yield Label(f"{self.agent_type.title()} | {self.agent_name.upper()} ", classes="agent-header")
         yield StalenessIndicator(self.log_path, classes="staleness-indicator")
         yield SummaryBox(self.log_path, classes="summary-box")   # hidden until agent emits a summary
@@ -234,14 +251,13 @@ class AgentCard(Vertical):
         yield LogTail(self.log_path, classes="log-tail")
         yield Label("Send command to agent", classes="section-label")
         yield Input(placeholder="Type here...", classes="command-input")
+        with Horizontal(classes="command-buttons"):
+            yield Button(compress_cmd, id="btn-compress", variant="primary")
+            yield Button(clear_cmd, id="btn-clear", variant="warning")
+            yield Button("Reset", id="btn-reset", variant="error")
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Send the command to the corresponding tmux pane."""
-        command = event.value.strip()
-        if not command:
-            return
-
-        # Find the tmux pane with the matching title or session name
+    async def _send_to_tmux(self, command: str) -> str | None:
+        """Send a command to the corresponding tmux pane. Returns error string if failed."""
         try:
             # list-panes -a lists all panes in all sessions
             # -F "#{pane_title}|#{session_name}|#S:#I.#P" gives us titles and target address
@@ -273,27 +289,63 @@ class AgentCard(Vertical):
 
             if target:
                 # Send the command followed by Enter in a single call.
-                # Many CLI REPLs (like gemini/claude) prefer the combined keystroke.
                 await asyncio.create_subprocess_exec(
                         "tmux", "send-keys", "-t", target, command
                     )
-
-# 2. Give the CLI a fraction of a second to buffer the text
+                # 2. Give the CLI a fraction of a second to buffer the text
                 await asyncio.sleep(0.1)
-
-# 3. Send the carriage return
+                # 3. Send the carriage return
                 await asyncio.create_subprocess_exec(
                         "tmux", "send-keys", "-t", target, "C-m"
                     )
-                event.input.value = ""
-                event.input.placeholder = f"Sent: {command}"
+                return None
             else:
-                event.input.value = ""
-                event.input.placeholder = f"Error: Pane '{self.agent_name}' not found"
+                return f"Pane '{self.agent_name}' not found"
 
         except Exception as e:
+            return str(e)
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button clicks for quick commands."""
+        agent_type_low = self.agent_type.lower()
+        commands_map = COMMAND_MAP.get(agent_type_low, COMMAND_MAP["gemini"])
+        compress_cmd = commands_map["compress"]
+        clear_cmd = commands_map["clear"]
+
+        commands_to_send = []
+        if event.button.id == "btn-compress":
+            commands_to_send = [compress_cmd]
+        elif event.button.id == "btn-clear":
+            commands_to_send = [clear_cmd]
+        elif event.button.id == "btn-reset":
+            commands_to_send = [compress_cmd, clear_cmd]
+
+        if commands_to_send:
+            input_widget = self.query_one(Input)
+            for command in commands_to_send:
+                error = await self._send_to_tmux(command)
+                if error:
+                    input_widget.placeholder = f"Error: {error}"
+                    return
+                # Short delay between commands
+                if len(commands_to_send) > 1:
+                    await asyncio.sleep(0.5)
+
+            input_widget.placeholder = f"Sent: {' + '.join(commands_to_send)}"
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Send the command to the corresponding tmux pane."""
+        command = event.value.strip()
+        if not command:
+            return
+
+        error = await self._send_to_tmux(command)
+        if error:
             event.input.value = ""
-            event.input.placeholder = f"Error: {str(e)}"
+            event.input.placeholder = f"Error: {error}"
+        else:
+            event.input.value = ""
+            event.input.placeholder = f"Sent: {command}"
 
 
 class FleetDashboard(App):
@@ -383,6 +435,17 @@ class FleetDashboard(App):
     .section-label {
         text-style: bold;
         margin: 0 0 0 0;
+    }
+
+    .command-buttons {
+        height: 3;
+        margin: 1 0 0 0;
+    }
+
+    .command-buttons Button {
+        margin-right: 2;
+        min-width: 10;
+        padding: 0;
     }
 
     .command-input {
