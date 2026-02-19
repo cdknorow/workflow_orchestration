@@ -16,7 +16,14 @@ from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, St
 
 TASKS_FILE = Path("fleet_tasks.json")
 LOG_PATTERN = "/tmp/claude_fleet_*.log"
+SUMMARY_FILE = Path("/tmp/fleet_task_summary.txt")
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
+ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from terminal output."""
+    return ANSI_RE.sub("", text)
 
 
 def discover_agents() -> list[tuple[str, Path]]:
@@ -43,7 +50,7 @@ def save_tasks(data: dict[str, list[str]]) -> None:
 
 
 class LogTail(Static):
-    """Displays the last N lines of a log file."""
+    """Displays a history of ||STATUS:|| lines from a log file."""
 
     tail_text: reactive[str] = reactive("Waiting for output...")
 
@@ -57,12 +64,14 @@ class LogTail(Static):
 
     def _refresh_log(self) -> None:
         try:
-            text = self.log_path.read_text(errors="replace")
-            lines = text.splitlines()
-            # Filter out status protocol lines for cleaner display
-            display_lines = [l for l in lines if not STATUS_RE.search(l)]
-            tail = display_lines[-self.max_lines :]
-            self.tail_text = "\n".join(tail) if tail else "Waiting for output..."
+            raw = self.log_path.read_text(errors="replace")
+            text = strip_ansi(raw)
+            matches = STATUS_RE.findall(text)
+            if matches:
+                tail = matches[-self.max_lines :]
+                self.tail_text = "\n".join(f"• {s.strip()}" for s in tail)
+            else:
+                self.tail_text = "Waiting for output..."
         except OSError:
             self.tail_text = "Log file not found."
 
@@ -84,7 +93,8 @@ class StatusBox(Static):
 
     def _refresh_status(self) -> None:
         try:
-            text = self.log_path.read_text(errors="replace")
+            raw = self.log_path.read_text(errors="replace")
+            text = strip_ansi(raw)
             matches = STATUS_RE.findall(text)
             if matches:
                 self.status_text = matches[-1].strip()
@@ -143,6 +153,31 @@ class TaskPanel(Vertical):
         save_tasks(all_tasks)
 
 
+class TaskSummaryPanel(Vertical):
+    """Live display of /tmp/fleet_task_summary.txt, refreshed every 2 s."""
+
+    def compose(self) -> ComposeResult:
+        yield Label(" Fleet Task Summary ", classes="agent-header")
+        yield VerticalScroll(
+            Static("Waiting for /tmp/fleet_task_summary.txt…", id="summary-content"),
+            id="summary-scroll",
+        )
+
+    def on_mount(self) -> None:
+        self.set_interval(2.0, self._refresh)
+
+    def _refresh(self) -> None:
+        try:
+            content = SUMMARY_FILE.read_text(errors="replace").strip()
+            self.query_one("#summary-content", Static).update(
+                content if content else "(file exists but is empty)"
+            )
+        except OSError:
+            self.query_one("#summary-content", Static).update(
+                "Waiting for /tmp/fleet_task_summary.txt…"
+            )
+
+
 class AgentCard(Vertical):
     """One card per agent: header, status, log tail, tasks."""
 
@@ -154,16 +189,27 @@ class AgentCard(Vertical):
     def compose(self) -> ComposeResult:
         yield Label(f" {self.agent_name} ", classes="agent-header")
         yield StatusBox(self.log_path, classes="status-box")
-        yield LogTail(self.log_path, classes="log-tail")
         yield TaskPanel(self.agent_name)
 
 
 class FleetDashboard(App):
     CSS = """
     Screen {
+        layout: vertical;
+        padding: 1;
+    }
+
+    #main-area {
+        layout: horizontal;
+        height: 1fr;
+    }
+
+    /* Left pane: grid of agent cards */
+    #agents-grid {
         layout: grid;
         grid-gutter: 1;
-        padding: 1;
+        width: 1fr;
+        height: 100%;
     }
 
     .agent-card {
@@ -212,6 +258,23 @@ class FleetDashboard(App):
         margin: 0;
     }
 
+    /* Right pane: task summary */
+    .summary-panel {
+        width: 52;
+        height: 100%;
+        border: solid $success;
+        padding: 1;
+        margin-left: 1;
+    }
+
+    #summary-scroll {
+        height: 1fr;
+    }
+
+    #summary-content {
+        padding: 0 1;
+    }
+
     Footer {
         dock: bottom;
     }
@@ -229,23 +292,29 @@ class FleetDashboard(App):
 
     def compose(self) -> ComposeResult:
         agents = discover_agents()
-        if not agents:
-            yield Header()
-            yield Static(
-                "No agent logs found. Run launch_fleet.sh first.\n"
-                f"Expected log files matching: {LOG_PATTERN}"
-            )
-            yield Footer()
-            return
-
-        # Set grid columns based on agent count
-        cols = min(len(agents), 3)
-        self.styles.grid_size_columns = cols
 
         yield Header()
-        for name, log_path in agents:
-            yield AgentCard(name, log_path, classes="agent-card")
+        with Horizontal(id="main-area"):
+            with Vertical(id="agents-grid"):
+                if not agents:
+                    yield Static(
+                        "No agent logs found. Run launch_fleet.sh first.\n"
+                        f"Expected log files matching: {LOG_PATTERN}"
+                    )
+                else:
+                    for name, log_path in agents:
+                        yield AgentCard(name, log_path, classes="agent-card")
+            yield TaskSummaryPanel(classes="summary-panel")
         yield Footer()
+
+    def on_mount(self) -> None:
+        self.sub_title = (
+            "To intervene: quit (q), then run: tmux attach -t claude-fleet"
+        )
+        agents = discover_agents()
+        if agents:
+            cols = min(len(agents), 3)
+            self.query_one("#agents-grid").styles.grid_size_columns = cols
 
     def action_delete_task(self) -> None:
         for card in self.query(AgentCard):
@@ -256,11 +325,6 @@ class FleetDashboard(App):
             ):
                 panel.delete_selected()
                 return
-
-    def on_mount(self) -> None:
-        self.sub_title = (
-            "To intervene: quit (q), then run: tmux attach -t claude-fleet"
-        )
 
 
 if __name__ == "__main__":
