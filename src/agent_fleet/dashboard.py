@@ -547,5 +547,9 @@ class FleetDashboard(App):
         await self._auto_refresh_agents()
 
 
-if __name__ == "__main__":
+def main():
     FleetDashboard().run()
+
+
+if __name__ == "__main__":
+    main()

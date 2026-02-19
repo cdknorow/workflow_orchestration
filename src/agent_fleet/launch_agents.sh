@@ -12,19 +12,21 @@ TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 # Clean up all existing fleet logs
 rm -f "${LOG_DIR}/"*_fleet_*.log
 
-# Locate PROTOCOL.md relative to this script
+# Locate assets relative to this script
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROTOCOL_PATH="${SCRIPT_DIR}/PROTOCOL.md"
 DASHBOARD_PATH="${SCRIPT_DIR}/dashboard.py"
-echo $DASHBOARD_PATH
 
 # New function to launch the dashboard in a direct terminal window (No tmux)
 launch_dashboard() {
-    local script_name=$DASHBOARD_PATH
     local title="Fleet Dashboard"
+    local cmd="python3 $DASHBOARD_PATH"
 
-    if [ ! -f "$script_name" ]; then
-        echo "  [!] Dashboard skip: $script_name not found in $(pwd)."
+    # If installed as a package, use the entry point
+    if command -v fleet-dash &>/dev/null; then
+        cmd="fleet-dash"
+    elif [ ! -f "$DASHBOARD_PATH" ]; then
+        echo "  [!] Dashboard skip: dashboard.py not found and fleet-dash not in PATH."
         return 1
     fi
 
@@ -39,13 +41,13 @@ launch_dashboard() {
         if osascript -e 'tell application "iTerm2" to version' &>/dev/null 2>&1; then
             osascript << EOF
 tell application "iTerm2"
-    create window with default profile command "python3 $(pwd)/${script_name}"
+    create window with default profile command "$cmd"
 end tell
 EOF
         else
             osascript << EOF
 tell application "Terminal"
-    do script "cd $(pwd) && python3 ${script_name}"
+    do script "$cmd"
     set custom title of front window to "${title}"
 end tell
 EOF

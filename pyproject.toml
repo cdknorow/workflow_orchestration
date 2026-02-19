@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-fleet"
+version = "0.1.0"
+description = "A multi-agent orchestration system for Claude and Gemini agents in tmux."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "textual>=0.75.0",
+]
+authors = [
+    { name = "CK Norow" }
+]
+
+[project.scripts]
+fleet-dash = "agent_fleet.dashboard:main"
+
+[tool.setuptools.package-data]
+agent_fleet = ["PROTOCOL.md", "launch_agents.sh"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
