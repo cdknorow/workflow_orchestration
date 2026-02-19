@@ -140,7 +140,7 @@ class SummaryBox(Static):
             text = strip_ansi(raw)
             matches = SUMMARY_RE.findall(text)
             if matches:
-                self.summary_text = matches[-1].strip()
+                self.summary_text = matches[-1]
         except OSError:
             pass
 
