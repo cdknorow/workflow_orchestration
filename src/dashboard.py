@@ -13,7 +13,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.reactive import reactive
-from textual.widgets import Footer, Header, Label, Static
+from textual.widgets import Footer, Header, Label, Static, Input
 
 LOG_PATTERN = "/tmp/*_fleet_*.log"
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
@@ -232,6 +232,68 @@ class AgentCard(Vertical):
         yield StatusBox(self.log_path, classes="status-box")
         yield Label("History", classes="section-label")
         yield LogTail(self.log_path, classes="log-tail")
+        yield Label("Send command to agent", classes="section-label")
+        yield Input(placeholder="Type here...", classes="command-input")
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Send the command to the corresponding tmux pane."""
+        command = event.value.strip()
+        if not command:
+            return
+
+        # Find the tmux pane with the matching title or session name
+        try:
+            # list-panes -a lists all panes in all sessions
+            # -F "#{pane_title}|#{session_name}|#S:#I.#P" gives us titles and target address
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "list-panes", "-a", "-F", "#{pane_title}|#{session_name}|#S:#I.#P",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            lines = stdout.decode().splitlines()
+
+            target = None
+            # Normalize agent name for matching (e.g. worktree_2 -> worktree-2)
+            norm_name = self.agent_name.replace("_", "-").lower()
+
+            for line in lines:
+                if "|" in line:
+                    title, session, addr = line.split("|", 2)
+                    title_low = title.lower()
+                    session_low = session.lower()
+
+                    # Match if agent name is in the title (set via OSC 2) or the session name
+                    if (self.agent_name.lower() in title_low or
+                        norm_name in title_low or
+                        self.agent_name.lower() in session_low or
+                        norm_name in session_low):
+                        target = addr
+                        break
+
+            if target:
+                # Send the command followed by Enter in a single call.
+                # Many CLI REPLs (like gemini/claude) prefer the combined keystroke.
+                await asyncio.create_subprocess_exec(
+                        "tmux", "send-keys", "-t", target, command
+                    )
+
+# 2. Give the CLI a fraction of a second to buffer the text
+                await asyncio.sleep(0.1)
+
+# 3. Send the carriage return
+                await asyncio.create_subprocess_exec(
+                        "tmux", "send-keys", "-t", target, "C-m"
+                    )
+                event.input.value = ""
+                event.input.placeholder = f"Sent: {command}"
+            else:
+                event.input.value = ""
+                event.input.placeholder = f"Error: Pane '{self.agent_name}' not found"
+
+        except Exception as e:
+            event.input.value = ""
+            event.input.placeholder = f"Error: {str(e)}"
 
 
 class FleetDashboard(App):
@@ -321,6 +383,15 @@ class FleetDashboard(App):
     .section-label {
         text-style: bold;
         margin: 0 0 0 0;
+    }
+
+    .command-input {
+        margin: 1 0 0 0;
+        border: tall $accent;
+    }
+
+    .command-input:focus {
+        border: tall $success;
     }
 
     .no-agents {
