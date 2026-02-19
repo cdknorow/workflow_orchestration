@@ -5,12 +5,18 @@ This is a workflow designed for people using worktrees and multiple agents.
 
 ## Installation
 
-You can install this tool as a Python package:
+You can install the tool directly from GitHub:
+
+```bash
+pip install git+https://github.com/cdknorow/workflow_orchestration.git#subdirectory=workflow_orchestrator
+```
+
+Or for local development:
 
 ```bash
 # Clone the repository
-git clone <repo-url>
-cd workflow_orchestrator
+git clone https://github.com/cdknorow/workflow_orchestration.git
+cd workflow_orchestration/workflow_orchestrator
 
 # Install in editable mode
 pip install -e .
