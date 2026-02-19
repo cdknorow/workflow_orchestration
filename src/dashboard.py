@@ -5,18 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Vertical
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Static
 
 TASKS_FILE = Path("fleet_tasks.json")
 LOG_PATTERN = "/tmp/claude_fleet_*.log"
-SUMMARY_FILE = Path("/tmp/fleet_task_summary.txt")
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
 ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
 
@@ -49,8 +49,20 @@ def save_tasks(data: dict[str, list[str]]) -> None:
     TASKS_FILE.write_text(json.dumps(data, indent=2))
 
 
+def _status_css_class(status: str) -> str:
+    """Return a CSS class name based on the status text keywords."""
+    lower = status.lower()
+    if any(k in lower for k in ("complete", "done", "finished", "success")):
+        return "status-complete"
+    if any(k in lower for k in ("error", "fail", "failed", "exception", "crash")):
+        return "status-error"
+    if any(k in lower for k in ("waiting", "idle", "paused", "blocked")):
+        return "status-waiting"
+    return "status-active"
+
+
 class LogTail(Static):
-    """Displays a history of ||STATUS:|| lines from a log file."""
+    """Displays a history of ||STATUS:|| lines from a log file with timestamps."""
 
     tail_text: reactive[str] = reactive("Waiting for output...")
 
@@ -58,6 +70,8 @@ class LogTail(Static):
         super().__init__(**kwargs)
         self.log_path = log_path
         self.max_lines = max_lines
+        self._timestamped: list[tuple[str, str]] = []
+        self._seen_count: int = 0
 
     def on_mount(self) -> None:
         self.set_interval(1.0, self._refresh_log)
@@ -68,8 +82,16 @@ class LogTail(Static):
             text = strip_ansi(raw)
             matches = STATUS_RE.findall(text)
             if matches:
-                tail = matches[-self.max_lines :]
-                self.tail_text = "\n".join(f"• {s.strip()}" for s in tail)
+                if len(matches) > self._seen_count:
+                    new_entries = matches[self._seen_count:]
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    for entry in new_entries:
+                        self._timestamped.append((ts, entry.strip()))
+                    self._seen_count = len(matches)
+
+                tail = self._timestamped[-self.max_lines:]
+                lines = [f"[dim]{ts}[/dim]  {msg}" for ts, msg in tail]
+                self.tail_text = "\n".join(lines)
             else:
                 self.tail_text = "Waiting for output..."
         except OSError:
@@ -80,7 +102,7 @@ class LogTail(Static):
 
 
 class StatusBox(Static):
-    """Displays the latest ||STATUS: ...|| from a log file."""
+    """Displays the latest ||STATUS: ...|| from a log file with color coding."""
 
     status_text: reactive[str] = reactive("Idle")
 
@@ -89,6 +111,7 @@ class StatusBox(Static):
         self.log_path = log_path
 
     def on_mount(self) -> None:
+        self.add_class("status-waiting")
         self.set_interval(1.0, self._refresh_status)
 
     def _refresh_status(self) -> None:
@@ -102,7 +125,11 @@ class StatusBox(Static):
             pass
 
     def watch_status_text(self, value: str) -> None:
-        self.update(f"STATUS: {value}")
+        # Remove all status classes, then add the appropriate one
+        for cls in ("status-active", "status-complete", "status-error", "status-waiting"):
+            self.remove_class(cls)
+        self.add_class(_status_css_class(value))
+        self.update(f"● {value}")
 
 
 class TaskPanel(Vertical):
@@ -114,13 +141,17 @@ class TaskPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         tasks = load_tasks().get(self.agent_name, [])
-        yield Label("Tasks", classes="section-label")
+        yield Label(
+            f"Tasks ({len(tasks)})",
+            classes="section-label",
+            id=f"tasks-label-{self.agent_name}",
+        )
         yield ListView(
             *[ListItem(Label(t)) for t in tasks],
             id=f"tasks-{self.agent_name}",
         )
         yield Input(
-            placeholder="Add task + Enter (select item + d to delete)",
+            placeholder="Add task + Enter  •  d = delete selected",
             id=f"input-{self.agent_name}",
         )
 
@@ -151,31 +182,12 @@ class TaskPanel(Vertical):
                 items.append(str(labels.first.renderable))
         all_tasks[self.agent_name] = items
         save_tasks(all_tasks)
-
-
-class TaskSummaryPanel(Vertical):
-    """Live display of /tmp/fleet_task_summary.txt, refreshed every 2 s."""
-
-    def compose(self) -> ComposeResult:
-        yield Label(" Fleet Task Summary ", classes="agent-header")
-        yield VerticalScroll(
-            Static("Waiting for /tmp/fleet_task_summary.txt…", id="summary-content"),
-            id="summary-scroll",
-        )
-
-    def on_mount(self) -> None:
-        self.set_interval(2.0, self._refresh)
-
-    def _refresh(self) -> None:
+        # Update task count label
         try:
-            content = SUMMARY_FILE.read_text(errors="replace").strip()
-            self.query_one("#summary-content", Static).update(
-                content if content else "(file exists but is empty)"
-            )
-        except OSError:
-            self.query_one("#summary-content", Static).update(
-                "Waiting for /tmp/fleet_task_summary.txt…"
-            )
+            label = self.query_one(f"#tasks-label-{self.agent_name}", Label)
+            label.update(f"Tasks ({len(items)})")
+        except Exception:
+            pass
 
 
 class AgentCard(Vertical):
@@ -187,8 +199,10 @@ class AgentCard(Vertical):
         self.log_path = log_path
 
     def compose(self) -> ComposeResult:
-        yield Label(f" {self.agent_name} ", classes="agent-header")
+        yield Label(f" {self.agent_name.upper()} ", classes="agent-header")
         yield StatusBox(self.log_path, classes="status-box")
+        yield Label("History", classes="section-label")
+        yield LogTail(self.log_path, classes="log-tail")
         yield TaskPanel(self.agent_name)
 
 
@@ -199,12 +213,6 @@ class FleetDashboard(App):
         padding: 1;
     }
 
-    #main-area {
-        layout: horizontal;
-        height: 1fr;
-    }
-
-    /* Left pane: grid of agent cards */
     #agents-grid {
         layout: grid;
         grid-gutter: 1;
@@ -224,13 +232,33 @@ class FleetDashboard(App):
         background: $accent;
         text-align: center;
         padding: 0 1;
+        margin-bottom: 1;
     }
 
+    /* Status box color variants */
     .status-box {
-        border: dashed $warning;
         padding: 0 1;
         margin: 1 0;
         min-height: 1;
+    }
+
+    .status-box.status-active {
+        border: dashed $accent;
+        color: $accent;
+    }
+
+    .status-box.status-complete {
+        border: dashed $success;
+        color: $success;
+    }
+
+    .status-box.status-error {
+        border: dashed $error;
+        color: $error;
+    }
+
+    .status-box.status-waiting {
+        border: dashed $warning;
         color: $warning;
     }
 
@@ -250,7 +278,7 @@ class FleetDashboard(App):
 
     ListView {
         min-height: 3;
-        max-height: 8;
+        max-height: 6;
         margin: 0 0 0 0;
     }
 
@@ -258,21 +286,10 @@ class FleetDashboard(App):
         margin: 0;
     }
 
-    /* Right pane: task summary */
-    .summary-panel {
-        width: 52;
-        height: 100%;
-        border: solid $success;
-        padding: 1;
-        margin-left: 1;
-    }
-
-    #summary-scroll {
-        height: 1fr;
-    }
-
-    #summary-content {
-        padding: 0 1;
+    .no-agents {
+        color: $text-muted;
+        text-align: center;
+        padding: 2;
     }
 
     Footer {
@@ -288,33 +305,73 @@ class FleetDashboard(App):
     BINDINGS = [
         Binding("d", "delete_task", "Delete selected task"),
         Binding("q", "quit", "Quit"),
+        Binding("r", "refresh_agents", "Refresh agents"),
     ]
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._known_agents: set[str] = set()
 
     def compose(self) -> ComposeResult:
         agents = discover_agents()
 
         yield Header()
-        with Horizontal(id="main-area"):
-            with Vertical(id="agents-grid"):
-                if not agents:
-                    yield Static(
-                        "No agent logs found. Run launch_fleet.sh first.\n"
-                        f"Expected log files matching: {LOG_PATTERN}"
-                    )
-                else:
-                    for name, log_path in agents:
-                        yield AgentCard(name, log_path, classes="agent-card")
-            yield TaskSummaryPanel(classes="summary-panel")
+        with Vertical(id="agents-grid"):
+            if not agents:
+                yield Static(
+                    "No agent logs found. Run launch_fleet.sh first.\n"
+                    f"Expected log files matching: {LOG_PATTERN}",
+                    id="no-agents-placeholder",
+                    classes="no-agents",
+                )
+            else:
+                for name, log_path in agents:
+                    self._known_agents.add(name)
+                    yield AgentCard(name, log_path, classes="agent-card")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.sub_title = (
-            "To intervene: quit (q), then run: tmux attach -t claude-fleet"
-        )
         agents = discover_agents()
+        n = len(agents)
+        self.sub_title = f"{n} agent(s) active  •  q=quit  d=delete task  r=refresh"
         if agents:
-            cols = min(len(agents), 3)
+            cols = min(n, 3)
             self.query_one("#agents-grid").styles.grid_size_columns = cols
+        self.set_interval(5.0, self._auto_refresh_agents)
+
+    async def _auto_refresh_agents(self) -> None:
+        """Discover new agents and mount their cards dynamically."""
+        current = discover_agents()
+        current_names = {name for name, _ in current}
+        new_agents = [(name, path) for name, path in current if name not in self._known_agents]
+
+        if not new_agents:
+            return
+
+        grid = self.query_one("#agents-grid")
+
+        # Remove the "no agents" placeholder if present
+        try:
+            placeholder = self.query_one("#no-agents-placeholder", Static)
+            await placeholder.remove()
+        except Exception:
+            pass
+
+        for name, log_path in new_agents:
+            self._known_agents.add(name)
+            await grid.mount(AgentCard(name, log_path, classes="agent-card"))
+
+        # Update grid columns
+        cols = min(len(self._known_agents), 3)
+        grid.styles.grid_size_columns = cols
+
+        # Update subtitle
+        n = len(self._known_agents)
+        self.sub_title = f"{n} agent(s) active  •  q=quit  d=delete task  r=refresh"
+
+    async def action_refresh_agents(self) -> None:
+        """Manually trigger agent discovery."""
+        await self._auto_refresh_agents()
 
     def action_delete_task(self) -> None:
         for card in self.query(AgentCard):
