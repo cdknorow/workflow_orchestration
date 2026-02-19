@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -165,6 +166,51 @@ class SummaryBox(Static):
             self.display = False
 
 
+class StalenessIndicator(Static):
+    """Shows how recently the agent's log file was written to.
+
+    Three states based on log file mtime:
+      active  — written within the last 60 s   (green)
+      recent  — written 1–5 minutes ago         (yellow)
+      stale   — not written for > 5 minutes     (dim)
+    """
+
+    _ACTIVE_SECS = 60
+    _RECENT_SECS = 300
+
+    age_label: reactive[str] = reactive("")
+
+    def __init__(self, log_path: Path, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.log_path = log_path
+
+    def on_mount(self) -> None:
+        self._refresh()
+        self.set_interval(5.0, self._refresh)
+
+    def _refresh(self) -> None:
+        try:
+            age = time.time() - self.log_path.stat().st_mtime
+        except OSError:
+            self._set_state("no log", "staleness-stale")
+            return
+
+        if age < self._ACTIVE_SECS:
+            self._set_state("● active", "staleness-active")
+        elif age < self._RECENT_SECS:
+            mins = int(age // 60)
+            self._set_state(f"● {mins}m ago", "staleness-recent")
+        else:
+            mins = int(age // 60)
+            self._set_state(f"● {mins}m ago", "staleness-stale")
+
+    def _set_state(self, label: str, css_class: str) -> None:
+        for cls in ("staleness-active", "staleness-recent", "staleness-stale"):
+            self.remove_class(cls)
+        self.add_class(css_class)
+        self.update(label)
+
+
 class AgentCard(Vertical):
     """One card per agent: header, status, log tail, tasks."""
 
@@ -174,7 +220,8 @@ class AgentCard(Vertical):
         self.log_path = log_path
 
     def compose(self) -> ComposeResult:
-        yield Label(f" {self.agent_name.upper()} ", classes="agent-header")
+        yield Label(f"Worktree: {self.agent_name.upper()} ", classes="agent-header")
+        yield StalenessIndicator(self.log_path, classes="staleness-indicator")
         yield SummaryBox(self.log_path, classes="summary-box")   # hidden until agent emits a summary
         yield StatusBox(self.log_path, classes="status-box")
         yield Label("History", classes="section-label")
@@ -207,8 +254,19 @@ class FleetDashboard(App):
         background: $accent;
         text-align: center;
         padding: 0 1;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
+
+    .staleness-indicator {
+        text-align: right;
+        padding: 0 1;
+        margin-bottom: 1;
+        height: 1;
+    }
+
+    .staleness-active  { color: $success; }
+    .staleness-recent  { color: $warning; }
+    .staleness-stale   { color: $text-muted; }
 
     /* Status box color variants */
     .status-box {
