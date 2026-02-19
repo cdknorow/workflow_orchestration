@@ -41,7 +41,7 @@ The dashboard parses these lines to show your live status. If you do not print s
 
 ### Summary Reporting Protocol
 
-In addition to `||STATUS:||` lines, you **may** emit a summary to describe your high-level goal. Displayed in a **Goal** box on your agent card.
+In addition to `||STATUS:||` lines, you **may** emit a summary to describe your high-level goal. Displayed in a **Goal** box on your agent card. Always do this after the first prompt that a user emmits, then again from time to time as the goal has changed.
 
 **Format:**
 ```
