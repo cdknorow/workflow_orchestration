@@ -8,7 +8,7 @@ This is a workflow designed for people using worktrees and multiple agents.
 You can install the tool directly from GitHub:
 
 ```bash
-pip install git+https://github.com/cdknorow/workflow_orchestration.git#subdirectory=workflow_orchestrator
+pip install git+https://github.com/cdknorow/workflow_orchestration.git
 ```
 
 Or for local development:
@@ -16,7 +16,7 @@ Or for local development:
 ```bash
 # Clone the repository
 git clone https://github.com/cdknorow/workflow_orchestration.git
-cd workflow_orchestration/workflow_orchestrator
+cd workflow_orchestration
 
 # Install in editable mode
 pip install -e .
