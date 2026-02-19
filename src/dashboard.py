@@ -1,4 +1,4 @@
-"""Claude Fleet Dashboard — monitors parallel AI coding agents via log files."""
+"""Multi-Agent Fleet Dashboard — monitors parallel AI coding agents via log files."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from textual.containers import Vertical
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Label, Static
 
-LOG_PATTERN = "/tmp/claude_fleet_*.log"
+LOG_PATTERN = "/tmp/*_fleet_*.log"
 STATUS_RE = re.compile(r"\|\|STATUS:\s*(.+?)\|\|")
 SUMMARY_RE = re.compile(r"\|\|SUMMARY:\s*(.+?)\|\|")
 ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
@@ -39,13 +39,18 @@ def clean_match(text: str) -> str:
     return " ".join(text.split())
 
 
-def discover_agents() -> list[tuple[str, Path]]:
-    """Return (agent_name, log_path) pairs sorted by name."""
+def discover_agents() -> list[tuple[str, str, Path]]:
+    """Return (agent_type, agent_name, log_path) tuples sorted by name."""
     results = []
     for log_path in sorted(glob(LOG_PATTERN)):
         p = Path(log_path)
-        name = p.stem.removeprefix("claude_fleet_")
-        results.append((name, p))
+        # name will be e.g. "worktree1" from "claude_fleet_worktree1.log"
+        # we extract the part before 'fleet_' as agent_type and after as agent_name
+        match = re.search(r'([^_]+)_fleet_(.+)', p.stem)
+        if match:
+            agent_type = match.group(1)
+            agent_name = match.group(2)
+            results.append((agent_type, agent_name, p))
     return results
 
 
@@ -214,13 +219,14 @@ class StalenessIndicator(Static):
 class AgentCard(Vertical):
     """One card per agent: header, status, log tail, tasks."""
 
-    def __init__(self, agent_name: str, log_path: Path, **kwargs) -> None:
+    def __init__(self, agent_type: str, agent_name: str, log_path: Path, **kwargs) -> None:
         super().__init__(**kwargs)
+        self.agent_type = agent_type
         self.agent_name = agent_name
         self.log_path = log_path
 
     def compose(self) -> ComposeResult:
-        yield Label(f"Worktree: {self.agent_name.upper()} ", classes="agent-header")
+        yield Label(f"{self.agent_type.title()} | {self.agent_name.upper()} ", classes="agent-header")
         yield StalenessIndicator(self.log_path, classes="staleness-indicator")
         yield SummaryBox(self.log_path, classes="summary-box")   # hidden until agent emits a summary
         yield StatusBox(self.log_path, classes="status-box")
@@ -332,7 +338,7 @@ class FleetDashboard(App):
     }
     """
 
-    TITLE = "Claude Fleet Dashboard"
+    TITLE = "Multi-Agent Fleet Dashboard"
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh_agents", "Refresh agents"),
@@ -355,9 +361,9 @@ class FleetDashboard(App):
                     classes="no-agents",
                 )
             else:
-                for name, log_path in agents:
-                    self._known_agents.add(name)
-                    yield AgentCard(name, log_path, classes="agent-card")
+                for agent_type, name, log_path in agents:
+                    self._known_agents.add(str(log_path))
+                    yield AgentCard(agent_type, name, log_path, classes="agent-card")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -372,8 +378,11 @@ class FleetDashboard(App):
     async def _auto_refresh_agents(self) -> None:
         """Discover new agents and mount their cards dynamically."""
         current = discover_agents()
-        current_names = {name for name, _ in current}
-        new_agents = [(name, path) for name, path in current if name not in self._known_agents]
+        new_agents = [
+            (atype, name, path)
+            for atype, name, path in current
+            if str(path) not in self._known_agents
+        ]
 
         if not new_agents:
             return
@@ -387,9 +396,9 @@ class FleetDashboard(App):
         except Exception:
             pass
 
-        for name, log_path in new_agents:
-            self._known_agents.add(name)
-            await grid.mount(AgentCard(name, log_path, classes="agent-card"))
+        for agent_type, name, log_path in new_agents:
+            self._known_agents.add(str(log_path))
+            await grid.mount(AgentCard(agent_type, name, log_path, classes="agent-card"))
 
         # Update grid columns
         cols = min(len(self._known_agents), 3)
