@@ -9,6 +9,12 @@ MAX_AGENTS=3
 open_terminal() {
     local session="$1"
     local title="$2"
+    # SSH_CONNECTION is set by sshd whenever the shell is reached via SSH.
+    # Skip GUI window opening silently in that environment.
+    if [ -n "${SSH_CONNECTION:-}" ]; then
+        echo "  [~] SSH detected — skipping terminal window (use: tmux attach -t $session)"
+        return 0
+    fi
     if command -v osascript &>/dev/null; then
         if osascript -e 'tell application "iTerm2" to version' &>/dev/null 2>&1; then
             osascript << EOF
