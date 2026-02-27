@@ -1,7 +1,9 @@
 <img width="1024" height="250" alt="image" src="https://github.com/user-attachments/assets/8b7b1467-ecba-4b63-9151-137f2d2243ec" />
 
+---
 
-Take back control and fight AI fatigue with corral 🤠 ➰ 🤖 🤖. An MIT licensed open-source multi-agent orchestration application for managing AI coding agents across git worktrees running locally on your local or remote machine. The  Its application is built using tmux and FastAPI for easy extensibilty and modification.
+
+Corral 🤠 ➰ 🤖 🤖, is an MIT licensed multi-agent orchestration application for managing AI coding agents across git worktrees running locally on your local or remote machine. The  Its application is built using tmux and FastAPI for easy extensibilty and modification.
 
 
 <img width="1504" height="824" alt="image" src="https://github.com/user-attachments/assets/18fe9a2b-c00b-445e-8bb0-b6a3b2c55e60" />
