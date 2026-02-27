@@ -1,4 +1,4 @@
-# Corral 🐄 Your AI Agents
+# Corral 🤠 ➰ 🤖 🤖  Your AI Agents
 
 <!-- TODO: Add a high-quality GIF here demonstrating launching the corral and the real-time web dashboard. -->
 <img width="1512" height="822" alt="image" src="https://github.com/user-attachments/assets/7534c1c4-5431-4e63-a5e3-4ec667e8bcb5" />
