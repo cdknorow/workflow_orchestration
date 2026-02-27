@@ -9,14 +9,13 @@ Take back some control and fight AI fatigue with corral. A multi-agent orchestra
 
 - **Multi-agent support** — Launch and manage both Claude and Gemini agents side-by-side across worktrees
 - **Web dashboard** — Real-time monitoring with pane capture, status tracking, and command input
-- **Session history** — Browse past sessions from both Claude (`~/.claude/projects/`) and Gemini (`~/.gemini/tmp/`)
-- **Full-text search** — Search across all session content using FTS5
-- **Auto-summarization** — Background summarization of sessions using Claude
-- **Session notes & tags** — Add markdown notes and color-coded tags to any session
+- **Session history** — Browse past sessions from both Claude and Gemini
+- **Full-text search** — Search across all session content 
+- **Auto-summarization** — Summarization of sessions are stored for text search later
+- **Session notes & activity ** — Add markdown notes and see the activty that occured in each seassion live and historically
 - **Remote control** — Send commands, navigate modes, and manage agents from the dashboard
 - **Attach/Kill/Restart/Resume** — Open a terminal attached to any agent's tmux session, or kill it directly from the UI, or relaunch as a neew session
-- **Git integration & PR Linking** Tracks, commits, and remote URL per agent
-
+- **Git integration & PR Linking** Tracks, commits, and remote URL per agent & session
 
 ## Installation
 
