@@ -8,10 +8,14 @@ let _noteId = null;
 let _lastSaved = '';
 let _isEditing = false;
 
-export async function loadAgentNotes(agentName) {
+export async function loadAgentNotes(agentName, sessionId) {
     if (!agentName) return;
     try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/notes`);
+        const params = new URLSearchParams();
+        const sid = sessionId || (state.currentSession && state.currentSession.session_id);
+        if (sid) params.set("session_id", sid);
+        const qs = params.toString() ? `?${params}` : "";
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/notes${qs}`);
         const notes = await resp.json();
         if (notes.length > 0) {
             _noteId = notes[0].id;

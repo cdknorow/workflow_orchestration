@@ -118,8 +118,11 @@ export async function refreshCapture() {
     if (!state.currentSession || state.currentSession.type !== "live") return;
 
     try {
-        let captureUrl = `/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/capture`;
-        if (state.currentSession.agent_type) captureUrl += `?agent_type=${encodeURIComponent(state.currentSession.agent_type)}`;
+        const params = new URLSearchParams();
+        if (state.currentSession.agent_type) params.set("agent_type", state.currentSession.agent_type);
+        if (state.currentSession.session_id) params.set("session_id", state.currentSession.session_id);
+        const qs = params.toString() ? `?${params}` : "";
+        let captureUrl = `/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/capture${qs}`;
         const resp = await fetch(captureUrl);
         const data = await resp.json();
         const el = document.getElementById("pane-capture");
@@ -139,8 +142,9 @@ export async function refreshCapture() {
 
     // Poll tasks and events on the same interval
     if (state.currentSession && state.currentSession.type === "live") {
-        loadAgentTasks(state.currentSession.name);
-        loadAgentEvents(state.currentSession.name);
+        const sid = state.currentSession.session_id;
+        loadAgentTasks(state.currentSession.name, sid);
+        loadAgentEvents(state.currentSession.name, sid);
     }
 }
 

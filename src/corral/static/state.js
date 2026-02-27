@@ -1,7 +1,7 @@
 /* Shared application state */
 
 export const state = {
-    currentSession: null,       // { type: "live"|"history", name: string, agent_type?: string }
+    currentSession: null,       // { type: "live"|"history", name: string, agent_type?: string, session_id?: string }
     corralWs: null,             // WebSocket for corral updates
     captureInterval: null,      // interval ID for auto-refreshing capture
     autoScroll: true,
@@ -17,6 +17,8 @@ export const state = {
 
 export function sessionKey(session) {
     if (!session) return null;
+    // Use session_id as the key when available (unique per session)
+    if (session.session_id) return `${session.type}:${session.session_id}`;
     return `${session.type}:${session.name}`;
 }
 

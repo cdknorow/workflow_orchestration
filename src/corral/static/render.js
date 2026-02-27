@@ -19,20 +19,42 @@ export function renderLiveSessions(sessions) {
         return;
     }
 
-    list.innerHTML = sessions.map(s => {
-        const dotClass = getDotClass(s.staleness_seconds);
-        const isActive = state.currentSession && state.currentSession.type === "live" && state.currentSession.name === s.name && state.currentSession.agent_type === s.agent_type;
-        const typeTag = s.agent_type && s.agent_type !== "claude" ? ` <span class="badge ${escapeHtml(s.agent_type)}">${escapeHtml(s.agent_type)}</span>` : "";
-        const branchTag = s.branch ? ` <span class="sidebar-branch">${escapeHtml(s.branch)}</span>` : "";
-        const goal = s.summary ? escapeHtml(s.summary) : "No goal set";
-        return `<li class="${isActive ? 'active' : ''}" onclick="selectLiveSession('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}')">
-            <span class="session-dot ${dotClass}"></span>
-            <div class="session-info">
-                <span class="session-label">${escapeHtml(s.name)}${typeTag}${branchTag}</span>
-                <span class="session-goal">${goal}</span>
-            </div>
-        </li>`;
-    }).join("");
+    // Group sessions by agent_name (folder)
+    const groups = {};
+    for (const s of sessions) {
+        const key = s.name || "unknown";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+    }
+
+    let html = "";
+    for (const [groupName, groupSessions] of Object.entries(groups)) {
+        const isMulti = groupSessions.length > 1;
+
+        if (isMulti) {
+            html += `<li class="session-group-header">${escapeHtml(groupName)} <span class="session-group-count">${groupSessions.length}</span></li>`;
+        }
+
+        for (const s of groupSessions) {
+            const dotClass = getDotClass(s.staleness_seconds);
+            const isActive = state.currentSession && state.currentSession.type === "live" && state.currentSession.session_id === s.session_id;
+            const typeTag = s.agent_type && s.agent_type !== "claude" ? ` <span class="badge ${escapeHtml(s.agent_type)}">${escapeHtml(s.agent_type)}</span>` : "";
+            const branchTag = s.branch ? ` <span class="sidebar-branch">${escapeHtml(s.branch)}</span>` : "";
+            const goal = s.summary ? escapeHtml(s.summary) : "No goal set";
+            const label = isMulti ? (s.session_id ? s.session_id.substring(0, 8) : s.name) : s.name;
+            const indentCls = isMulti ? " session-group-item" : "";
+            const sid = s.session_id ? escapeHtml(s.session_id) : "";
+            html += `<li class="${isActive ? 'active' : ''}${indentCls}" onclick="selectLiveSession('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+                <span class="session-dot ${dotClass}"></span>
+                <div class="session-info">
+                    <span class="session-label">${escapeHtml(label)}${typeTag}${branchTag}</span>
+                    <span class="session-goal">${goal}</span>
+                </div>
+            </li>`;
+        }
+    }
+
+    list.innerHTML = html;
 }
 
 export function renderHistorySessions(sessions, total, page, pageSize) {

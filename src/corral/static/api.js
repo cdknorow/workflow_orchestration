@@ -42,11 +42,13 @@ export async function loadHistorySessionsPaged(page = 1, pageSize = 50, search =
     }
 }
 
-export async function loadLiveSessionDetail(name, agentType) {
+export async function loadLiveSessionDetail(name, agentType, sessionId) {
     try {
-        let url = `/api/sessions/live/${encodeURIComponent(name)}`;
-        if (agentType) url += `?agent_type=${encodeURIComponent(agentType)}`;
-        const resp = await fetch(url);
+        const params = new URLSearchParams();
+        if (agentType) params.set("agent_type", agentType);
+        if (sessionId) params.set("session_id", sessionId);
+        const qs = params.toString() ? `?${params}` : "";
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}${qs}`);
         return await resp.json();
     } catch (e) {
         console.error("Failed to load session detail:", e);

@@ -107,14 +107,12 @@ echo "Target directory: $TARGET_DIR"
 echo "Found ${#worktrees[@]} workspace(s):"
 echo ""
 
-agent_index=1
+session_names=()
 for dir in "${worktrees[@]}"; do
     folder_name="$(basename "$dir")"
-    session_name="${AGENT_TYPE}-agent-${agent_index}"
-    log_file="${LOG_DIR}/${AGENT_TYPE}_corral_${folder_name}.log"
-
-    # Kill existing session if present
-    tmux kill-session -t "$session_name" 2>/dev/null || true
+    session_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+    session_name="${AGENT_TYPE}-${session_id}"
+    log_file="${LOG_DIR}/${AGENT_TYPE}_corral_${session_id}.log"
 
     # Clear old log
     > "$log_file"
@@ -135,9 +133,9 @@ for dir in "${worktrees[@]}"; do
         fi
     else
         if [ -f "$PROTOCOL_PATH" ]; then
-            tmux send-keys -t "${session_name}.0" "claude --append-system-prompt \"\$(cat '${PROTOCOL_PATH}')\"" Enter
+            tmux send-keys -t "${session_name}.0" "claude --session-id ${session_id} --append-system-prompt \"\$(cat '${PROTOCOL_PATH}')\"" Enter
         else
-            tmux send-keys -t "${session_name}.0" "claude" Enter
+            tmux send-keys -t "${session_name}.0" "claude --session-id ${session_id}" Enter
         fi
     fi
 
@@ -154,7 +152,7 @@ for dir in "${worktrees[@]}"; do
     echo "      Attach  : tmux attach -t $session_name"
     echo ""
 
-    agent_index=$((agent_index + 1))
+    session_names+=("$session_name")
 done
 
 
@@ -173,9 +171,9 @@ fi
 echo "=== All sessions launched ==="
 echo ""
 echo "Quick attach commands:"
-for i in $(seq 1 $((agent_index - 1))); do
-    echo "  tmux attach -t ${AGENT_TYPE}-agent-${i}"
+for sn in "${session_names[@]}"; do
+    echo "  tmux attach -t ${sn}"
 done
 echo ""
 echo "Kill all agents:"
-echo "  for i in \$(seq 1 $((agent_index - 1))); do tmux kill-session -t ${AGENT_TYPE}-agent-\$i 2>/dev/null; done"
+echo "  for sn in ${session_names[*]}; do tmux kill-session -t \$sn 2>/dev/null; done"

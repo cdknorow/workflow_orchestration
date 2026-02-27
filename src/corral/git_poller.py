@@ -31,17 +31,21 @@ class GitPoller:
     async def poll_once(self) -> dict[str, int]:
         agents = await discover_corral_agents()
         polled = 0
+        seen_paths: set[str] = set()
         for agent in agents:
             try:
-                pane = await _find_pane(agent["agent_name"], agent["agent_type"])
+                session_id = agent.get("session_id")
+                pane = await _find_pane(
+                    agent["agent_name"], agent["agent_type"], session_id=session_id,
+                )
                 if not pane:
                     continue
                 workdir = pane.get("current_path", "")
-                if not workdir:
+                if not workdir or workdir in seen_paths:
                     continue
+                seen_paths.add(workdir)
                 git_info = await self._query_git(workdir)
                 if git_info:
-                    session_id = await self._query_session_id(workdir)
                     await self._store.upsert_git_snapshot(
                         agent_name=agent["agent_name"],
                         agent_type=agent["agent_type"],
@@ -57,29 +61,6 @@ class GitPoller:
             except Exception:
                 log.exception("GitPoller error for agent %s", agent["agent_name"])
         return {"polled": polled}
-
-    async def _query_session_id(self, workdir: str) -> str | None:
-        """Find the active Claude session ID for a working directory.
-
-        Claude stores session JSONL files under ~/.claude/projects/<encoded-path>/.
-        The directory name is the absolute path with '/' and '_' replaced by '-'.
-        The most recently modified .jsonl file is the active session.
-        """
-        try:
-            encoded = workdir.replace("/", "-").replace("_", "-")
-            project_dir = HISTORY_PATH / encoded
-            if not project_dir.is_dir():
-                return None
-            jsonl_files = sorted(
-                project_dir.glob("*.jsonl"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            if jsonl_files:
-                return jsonl_files[0].stem
-        except OSError:
-            pass
-        return None
 
     async def _query_git(self, workdir: str) -> dict[str, str] | None:
         """Query git for current branch and latest commit in a working directory."""

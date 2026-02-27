@@ -14,7 +14,7 @@ import { loadAgentNotes } from './agent_notes.js';
 import { loadAgentEvents } from './agentic_state.js';
 import { loadHistoryEvents, loadHistoryTasks, loadHistoryAgentNotes } from './history_tabs.js';
 
-export async function selectLiveSession(name, agentType) {
+export async function selectLiveSession(name, agentType, sessionId) {
     stopCaptureRefresh();
 
     // Save current input text for the old session
@@ -24,7 +24,9 @@ export async function selectLiveSession(name, agentType) {
         state.sessionInputText[oldKey] = input.value;
     }
 
-    state.currentSession = { type: "live", name, agent_type: agentType || null };
+    state.currentSession = {
+        type: "live", name, agent_type: agentType || null, session_id: sessionId || null,
+    };
 
     // Restore input text for the new session
     const newKey = sessionKey(state.currentSession);
@@ -43,7 +45,7 @@ export async function selectLiveSession(name, agentType) {
     badge.className = `badge ${(agentType || "claude").toLowerCase()}`;
 
     // Load detail for status/summary
-    const detail = await loadLiveSessionDetail(name, agentType);
+    const detail = await loadLiveSessionDetail(name, agentType, sessionId);
     if (detail) {
         updateSessionStatus(detail.status);
         updateSessionSummary(detail.summary);
@@ -54,8 +56,8 @@ export async function selectLiveSession(name, agentType) {
         }
     }
 
-    // Update branch from live sessions data
-    const agent = state.liveSessions.find(s => s.name === name);
+    // Update branch from live sessions data — match by session_id for precision
+    const agent = state.liveSessions.find(s => s.session_id === sessionId);
     updateSessionBranch(agent && agent.branch ? agent.branch : null);
 
     // Set up quick action buttons
@@ -65,10 +67,10 @@ export async function selectLiveSession(name, agentType) {
     // Highlight in sidebar
     updateSidebarActive();
 
-    // Load tasks, notes, and events for this agent
-    loadAgentTasks(name);
-    loadAgentNotes(name);
-    loadAgentEvents(name);
+    // Load tasks, notes, and events for this agent (pass session_id)
+    loadAgentTasks(name, sessionId);
+    loadAgentNotes(name, sessionId);
+    loadAgentEvents(name, sessionId);
 
     // Start auto-refreshing capture
     startCaptureRefresh();
@@ -141,7 +143,8 @@ export function editAndResubmit(btn) {
 
     // Switch to a live session if one exists
     if (state.liveSessions.length > 0 && (!state.currentSession || state.currentSession.type !== "live")) {
-        selectLiveSession(state.liveSessions[0].name, state.liveSessions[0].agent_type);
+        const s = state.liveSessions[0];
+        selectLiveSession(s.name, s.agent_type, s.session_id);
     }
 
     // If we're viewing a live session, just populate the input

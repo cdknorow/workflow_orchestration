@@ -1022,32 +1022,36 @@ class SessionStore:
             await conn.close()
 
     async def get_last_known_status_summary(self) -> dict[str, dict[str, str | None]]:
-        """Return the most recent status and goal event per agent.
+        """Return the most recent status and goal event per session.
 
-        Returns dict like: {"agent1": {"status": "...", "summary": "..."}, ...}
+        Returns dict keyed by session_id (or agent_name for legacy events).
         Used to seed in-memory dedup cache on server restart.
         """
         conn = await self._connect()
         try:
-            # Get the most recent status event per agent
+            # Get the most recent status event per session_id
             status_rows = await (await conn.execute(
-                "SELECT agent_name, summary FROM agent_events "
+                "SELECT session_id, agent_name, summary FROM agent_events "
                 "WHERE event_type = 'status' AND id IN "
-                "(SELECT MAX(id) FROM agent_events WHERE event_type = 'status' GROUP BY agent_name)"
+                "(SELECT MAX(id) FROM agent_events WHERE event_type = 'status' "
+                "GROUP BY COALESCE(session_id, agent_name))"
             )).fetchall()
-            # Get the most recent goal event per agent
+            # Get the most recent goal event per session_id
             goal_rows = await (await conn.execute(
-                "SELECT agent_name, summary FROM agent_events "
+                "SELECT session_id, agent_name, summary FROM agent_events "
                 "WHERE event_type = 'goal' AND id IN "
-                "(SELECT MAX(id) FROM agent_events WHERE event_type = 'goal' GROUP BY agent_name)"
+                "(SELECT MAX(id) FROM agent_events WHERE event_type = 'goal' "
+                "GROUP BY COALESCE(session_id, agent_name))"
             )).fetchall()
             result: dict[str, dict[str, str | None]] = {}
             for r in status_rows:
-                result.setdefault(r["agent_name"], {"status": None, "summary": None})
-                result[r["agent_name"]]["status"] = r["summary"]
+                key = r["session_id"] or r["agent_name"]
+                result.setdefault(key, {"status": None, "summary": None})
+                result[key]["status"] = r["summary"]
             for r in goal_rows:
-                result.setdefault(r["agent_name"], {"status": None, "summary": None})
-                result[r["agent_name"]]["summary"] = r["summary"]
+                key = r["session_id"] or r["agent_name"]
+                result.setdefault(key, {"status": None, "summary": None})
+                result[key]["summary"] = r["summary"]
             return result
         finally:
             await conn.close()

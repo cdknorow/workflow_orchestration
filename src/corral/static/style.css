@@ -220,6 +220,38 @@ body {
     margin-top: 2px;
 }
 
+/* Grouped sessions (multiple sessions in same worktree) */
+.session-group-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 6px 12px 2px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.session-group-header:hover {
+    background: transparent !important;
+}
+
+.session-group-count {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 0 5px;
+    line-height: 16px;
+}
+
+.session-group-item {
+    padding-left: 22px !important;
+}
+
 /* Main Content */
 .main-content {
     flex: 1;

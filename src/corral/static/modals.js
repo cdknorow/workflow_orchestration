@@ -51,9 +51,12 @@ export async function showInfoModal() {
     const agentType = state.currentSession.agent_type || "";
 
     try {
-        let url = `/api/sessions/live/${encodeURIComponent(name)}/info`;
-        if (agentType) url += `?agent_type=${encodeURIComponent(agentType)}`;
-        const resp = await fetch(url);
+        const params = new URLSearchParams();
+        if (agentType) params.set("agent_type", agentType);
+        const sid = state.currentSession.session_id;
+        if (sid) params.set("session_id", sid);
+        const qs = params.toString() ? `?${params}` : "";
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}/info${qs}`);
         const info = await resp.json();
 
         if (info.error) {
@@ -117,7 +120,7 @@ export function showResumeModal() {
             </div>
             <div class="resume-item-goal">${goal}</div>
         `;
-        item.addEventListener("click", () => resumeIntoSession(agent.name, agent.agent_type));
+        item.addEventListener("click", () => resumeIntoSession(agent.name, agent.agent_type, agent.session_id));
         list.appendChild(item);
     }
 
@@ -128,7 +131,7 @@ export function hideResumeModal() {
     document.getElementById("resume-modal").style.display = "none";
 }
 
-export async function resumeIntoSession(agentName, agentType) {
+export async function resumeIntoSession(agentName, agentType, currentSessionId) {
     if (!state.currentSession || state.currentSession.type !== "history") {
         showToast("No history session selected", true);
         return;
@@ -147,16 +150,16 @@ export async function resumeIntoSession(agentName, agentType) {
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/resume`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ session_id: sessionId, agent_type: agentType }),
+            body: JSON.stringify({ session_id: sessionId, agent_type: agentType, current_session_id: currentSessionId }),
         });
         const result = await resp.json();
         if (result.error) {
             showToast(result.error, true);
         } else {
             showToast(`Resumed session in ${agentName}`);
-            // Switch to the live session view
+            // Switch to the live session view — session_id will now be the resumed session
             if (window.selectLiveSession) {
-                window.selectLiveSession(agentName, displayType);
+                window.selectLiveSession(agentName, displayType, sessionId);
             }
         }
     } catch (e) {

@@ -3,10 +3,14 @@
 import { state } from './state.js';
 import { escapeHtml, showToast } from './utils.js';
 
-export async function loadAgentTasks(agentName) {
+export async function loadAgentTasks(agentName, sessionId) {
     if (!agentName) return;
     try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/tasks`);
+        const params = new URLSearchParams();
+        const sid = sessionId || (state.currentSession && state.currentSession.session_id);
+        if (sid) params.set("session_id", sid);
+        const qs = params.toString() ? `?${params}` : "";
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/tasks${qs}`);
         state.currentAgentTasks = await resp.json();
     } catch (e) {
         state.currentAgentTasks = [];

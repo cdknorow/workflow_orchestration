@@ -99,10 +99,13 @@ function isEventVisible(ev) {
     return true;
 }
 
-export async function loadAgentEvents(agentName) {
+export async function loadAgentEvents(agentName, sessionId) {
     if (!agentName) return;
     try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/events?limit=50`);
+        const params = new URLSearchParams({ limit: 50 });
+        const sid = sessionId || (state.currentSession && state.currentSession.session_id);
+        if (sid) params.set("session_id", sid);
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/events?${params}`);
         state.currentAgentEvents = await resp.json();
     } catch (e) {
         state.currentAgentEvents = [];

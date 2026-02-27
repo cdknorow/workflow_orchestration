@@ -14,12 +14,15 @@ PULSE_EVENT_RE = re.compile(r"\|\|PULSE:(\S+)\s+(.*?)\|\|")
 _file_positions: dict[str, int] = {}
 
 
-async def scan_log_for_pulse_events(store, agent_name: str, log_path: str) -> None:
+async def scan_log_for_pulse_events(
+    store, agent_name: str, log_path: str, session_id: str | None = None,
+) -> None:
     """Scan new content in a log file for all PULSE events.
 
     - All pulse events are stored as activities in agent_events.
     - STATUS and SUMMARY are skipped here (handled by _track_status_summary_events
       in web_server.py which deduplicates on change).
+    - *session_id* is passed from discovery (no DB lookup needed).
     """
     path = Path(log_path)
     if not path.exists():
@@ -48,9 +51,6 @@ async def scan_log_for_pulse_events(store, agent_name: str, log_path: str) -> No
         return
 
     clean = strip_ansi(new_content)
-
-    # Get current session_id so events are scoped to the active session
-    session_id = await store.get_agent_session_id(agent_name)
 
     # Process all pulse events
     for match in PULSE_EVENT_RE.finditer(clean):

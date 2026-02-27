@@ -38,14 +38,17 @@ from corral.task_detector import scan_log_for_pulse_events
 log = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
 
-# Track last-known status/summary per agent so we only emit events on change.
+# Track last-known status/summary per session_id so we only emit events on change.
 _last_known: dict[str, dict[str, str | None]] = {}
 
 
-async def _track_status_summary_events(agent_name: str, status: str | None, summary: str | None):
+async def _track_status_summary_events(
+    agent_name: str, status: str | None, summary: str | None, session_id: str | None = None,
+):
     """Insert agent_events when status or summary changes for a live agent."""
-    prev = _last_known.get(agent_name, {"status": None, "summary": None})
-    session_id = await store.get_agent_session_id(agent_name)
+    # Dedup key: use session_id if available, fall back to agent_name
+    dedup_key = session_id or agent_name
+    prev = _last_known.get(dedup_key, {"status": None, "summary": None})
 
     if status and status != prev.get("status"):
         await store.insert_agent_event(
@@ -56,7 +59,7 @@ async def _track_status_summary_events(agent_name: str, status: str | None, summ
             agent_name, "goal", summary, session_id=session_id,
         )
 
-    _last_known[agent_name] = {"status": status, "summary": summary}
+    _last_known[dedup_key] = {"status": status, "summary": summary}
 
 
 @asynccontextmanager
@@ -106,6 +109,12 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+COMMAND_MAP = {
+    "claude": {"compress": "/compact", "clear": "/clear"},
+    "gemini": {"compress": "/compact", "clear": "/clear"},
+}
+
+
 @app.get("/api/sessions/live")
 async def get_live_sessions():
     """List active corral agents with their current status."""
@@ -116,9 +125,12 @@ async def get_live_sessions():
         log_info = get_log_status(agent["log_path"])
         git = git_state.get(agent["agent_name"])
         name = agent["agent_name"]
+        sid = agent.get("session_id")
         entry = {
             "name": name,
             "agent_type": agent["agent_type"],
+            "session_id": sid,
+            "tmux_session": agent.get("tmux_session"),
             "log_path": agent["log_path"],
             "status": log_info["status"],
             "summary": log_info["summary"],
@@ -127,24 +139,27 @@ async def get_live_sessions():
             "branch": git["branch"] if git else None,
         }
         results.append(entry)
-        await _track_status_summary_events(name, log_info["status"], log_info["summary"])
+        await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
         # Scan log for all protocol events (TASK, TASK_DONE, custom events)
-        await scan_log_for_pulse_events(store, name, agent["log_path"])
+        await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
     return results
 
 
 @app.get("/api/sessions/live/{name}")
-async def get_live_session_detail(name: str, agent_type: str | None = None):
+async def get_live_session_detail(
+    name: str, agent_type: str | None = None, session_id: str | None = None,
+):
     """Get detailed info for a specific live session."""
-    log_path = get_agent_log_path(name, agent_type)
+    log_path = get_agent_log_path(name, agent_type, session_id=session_id)
     if not log_path:
         return {"error": f"Agent '{name}' not found"}
 
     snapshot = get_log_snapshot(str(log_path))
-    pane_text = await capture_pane(name, agent_type=agent_type)
+    pane_text = await capture_pane(name, agent_type=agent_type, session_id=session_id)
 
     return {
         "name": name,
+        "session_id": session_id,
         "status": snapshot["status"],
         "summary": snapshot["summary"],
         "recent_lines": snapshot["recent_lines"],
@@ -154,18 +169,18 @@ async def get_live_session_detail(name: str, agent_type: str | None = None):
 
 
 @app.get("/api/sessions/live/{name}/capture")
-async def get_pane_capture(name: str, agent_type: str | None = None):
+async def get_pane_capture(name: str, agent_type: str | None = None, session_id: str | None = None):
     """Capture current tmux pane content."""
-    text = await capture_pane(name, agent_type=agent_type)
+    text = await capture_pane(name, agent_type=agent_type, session_id=session_id)
     if text is None:
         return {"error": f"Could not capture pane for '{name}'"}
     return {"name": name, "capture": text}
 
 
 @app.get("/api/sessions/live/{name}/info")
-async def get_live_session_info(name: str, agent_type: str | None = None):
+async def get_live_session_info(name: str, agent_type: str | None = None, session_id: str | None = None):
     """Return enriched metadata for a live session (Info modal)."""
-    info = await get_session_info(name, agent_type)
+    info = await get_session_info(name, agent_type, session_id=session_id)
     if not info:
         return {"error": f"Agent '{name}' not found"}
     git = await store.get_latest_git_state(name)
@@ -278,7 +293,8 @@ async def send_command(name: str, body: dict):
         return {"error": "No command provided"}
 
     agent_type = body.get("agent_type") or None
-    error = await send_to_tmux(name, command, agent_type=agent_type)
+    sid = body.get("session_id") or None
+    error = await send_to_tmux(name, command, agent_type=agent_type, session_id=sid)
     if error:
         return {"error": error}
     return {"ok": True, "command": command}
@@ -292,7 +308,8 @@ async def send_keys(name: str, body: dict):
         return {"error": "keys must be a non-empty list of tmux key names"}
 
     agent_type = body.get("agent_type") or None
-    error = await send_raw_keys(name, keys, agent_type=agent_type)
+    sid = body.get("session_id") or None
+    error = await send_raw_keys(name, keys, agent_type=agent_type, session_id=sid)
     if error:
         return {"error": error}
     return {"ok": True, "keys": keys}
@@ -302,8 +319,8 @@ async def send_keys(name: str, body: dict):
 async def kill_live_session(name: str, body: dict | None = None):
     """Kill the tmux session for a live agent."""
     agent_type = (body or {}).get("agent_type") or None
-    await store.clear_agent_session_id(name)
-    error = await kill_session(name, agent_type=agent_type)
+    sid = (body or {}).get("session_id") or None
+    error = await kill_session(name, agent_type=agent_type, session_id=sid)
     if error:
         return {"error": error}
     return {"ok": True}
@@ -314,24 +331,22 @@ async def restart_live_session(name: str, body: dict | None = None):
     """Restart the agent session: exit the current session and launch a fresh one in the same pane."""
     agent_type = (body or {}).get("agent_type") or None
     extra_flags = (body or {}).get("extra_flags") or None
-    # Clear session_id so the new session starts with a clean task/event slate
-    await store.clear_agent_session_id(name)
-    result = await restart_session(name, agent_type=agent_type, extra_flags=extra_flags)
+    sid = (body or {}).get("session_id") or None
+    result = await restart_session(name, agent_type=agent_type, extra_flags=extra_flags, session_id=sid)
     return result
 
 
 @app.post("/api/sessions/live/{name}/resume")
 async def resume_live_session(name: str, body: dict):
     """Restart the agent with --resume to continue a historical session."""
-    session_id = body.get("session_id")
+    resume_sid = body.get("session_id")
     agent_type = body.get("agent_type") or None
-    if not session_id:
+    current_sid = body.get("current_session_id") or None
+    if not resume_sid:
         return {"error": "session_id is required"}
-    # Clear old binding, restart with --resume, then bind new session_id
-    await store.clear_agent_session_id(name)
-    result = await restart_session(name, agent_type=agent_type, resume_session_id=session_id)
-    if not result.get("error"):
-        await store.set_agent_session_id(name, session_id)
+    result = await restart_session(
+        name, agent_type=agent_type, resume_session_id=resume_sid, session_id=current_sid,
+    )
     return result
 
 
@@ -339,7 +354,8 @@ async def resume_live_session(name: str, body: dict):
 async def attach_terminal(name: str, body: dict | None = None):
     """Open a local terminal window attached to the agent's tmux session."""
     agent_type = (body or {}).get("agent_type") or None
-    error = await open_terminal_attached(name, agent_type=agent_type)
+    sid = (body or {}).get("session_id") or None
+    error = await open_terminal_attached(name, agent_type=agent_type, session_id=sid)
     if error:
         return {"error": error}
     return {"ok": True}
@@ -481,9 +497,8 @@ async def remove_session_tag(session_id: str, tag_id: int):
 
 
 @app.get("/api/sessions/live/{name}/tasks")
-async def list_agent_tasks(name: str):
-    """List tasks for the current session of a live agent."""
-    session_id = await store.get_agent_session_id(name)
+async def list_agent_tasks(name: str, session_id: str | None = None):
+    """List tasks for a live agent, scoped by session_id."""
     if session_id is None:
         return []
     return await store.list_agent_tasks(name, session_id=session_id)
@@ -495,11 +510,7 @@ async def create_agent_task(name: str, body: dict):
     title = body.get("title", "").strip()
     if not title:
         return {"error": "title is required"}
-    session_id = await store.get_agent_session_id(name)
-    # Accept session_id from body as fallback (e.g. from hooks that know the session)
-    if session_id is None and body.get("session_id"):
-        session_id = body["session_id"]
-        await store.set_agent_session_id(name, session_id)
+    session_id = body.get("session_id")
     task = await store.create_agent_task(name, title, session_id=session_id)
     return task
 
@@ -535,9 +546,8 @@ async def reorder_agent_tasks(name: str, body: dict):
 
 
 @app.get("/api/sessions/live/{name}/notes")
-async def list_agent_notes(name: str):
-    """List notes for the current session of a live agent."""
-    session_id = await store.get_agent_session_id(name)
+async def list_agent_notes(name: str, session_id: str | None = None):
+    """List notes for a live agent, scoped by session_id."""
     if session_id is None:
         return []
     return await store.list_agent_notes(name, session_id=session_id)
@@ -549,7 +559,7 @@ async def create_agent_note(name: str, body: dict):
     content = body.get("content", "").strip()
     if not content:
         return {"error": "content is required"}
-    session_id = await store.get_agent_session_id(name)
+    session_id = body.get("session_id")
     note = await store.create_agent_note(name, content, session_id=session_id)
     return note
 
@@ -575,9 +585,10 @@ async def delete_agent_note(name: str, note_id: int):
 
 
 @app.get("/api/sessions/live/{name}/events")
-async def list_agent_events(name: str, limit: int = Query(50, ge=1, le=200)):
-    """List recent events for the current session of a live agent."""
-    session_id = await store.get_agent_session_id(name)
+async def list_agent_events(
+    name: str, limit: int = Query(50, ge=1, le=200), session_id: str | None = None,
+):
+    """List recent events for a live agent, scoped by session_id."""
     events = await store.list_agent_events(name, limit, session_id=session_id)
     return events
 
@@ -593,10 +604,6 @@ async def create_agent_event(name: str, body: dict):
     session_id = body.get("session_id")
     detail_json = body.get("detail_json")
 
-    # Track the current session_id for this agent
-    if session_id:
-        await store.set_agent_session_id(name, session_id)
-
     event = await store.insert_agent_event(
         name, event_type, summary,
         tool_name=tool_name, session_id=session_id, detail_json=detail_json,
@@ -605,17 +612,15 @@ async def create_agent_event(name: str, body: dict):
 
 
 @app.get("/api/sessions/live/{name}/events/counts")
-async def get_agent_event_counts(name: str):
-    """Get event counts grouped by tool name for the current session."""
-    session_id = await store.get_agent_session_id(name)
+async def get_agent_event_counts(name: str, session_id: str | None = None):
+    """Get event counts grouped by tool name for a session."""
     counts = await store.get_agent_event_counts(name, session_id=session_id)
     return counts
 
 
 @app.delete("/api/sessions/live/{name}/events")
-async def clear_agent_events(name: str):
-    """Clear events for the current session of a live agent."""
-    session_id = await store.get_agent_session_id(name)
+async def clear_agent_events(name: str, session_id: str | None = None):
+    """Clear events for a live agent session."""
     await store.clear_agent_events(name, session_id=session_id)
     return {"ok": True}
 
@@ -638,16 +643,19 @@ async def ws_corral(websocket: WebSocket):
                 log_info = get_log_status(agent["log_path"])
                 git = git_state.get(agent["agent_name"])
                 name = agent["agent_name"]
+                sid = agent.get("session_id")
                 results.append({
                     "name": name,
                     "agent_type": agent["agent_type"],
+                    "session_id": sid,
+                    "tmux_session": agent.get("tmux_session"),
                     "status": log_info["status"],
                     "summary": log_info["summary"],
                     "staleness_seconds": log_info["staleness_seconds"],
                     "branch": git["branch"] if git else None,
                 })
-                await _track_status_summary_events(name, log_info["status"], log_info["summary"])
-                await scan_log_for_pulse_events(store, name, agent["log_path"])
+                await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
+                await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
 
             current_state = json.dumps(results, sort_keys=True)
             if current_state != last_state:
