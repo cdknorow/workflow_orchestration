@@ -90,6 +90,7 @@ async def lifespan(app: FastAPI):
     indexer_task.cancel()
     summarizer_task.cancel()
     git_task.cancel()
+    await store.close()
 
 
 app = FastAPI(title="Corral Dashboard", lifespan=lifespan)

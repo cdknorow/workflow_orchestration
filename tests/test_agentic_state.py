@@ -17,9 +17,9 @@ async def tmp_store(tmp_path):
     """Create a SessionStore backed by a temp SQLite database."""
     db_path = tmp_path / "test.db"
     s = SessionStore(db_path=db_path)
-    conn = await s._connect()
-    await conn.close()
-    return s
+    await s._get_conn()  # Force schema creation
+    yield s
+    await s.close()
 
 
 @pytest_asyncio.fixture
