@@ -64,6 +64,51 @@ corral-dashboard --host 127.0.0.1 --port 9000
 ```
 
 
+### Managing sessions from the dashboard
+
+<!-- TODO: Add a GIF here showing the live pane capture updating, sending commands to an agent, and toggling plan/base mode. -->
+<img width="1510" height="813" alt="image" src="https://github.com/user-attachments/assets/5a2e7909-ef08-4371-b485-f6e141a5a02c" />
+
+The web dashboard provides quick-action buttons for each live session:
+
+| Action | Description |
+|---|---|
+| **Esc / Arrow / Enter** | Send navigation keys to the agent |
+| **Plan Mode** | Toggle Claude Code plan mode |
+| **Accept Edits** | Toggle Claude Code auto-accept mode |
+| **Bash Mode** | Send `!` command to enter bash mode |
+| **Base Mode** | Toggle base mode |
+| **/compact / /clear** | Send compress or clear commands (adapts per agent type) |
+| **Reset** | Compress then clear the session |
+| **Attach** | Open a local terminal window attached to the agent's tmux session |
+| **Restart** | Restart the agent in the same tmux pane |
+| **Kill** | Terminate the tmux session and remove it from the dashboard |
+
+You can also type arbitrary commands in the input bar and send them to the selected agent.
+
+### Session history search and filtering
+
+<!-- TODO: Add a GIF here showing full-text search across past Claude/Gemini sessions and adding notes/tags. -->
+<img width="1512" height="799" alt="image" src="https://github.com/user-attachments/assets/37561737-caf9-438b-81af-8c48a6cfe30a" />
+
+
+The sidebar History section includes a search bar and filters for browsing your entire AI coding session history.
+
+On startup, the server launches three background services:
+
+1. **Session indexer** (every 2 min) — Indexes all Claude sessions from `~/.claude/projects/**/*.jsonl` and Gemini sessions from `~/.gemini/tmp/*/chats/session-*.json`, builds a full-text search index (FTS5), and queues new sessions for auto-summarization
+2. **Batch summarizer** — Continuously processes the summarization queue using Claude CLI
+3. **Git poller** (every 2 min) — Polls git branch, commit, and remote URL for each live agent and stores snapshots in SQLite
+
+Features:
+
+- **Search** — Type in the search bar to find sessions by content (uses SQLite FTS5 with porter stemming)
+- **Filter by tag** — Select a tag from the dropdown to narrow results
+- **Filter by source** — Show only Claude or Gemini sessions
+- **Pagination** — Browse through all sessions with prev/next controls
+- **URL bookmarking** — Session URLs use hash routing (`#session/<id>`) so you can bookmark or share links
+- **Notes & tags** — Add markdown notes and color-coded tags to any session, stored in `~/.corral/sessions.db`
+
 ### Claude Code Hooks (settings.json)
 
 To fully integrate Claude Code's agentic state and task management into the Corral dashboard, configure the provided `corral-hook` scripts in your Claude Code `settings.json` (usually located at `~/.claude.json` or `~/.claude/settings.json`).
@@ -116,51 +161,6 @@ If you are already using other configuration options like a custom `statusLine` 
     ]
 
 ```
-
-### Managing sessions from the dashboard
-
-<!-- TODO: Add a GIF here showing the live pane capture updating, sending commands to an agent, and toggling plan/base mode. -->
-<img width="1510" height="813" alt="image" src="https://github.com/user-attachments/assets/5a2e7909-ef08-4371-b485-f6e141a5a02c" />
-
-The web dashboard provides quick-action buttons for each live session:
-
-| Action | Description |
-|---|---|
-| **Esc / Arrow / Enter** | Send navigation keys to the agent |
-| **Plan Mode** | Toggle Claude Code plan mode |
-| **Accept Edits** | Toggle Claude Code auto-accept mode |
-| **Bash Mode** | Send `!` command to enter bash mode |
-| **Base Mode** | Toggle base mode |
-| **/compact / /clear** | Send compress or clear commands (adapts per agent type) |
-| **Reset** | Compress then clear the session |
-| **Attach** | Open a local terminal window attached to the agent's tmux session |
-| **Restart** | Restart the agent in the same tmux pane |
-| **Kill** | Terminate the tmux session and remove it from the dashboard |
-
-You can also type arbitrary commands in the input bar and send them to the selected agent.
-
-### Session history search and filtering
-
-<!-- TODO: Add a GIF here showing full-text search across past Claude/Gemini sessions and adding notes/tags. -->
-<img width="1512" height="799" alt="image" src="https://github.com/user-attachments/assets/37561737-caf9-438b-81af-8c48a6cfe30a" />
-
-
-The sidebar History section includes a search bar and filters for browsing your entire AI coding session history.
-
-On startup, the server launches three background services:
-
-1. **Session indexer** (every 2 min) — Indexes all Claude sessions from `~/.claude/projects/**/*.jsonl` and Gemini sessions from `~/.gemini/tmp/*/chats/session-*.json`, builds a full-text search index (FTS5), and queues new sessions for auto-summarization
-2. **Batch summarizer** — Continuously processes the summarization queue using Claude CLI
-3. **Git poller** (every 2 min) — Polls git branch, commit, and remote URL for each live agent and stores snapshots in SQLite
-
-Features:
-
-- **Search** — Type in the search bar to find sessions by content (uses SQLite FTS5 with porter stemming)
-- **Filter by tag** — Select a tag from the dropdown to narrow results
-- **Filter by source** — Show only Claude or Gemini sessions
-- **Pagination** — Browse through all sessions with prev/next controls
-- **URL bookmarking** — Session URLs use hash routing (`#session/<id>`) so you can bookmark or share links
-- **Notes & tags** — Add markdown notes and color-coded tags to any session, stored in `~/.corral/sessions.db`
 
 ### Remote server development (SSH port forwarding)
 
