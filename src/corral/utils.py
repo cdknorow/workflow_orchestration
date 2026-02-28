@@ -26,13 +26,24 @@ def _hook_entry_exists(matcher_groups: list, command: str) -> bool:
     return False
 
 
-def install_hooks():
+def install_hooks(target_dir: Path | str | None = None):
     """Ensure Claude hooks for Corral are installed in settings.local.json.
+
+    When *target_dir* is provided, hooks are written to
+    ``<target_dir>/.claude/settings.local.json`` (per-worktree).
+    When omitted, falls back to ``~/.claude/settings.local.json`` (global).
 
     Merges corral hooks into existing user hooks without overriding them.
     Skips any hook that is already present (matched by command name).
     """
-    settings_path = Path.home() / ".claude" / "settings.local.json"
+    if target_dir is not None:
+        target = Path(target_dir)
+        # Only install into git worktree roots (.git file or directory)
+        if not (target / ".git").exists():
+            return
+        settings_path = target / ".claude" / "settings.local.json"
+    else:
+        settings_path = Path.home() / ".claude" / "settings.local.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
     if settings_path.exists():

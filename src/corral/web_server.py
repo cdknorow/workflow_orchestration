@@ -71,8 +71,13 @@ async def lifespan(app: FastAPI):
     from corral.session_indexer import SessionIndexer, BatchSummarizer
     from corral.git_poller import GitPoller
     from corral.utils import install_hooks
+    from corral.session_manager import discover_corral_agents
 
-    install_hooks()
+    # Install hooks into each live agent's worktree
+    for agent in await discover_corral_agents():
+        wd = agent.get("working_directory") or ""
+        if wd:
+            install_hooks(wd)
 
     # Seed _last_known from DB so we don't re-insert events already stored.
     _last_known.update(await store.get_last_known_status_summary())

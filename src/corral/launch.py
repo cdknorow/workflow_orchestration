@@ -8,7 +8,11 @@ from pathlib import Path
 def main():
     from corral.utils import install_hooks
 
-    install_hooks()
+    # Install hooks into each worktree's .claude/settings.local.json
+    target_dir = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+    for child in sorted(target_dir.iterdir()):
+        if child.is_dir():
+            install_hooks(child)
 
     script = Path(__file__).parent / "launch_agents.sh"
     if not script.exists():

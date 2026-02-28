@@ -78,6 +78,7 @@ async def discover_corral_agents() -> list[dict[str, Any]]:
             "session_id": session_id,
             "tmux_session": session_name,
             "log_path": log_path,
+            "working_directory": current_path,
         })
 
     # Clean up stale log files that don't match any live session
