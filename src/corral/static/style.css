@@ -67,6 +67,23 @@ body {
     padding: 5px 14px;
 }
 
+.top-bar-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+}
+
+.top-bar-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
 /* Layout */
 .layout {
     display: flex;
@@ -789,6 +806,10 @@ body {
     background: var(--bg-hover);
     color: var(--text-primary);
     border-color: var(--text-muted);
+}
+
+.settings-select {
+    width: 100%;
 }
 
 .btn-enter {

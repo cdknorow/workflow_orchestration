@@ -1,8 +1,10 @@
 /* Modal management: launch and info dialogs */
 
 import { state } from './state.js';
-import { showToast, escapeHtml } from './utils.js';
+import { showToast, escapeHtml, escapeAttr } from './utils.js';
 import { loadLiveSessions } from './api.js';
+import { getEngineNames, getEngineName, setRendererOverride } from './renderers.js';
+import { renderCaptureText } from './capture.js';
 
 export function showLaunchModal() {
     document.getElementById("launch-modal").style.display = "flex";
@@ -173,11 +175,54 @@ export async function resumeIntoSession(agentName, agentType, currentSessionId) 
     }
 }
 
+// ── Settings Modal ────────────────────────────────────────────────────────
+
+export function showSettingsModal() {
+    if (!state.currentSession || state.currentSession.type !== "live") {
+        showToast("No live session selected", true);
+        return;
+    }
+
+    const agentType = state.currentSession.agent_type || "claude";
+    const sessionId = state.currentSession.session_id || null;
+    const currentEngine = getEngineName(agentType, sessionId);
+
+    const options = getEngineNames()
+        .map(name => `<option value="${escapeAttr(name)}"${name === currentEngine ? " selected" : ""}>${escapeHtml(name)}</option>`)
+        .join("");
+
+    document.getElementById("settings-renderer-select").innerHTML = options;
+    document.getElementById("settings-modal").style.display = "flex";
+}
+
+export function hideSettingsModal() {
+    document.getElementById("settings-modal").style.display = "none";
+}
+
+export function applySettings() {
+    const select = document.getElementById("settings-renderer-select");
+    const engineName = select.value;
+    const sessionId = state.currentSession?.session_id;
+
+    if (sessionId) {
+        setRendererOverride(sessionId, engineName);
+        // Force re-render with new engine
+        const el = document.getElementById("pane-capture");
+        if (el && el._lastCapture) {
+            renderCaptureText(el, el._lastCapture);
+        }
+        showToast(`Renderer: ${engineName}`);
+    }
+
+    hideSettingsModal();
+}
+
 // Close modals on outside click
 document.addEventListener("click", (e) => {
     const launchModal = document.getElementById("launch-modal");
     const infoModal = document.getElementById("info-modal");
     const resumeModal = document.getElementById("resume-modal");
+    const settingsModal = document.getElementById("settings-modal");
     if (e.target === launchModal) {
         hideLaunchModal();
     }
@@ -187,6 +232,9 @@ document.addEventListener("click", (e) => {
     if (e.target === resumeModal) {
         hideResumeModal();
     }
+    if (e.target === settingsModal) {
+        hideSettingsModal();
+    }
 });
 
 // Close modals on Escape
@@ -195,5 +243,6 @@ document.addEventListener("keydown", (e) => {
         hideLaunchModal();
         hideInfoModal();
         hideResumeModal();
+        hideSettingsModal();
     }
 });
