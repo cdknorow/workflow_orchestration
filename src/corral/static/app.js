@@ -15,6 +15,7 @@ import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAge
 import { loadAgentNotes, initNotesMd } from './agent_notes.js';
 import { switchAgenticTab, loadAgentEvents, toggleEventFilter, toggleAllEventFilters, showFilterPopup, hideFilterPopup } from './agentic_state.js';
 import { toggleHistoryEventFilter, toggleAllHistoryEventFilters } from './history_tabs.js';
+import { copyBranchName } from './utils.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -35,6 +36,7 @@ window.launchSession = launchSession;
 window.showInfoModal = showInfoModal;
 window.hideInfoModal = hideInfoModal;
 window.copyInfoCommand = copyInfoCommand;
+window.copyBranchName = copyBranchName;
 window.showResumeModal = showResumeModal;
 window.hideResumeModal = hideResumeModal;
 window.resumeIntoSession = resumeIntoSession;

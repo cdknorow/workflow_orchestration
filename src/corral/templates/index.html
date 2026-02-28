@@ -61,6 +61,7 @@
                         <h2 id="session-name"></h2>
                         <span id="session-branch" class="title-branch" style="display:none">
                             <span class="branch-icon">&#x2387;</span> <span class="branch-text"></span>
+                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
                         </span>
                         <div class="session-title-actions">
                             <button class="btn btn-icon-label" onclick="showInfoModal()" title="View session details: agent type, tmux session, working directory, and log path"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg><span>Info</span></button>
@@ -136,6 +137,7 @@
                         <h2 id="history-session-title">Session History</h2>
                         <span id="history-session-branch" class="title-branch" style="display:none">
                             <span class="branch-icon">&#x2387;</span> <span class="branch-text"></span>
+                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
                         </span>
                         <span id="history-session-id" class="session-id-label"></span>
                         <div id="history-session-tags" class="tag-list"></div>

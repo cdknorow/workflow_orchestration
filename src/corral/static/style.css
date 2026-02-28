@@ -441,6 +441,23 @@ body {
     vertical-align: middle;
 }
 
+.copy-branch-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 2px;
+    vertical-align: middle;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+
+.copy-branch-btn:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
 .sidebar-branch {
     font-size: 11px;
     color: var(--text-muted);

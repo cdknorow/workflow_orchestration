@@ -17,3 +17,12 @@ export function showToast(message, isError = false) {
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
+
+export function copyBranchName(btn) {
+    const branchText = btn.closest(".title-branch").querySelector(".branch-text").textContent;
+    navigator.clipboard.writeText(branchText).then(() => {
+        showToast("Copied branch name");
+    }).catch(() => {
+        showToast("Failed to copy", true);
+    });
+}
