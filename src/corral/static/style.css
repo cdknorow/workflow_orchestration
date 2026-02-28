@@ -531,6 +531,54 @@ body {
     color: var(--text-secondary);
 }
 
+/* Block containers for grouping related lines */
+.capture-block {
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-left: 3px solid transparent;
+}
+
+.capture-block-text {
+    background: rgba(110, 118, 129, 0.06);
+    border-left-color: var(--border);
+}
+
+.capture-block-tool {
+    background: rgba(88, 166, 255, 0.05);
+    border-left-color: var(--accent-dim);
+}
+
+.capture-block-user {
+    background: rgba(201, 160, 255, 0.08);
+    border-left-color: #7c3aed;
+}
+
+.capture-block-pulse {
+    background: rgba(63, 185, 80, 0.08);
+    border-left-color: var(--success);
+}
+
+.capture-block-status {
+    background: transparent;
+    border-left-color: transparent;
+    padding: 4px 12px;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.capture-block-statusbar {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-light);
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
 .capture-line {
     white-space: pre;
     min-height: 1.4em;
