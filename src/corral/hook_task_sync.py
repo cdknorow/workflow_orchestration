@@ -124,7 +124,8 @@ def main():
             # completed=1 means done, completed=2 means in_progress
             completed_value = 1 if status == "completed" else 2
             if title:
-                tasks = _api(base, "GET", f"/api/sessions/live/{agent_name}/tasks")
+                qs = f"?session_id={session_id}" if session_id else ""
+                tasks = _api(base, "GET", f"/api/sessions/live/{agent_name}/tasks{qs}")
                 _debug_log(f"Dashboard tasks: {json.dumps([t.get('title') for t in (tasks or [])])}")
                 if tasks:
                     for t in tasks:
