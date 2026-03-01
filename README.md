@@ -3,12 +3,10 @@
 ---
 
 
-Corral is an MIT licensed multi-agent orchestration application for managing AI coding agents across git worktrees running locally on your local or remote machine. The application is built using tmux and FastAPI for easy extensibilty and modification.
+Corral is an MIT licensed multi-agent orchestration application for managing AI coding agents across git worktrees running locally on your local or remote machine. The application is built using tmux and FastAPI for easy extensibilty and modification. It is designed with the hope that we can back some sanity to coding with AI agents across multiple worktrees and sessions. The automated goals and status for each session are displayed prominantly, you can do full text search across previous sessions and resume them. The activity of the agent is visible so you can follow along and start to get a better understanding of just what these things are doing. We welcome feedback, commits and hope it brings you some stress releif to corral those little AIs.
 
 
-<img width="1503" height="823" alt="image" src="https://github.com/user-attachments/assets/9784a0d6-9bc9-40d4-99b0-3baabd51eaff" />
-
-
+![main_loop](https://github.com/user-attachments/assets/6af60c92-1d72-45bd-9b46-7f1eab2ce5fe)
 
 ## Features
 
@@ -21,13 +19,6 @@ Corral is an MIT licensed multi-agent orchestration application for managing AI 
 - **Remote control** — Send commands, navigate modes, and manage agents from the dashboard
 - **Attach/Kill/Restart/Resume** — Open a terminal attached to any agent's tmux session, or kill it directly from the UI, or relaunch as a neew session
 - **Git integration & PR Linking** Tracks, commits, and remote URL per agent & session
-
-As Demoed by Claude 😂😂😂
-<p align="center">
-  <img src="corral-dashboard-tour.gif" alt="Corral Dashboard Tour" width="800" />
-</p>
-
-
 
 ## Installation
 
@@ -43,16 +34,7 @@ Or install directly from GitHub:
 pip install git+https://github.com/cdknorow/corral.git
 ```
 
-## Usage
-
-
-### Launch agents and web dashboard
-
-
-> **Note:** This system is currently mostly tested with Claude Code and to some extent Gemini CLI. However, the underlying architecture is designed to support other agents, which can be integrated with some additional work from others.
-
-
-### Web dashboard (standalone)
+## Launch agents and web dashboard
 
 You can launch the web server directly using `corral` or `corral-dashboard`:
 
@@ -65,21 +47,33 @@ corral --host 127.0.0.1 --port 9000
 
 ```
 
-Or use launcher which discovers worktree subdirectories, creates a agent for each one, and starts launches the dashboard:
+> **Note:** This system is currently mostly tested with Claude Code and to some extent Gemini CLI. However, the underlying architecture is extensible to any cli based agents.
 
-```bash
-# Launch Claude agents and web dashboard for worktrees in the current directory
-launch-corral
+### Session history search and filtering
 
-# Launch Gemini agents from a specific path
-launch-corral <path-to-root> gemini
+![history](https://github.com/user-attachments/assets/3848aefe-e358-425b-ae14-ed2f41704a33)
 
-```
+
+The sidebar History section includes a search bar and filters for browsing your entire AI coding session history along with activity, notes, and git commit tracking
+
+On startup, the server launches three background services:
+
+1. **Session indexer** (every 2 min) — Indexes all Claude sessions from `~/.claude/projects/**/*.jsonl` and Gemini sessions from `~/.gemini/tmp/*/chats/session-*.json`, builds a full-text search index (FTS5), and queues new sessions for auto-summarization
+2. **Batch summarizer** — Continuously processes the summarization queue using Claude CLI
+3. **Git poller** (every 2 min) — Polls git branch, commit, and remote URL for each live agent and stores snapshots in SQLite
+
+Features:
+
+- **Search** — Type in the search bar to find sessions by content (uses SQLite FTS5 with porter stemming)
+- **Filter by tag** — Select a tag from the dropdown to narrow results
+- **Filter by source** — Show only Claude or Gemini sessions
+- **Pagination** — Browse through all sessions with prev/next controls
+- **URL bookmarking** — Session URLs use hash routing (`#session/<id>`) so you can bookmark or share links
+- **Notes & tags** — Add markdown notes and color-coded tags to any session, stored in `~/.corral/sessions.db`
 
 
 ### Managing sessions from the dashboard
 
-<!-- TODO: Add a GIF here showing the live pane capture updating, sending commands to an agent, and toggling plan/base mode. -->
 <img width="1502" height="812" alt="image" src="https://github.com/user-attachments/assets/9a8d1b7b-1bef-414b-9002-c27dd928342b" />
 
 
@@ -100,31 +94,7 @@ The web dashboard provides quick-action buttons for each live session:
 
 You can also type arbitrary commands in the input bar and send them to the selected agent.
 
-### Session history search and filtering
 
-<!-- TODO: Add a GIF here showing full-text search across past Claude/Gemini sessions and adding notes/tags. -->
-<img width="1507" height="821" alt="image" src="https://github.com/user-attachments/assets/89ba48ba-65b4-4292-9170-add2880bd5b7" />
-
-<img width="1498" height="815" alt="image" src="https://github.com/user-attachments/assets/a1f6bbb3-ee15-4fc3-867c-0d41d0f717ea" />
-
-
-
-The sidebar History section includes a search bar and filters for browsing your entire AI coding session history along with activity, notes, and git commit tracking
-
-On startup, the server launches three background services:
-
-1. **Session indexer** (every 2 min) — Indexes all Claude sessions from `~/.claude/projects/**/*.jsonl` and Gemini sessions from `~/.gemini/tmp/*/chats/session-*.json`, builds a full-text search index (FTS5), and queues new sessions for auto-summarization
-2. **Batch summarizer** — Continuously processes the summarization queue using Claude CLI
-3. **Git poller** (every 2 min) — Polls git branch, commit, and remote URL for each live agent and stores snapshots in SQLite
-
-Features:
-
-- **Search** — Type in the search bar to find sessions by content (uses SQLite FTS5 with porter stemming)
-- **Filter by tag** — Select a tag from the dropdown to narrow results
-- **Filter by source** — Show only Claude or Gemini sessions
-- **Pagination** — Browse through all sessions with prev/next controls
-- **URL bookmarking** — Session URLs use hash routing (`#session/<id>`) so you can bookmark or share links
-- **Notes & tags** — Add markdown notes and color-coded tags to any session, stored in `~/.corral/sessions.db`
 
 ### Claude Code Hooks (settings.json)
 
@@ -176,6 +146,19 @@ If you are already using other configuration options like a custom `statusLine` 
         ]
       }
     ]
+
+```
+
+
+
+Or use launcher which discovers worktree subdirectories, creates a agent for each one, and starts launches the dashboard:
+
+```bash
+# Launch Claude agents and web dashboard for worktrees in the current directory
+launch-corral
+
+# Launch Gemini agents from a specific path
+launch-corral <path-to-root> gemini
 
 ```
 
