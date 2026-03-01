@@ -9,6 +9,7 @@ import {
     CODE_FENCE_RE, DIFF_ADD_RE, DIFF_DEL_RE, DIFF_SUMMARY_RE,
     TOOL_HEADER_RE, TOOL_RESULT_RE,
 } from './syntax.js';
+import { state } from './state.js';
 
 // ── Regex constants shared across renderers ──────────────────────────
 
@@ -343,6 +344,10 @@ export function getEngineNames() {
 export function getEngineName(agentType, sessionId) {
     if (sessionId && agentOverrides[sessionId]) {
         return agentOverrides[sessionId];
+    }
+    // Fall back to global user setting before hardcoded agent-type defaults
+    if (state.settings && state.settings.default_renderer && ENGINES[state.settings.default_renderer]) {
+        return state.settings.default_renderer;
     }
     return AGENT_DEFAULTS[agentType] || AGENT_DEFAULTS.claude;
 }

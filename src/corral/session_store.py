@@ -163,6 +163,11 @@ class SessionStore:
             CREATE INDEX IF NOT EXISTS idx_agent_events_agent
                 ON agent_events(agent_name, created_at DESC);
 
+            CREATE TABLE IF NOT EXISTS user_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
         """)
         # FTS5 virtual table — created separately because CREATE VIRTUAL TABLE
         # cannot be used inside executescript on all SQLite builds.
@@ -206,6 +211,23 @@ class SessionStore:
 
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)")
 
+        await conn.commit()
+
+    # ── User Settings ──────────────────────────────────────────────────────
+
+    async def get_settings(self) -> dict[str, str]:
+        """Return all user settings as {key: value}."""
+        conn = await self._get_conn()
+        rows = await (await conn.execute("SELECT key, value FROM user_settings")).fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+    async def set_setting(self, key: str, value: str) -> None:
+        """Upsert a single user setting."""
+        conn = await self._get_conn()
+        await conn.execute(
+            "INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)",
+            (key, value),
+        )
         await conn.commit()
 
     # ── Notes ───────────────────────────────────────────────────────────────

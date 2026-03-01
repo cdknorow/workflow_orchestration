@@ -9,6 +9,18 @@ import { renderCaptureText } from './capture.js';
 export function showLaunchModal() {
     document.getElementById("launch-modal").style.display = "flex";
     document.getElementById("launch-agent-name").value = "";
+
+    // Pre-fill from global settings
+    const s = state.settings || {};
+    const dirInput = document.getElementById("launch-dir");
+    if (s.default_working_dir && dirInput) {
+        dirInput.value = s.default_working_dir;
+    }
+    const typeSelect = document.getElementById("launch-type");
+    if (s.default_agent_type && typeSelect) {
+        typeSelect.value = s.default_agent_type;
+    }
+
     document.getElementById("launch-agent-name").focus();
 }
 
@@ -177,21 +189,38 @@ export async function resumeIntoSession(agentName, agentType, currentSessionId) 
 
 // ── Settings Modal ────────────────────────────────────────────────────────
 
-export function showSettingsModal() {
-    if (!state.currentSession || state.currentSession.type !== "live") {
-        showToast("No live session selected", true);
-        return;
+export async function loadSettings() {
+    try {
+        const resp = await fetch("/api/settings");
+        const data = await resp.json();
+        state.settings = data.settings || {};
+    } catch (e) {
+        console.error("Failed to load settings:", e);
     }
+}
 
-    const agentType = state.currentSession.agent_type || "claude";
-    const sessionId = state.currentSession.session_id || null;
-    const currentEngine = getEngineName(agentType, sessionId);
+export function showSettingsModal() {
+    const s = state.settings || {};
 
+    // Default Render Engine
+    const currentEngine = s.default_renderer || "block-group";
     const options = getEngineNames()
         .map(name => `<option value="${escapeAttr(name)}"${name === currentEngine ? " selected" : ""}>${escapeHtml(name)}</option>`)
         .join("");
-
     document.getElementById("settings-renderer-select").innerHTML = options;
+
+    // Default Agent Type
+    const currentAgentType = s.default_agent_type || "claude";
+    const agentTypeSelect = document.getElementById("settings-agent-type");
+    if (agentTypeSelect) agentTypeSelect.value = currentAgentType;
+
+    // Default Working Directory
+    const dirInput = document.getElementById("settings-working-dir");
+    if (dirInput) {
+        dirInput.value = s.default_working_dir || "";
+        dirInput.placeholder = dirInput.dataset.corralRoot || "/path/to/project";
+    }
+
     document.getElementById("settings-modal").style.display = "flex";
 }
 
@@ -199,19 +228,36 @@ export function hideSettingsModal() {
     document.getElementById("settings-modal").style.display = "none";
 }
 
-export function applySettings() {
-    const select = document.getElementById("settings-renderer-select");
-    const engineName = select.value;
-    const sessionId = state.currentSession?.session_id;
+export async function applySettings() {
+    const engineName = document.getElementById("settings-renderer-select").value;
+    const agentType = document.getElementById("settings-agent-type")?.value || "claude";
+    const workingDir = document.getElementById("settings-working-dir")?.value.trim() || "";
 
-    if (sessionId) {
-        setRendererOverride(sessionId, engineName);
-        // Force re-render with new engine
-        const el = document.getElementById("pane-capture");
-        if (el && el._lastCapture) {
-            renderCaptureText(el, el._lastCapture);
+    const payload = {
+        default_renderer: engineName,
+        default_agent_type: agentType,
+        default_working_dir: workingDir,
+    };
+
+    try {
+        await fetch("/api/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        state.settings = { ...state.settings, ...payload };
+
+        // If a live session is selected, force re-render with new default
+        if (state.currentSession?.session_id) {
+            const el = document.getElementById("pane-capture");
+            if (el && el._lastCapture) {
+                renderCaptureText(el, el._lastCapture);
+            }
         }
-        showToast(`Renderer: ${engineName}`);
+
+        showToast("Settings saved");
+    } catch (e) {
+        showToast("Failed to save settings", true);
     }
 
     hideSettingsModal();

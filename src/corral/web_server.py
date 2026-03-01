@@ -408,6 +408,24 @@ async def set_display_name(name: str, body: dict):
     return {"ok": True, "display_name": display_name}
 
 
+# ── User Settings Endpoints ─────────────────────────────────────────────────
+
+
+@app.get("/api/settings")
+async def get_settings():
+    """Return all global user settings."""
+    settings = await store.get_settings()
+    return {"settings": settings}
+
+
+@app.put("/api/settings")
+async def put_settings(body: dict):
+    """Upsert one or more global user settings."""
+    for key, value in body.items():
+        await store.set_setting(str(key), str(value))
+    return {"ok": True}
+
+
 @app.get("/api/filesystem/list")
 async def list_filesystem(path: str = "~"):
     """List directories at a given path for the directory browser."""

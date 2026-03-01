@@ -14,6 +14,7 @@ export const state = {
     currentAgentNotes: [],      // user notes for the currently selected live agent
     currentAgentEvents: [],     // events for the currently selected live agent
     eventFiltersHidden: null,   // Set of hidden filter keys (lazily initialized)
+    settings: {},               // cached global user settings from /api/settings
 };
 
 export function sessionKey(session) {

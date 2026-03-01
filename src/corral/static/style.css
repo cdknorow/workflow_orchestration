@@ -67,6 +67,12 @@ body {
     padding: 5px 14px;
 }
 
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .top-bar-btn {
     background: none;
     border: none;
@@ -825,6 +831,11 @@ body {
 
 .settings-select {
     width: 100%;
+}
+
+.settings-input {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .btn-enter {
