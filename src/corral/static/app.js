@@ -197,11 +197,14 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Pause capture updates while user is selecting text
+    // Pause capture updates while user is selecting text inside the terminal pane
     const pauseBadge = document.getElementById("selection-pause-badge");
+    const captureWrapper = document.getElementById("capture-wrapper");
     document.addEventListener("selectionchange", () => {
         const sel = window.getSelection();
-        state.isSelecting = sel && sel.toString().length > 0;
+        const hasSelection = sel && sel.toString().length > 0;
+        const inCapture = hasSelection && captureWrapper && sel.anchorNode && captureWrapper.contains(sel.anchorNode);
+        state.isSelecting = !!inCapture;
         if (pauseBadge) pauseBadge.style.display = state.isSelecting ? "" : "none";
     });
 
