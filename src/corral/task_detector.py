@@ -7,8 +7,9 @@ from pathlib import Path
 
 from corral.session_manager import strip_ansi, clean_match
 
-# Generic regex that captures ANY ||PULSE:<TYPE> <payload>|| event
-PULSE_EVENT_RE = re.compile(r"\|\|PULSE:(\S+)\s+(.*?)\|\|")
+# Only match known PULSE event types to avoid matching protocol documentation examples
+KNOWN_PULSE_TYPES = ("STATUS", "SUMMARY", "CONFIDENCE")
+PULSE_EVENT_RE = re.compile(r"^\|\|PULSE:(" + "|".join(KNOWN_PULSE_TYPES) + r")\s+(.*?)\|\|", re.MULTILINE)
 
 # Track file positions to avoid re-scanning the same content
 _file_positions: dict[str, int] = {}

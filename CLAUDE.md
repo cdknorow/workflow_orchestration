@@ -54,7 +54,7 @@ All agent events use the `||PULSE:<EVENT_TYPE> <payload>||` format. The dashboar
 
 - `||PULSE:STATUS <Short Description>||`: Current task (emit before/after each subtask).
 - `||PULSE:SUMMARY <Goal Description>||`: High-level goal (emit once at start or when goal changes).
-- `||PULSE:CONFIDENCE <1-5> <short reason>||`: Certainty about a decision or suggestion (optional, emit when useful).
+- `||PULSE:CONFIDENCE <Low|High> <specific reason>||`: Flag uncertainty (`Low`) or non-obvious confidence (`High`) with a specific reason.
 
 ## Development Guidelines
 - **Build System:** Setuptools with `pyproject.toml`.

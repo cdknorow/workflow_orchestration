@@ -17,8 +17,8 @@ from corral.utils import run_cmd, LOG_DIR, LOG_PATTERN, HISTORY_PATH
 
 ANSI_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-STATUS_RE = re.compile(r"\|\|PULSE:STATUS (.*?)\|\|")
-SUMMARY_RE = re.compile(r"\|\|PULSE:SUMMARY (.*?)\|\|")
+STATUS_RE = re.compile(r"^\|\|PULSE:STATUS (.*?)\|\|", re.MULTILINE)
+SUMMARY_RE = re.compile(r"^\|\|PULSE:SUMMARY (.*?)\|\|", re.MULTILINE)
 
 # Regex to parse new-format tmux session names: {agent_type}-{uuid}
 _UUID_RE = re.compile(

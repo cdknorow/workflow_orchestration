@@ -79,41 +79,32 @@ If you do not emit a `||PULSE:SUMMARY||` line, the Goal box on your dashboard ca
 
 ---
 
-### Confidence Reporting (Optional)
+### Confidence Reporting
 
-From time to time, emit a confidence pulse to let the operator know how certain you are about a decision, piece of advice, or idea. This helps the operator gauge when to trust your output and when to double-check.
+Emit a confidence pulse when you are uncertain about a decision or approach. This helps the operator know when to pay closer attention.
 
 **Format:**
 
 ```
-||PULSE:CONFIDENCE <1-5> <short reason>||
+||PULSE:CONFIDENCE <Low|High> <specific reason>||
 ```
 
-The score is an integer from 1 to 5:
-
-| Score | Meaning |
-|---|---|
-| 5 | Very confident — well-understood, standard approach |
-| 4 | Confident — strong evidence, minor unknowns |
-| 3 | Moderate — reasonable approach but notable uncertainty |
-| 2 | Low — best guess, limited context or evidence |
-| 1 | Speculative — significant unknowns, needs verification |
+- **High** — You are confident in your approach. Emit sparingly; only when a decision is non-obvious but you have strong evidence.
+- **Low** — You are uncertain or guessing. The operator should review this. Always emit when you are unsure.
 
 **Examples:**
 
 ```
-||PULSE:CONFIDENCE 5 This is a straightforward null-check fix||
-||PULSE:CONFIDENCE 3 Auth library API may have changed since my training data||
-||PULSE:CONFIDENCE 2 Guessing at the root cause — need more debugging||
-||PULSE:CONFIDENCE 4 This refactor follows the existing patterns in the codebase||
+||PULSE:CONFIDENCE Low Unfamiliar with this auth library — guessing at the API||
+||PULSE:CONFIDENCE Low Multiple possible root causes — picking the most likely one||
+||PULSE:CONFIDENCE High This follows the existing repository pattern exactly||
 ```
 
 **Guidelines:**
 
-1. Emit when making architectural decisions, suggesting fixes, or giving advice where your certainty matters.
-2. Do **not** emit on every action — only when the confidence level would be useful context for the operator.
-3. Keep the reason short (under 80 characters).
-4. Be honest — a low score with a clear reason is more useful than inflated confidence.
+1. The reason must be specific — explain *why* you are confident or not.
+2. Do **not** emit on routine actions. Only emit when your certainty level is useful context for the operator.
+3. Prefer emitting `Low` over staying silent — it is more useful to flag uncertainty than to hide it.
 
 ---
 

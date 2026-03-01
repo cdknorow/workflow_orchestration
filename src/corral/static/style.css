@@ -2008,7 +2008,6 @@ body {
 .event-item.event-type-confidence {
     background: rgba(227, 179, 65, 0.1);
 }
-
 .event-item:hover {
     background: var(--bg-hover);
 }
