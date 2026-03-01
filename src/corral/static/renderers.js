@@ -24,7 +24,7 @@ const TOOL_CALL_RE = /^[\s●]*⏺\s+[A-Z]/;
 // Matches lines containing … that aren't tool results (⎿) or user prompts.
 const PROGRESS_RE = /^\s*.+…\s*(\(.*\))?\s*$/;
 const STATUS_BAR_RE = /^\s*(worktree:|⏵)/;
-const PULSE_RE = /^\|\|PULSE:(STATUS|SUMMARY|CONFIDENCE)\s/;
+const PULSE_RE = /^[\s●⏺]*\|\|PULSE:(STATUS|SUMMARY|CONFIDENCE)\s/;
 
 // All spinner characters Claude Code cycles through (from log_streamer.py).
 // Used to strip spinner prefixes for stateful progress line tracking.

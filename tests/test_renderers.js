@@ -485,6 +485,24 @@ console.log("\n=== Stateful spinner tracking tests ===");
         "PULSE line with ⏺ prefix is still pulse");
 }
 
+// Test: indented PULSE:STATUS not absorbed into tool block above
+{
+    resetState();
+
+    const lines = [
+        "⏺ Bash(git checkout -b features/new_feature main)",
+        "  ⎿  Switched to a new branch 'features/new_feature'",
+        "⏺ ||PULSE:SUMMARY Waiting for instructions||",
+        "  ||PULSE:STATUS Waiting for instructions||",
+    ];
+    const blocks = groupIntoBlocks(lines);
+    // The PULSE lines must NOT be merged into the tool block above.
+    assertEqual(blocks.length, 3, "tool block + 2 separate pulse blocks");
+    assertEqual(blocks[0].type, "tool", "first block is tool");
+    assertEqual(blocks[1].type, "pulse", "second block is pulse (SUMMARY)");
+    assertEqual(blocks[2].type, "pulse", "third block is pulse (STATUS)");
+}
+
 // Test: block structure stability across 3 frames with alternating spinner
 {
     resetState();
