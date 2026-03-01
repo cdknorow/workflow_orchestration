@@ -2,6 +2,8 @@
 
 ---
 
+## The Pitch
+
 Corral is designed to bring back some sanity to coding with AI agents. It generates automated goals and status based on what you are doing in each session and displays them prominantly. You can do full text search across previous sessions and resume them. The activity across all your agent is visible so you see which ones need attention. All of the things they are doing in the background is brough to the activity pannel so you can follow along and start to get a better understanding of just what these things are actually doing. 
 
 Corral is an MIT licensed multi-agent orchestration application built using tmux and FastAPI and basic HTML5/JS for easy extensibilty and modification. We welcome feedback, commits and hope it brings you some stress releif to corral those little AIs.
