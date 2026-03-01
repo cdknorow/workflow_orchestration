@@ -13,6 +13,7 @@ from corral.session_manager import (
     SUMMARY_RE,
     strip_ansi,
     clean_match,
+    _rejoin_pulse_lines,
 )
 
 # Lines that are purely TUI chrome / noise after ANSI stripping
@@ -127,34 +128,35 @@ def get_log_snapshot(log_path: str | Path, max_lines: int = 200, chunk_size: int
                 if pos > 0:
                     leftover = parts.pop(0)
 
-                # Add lines in reverse order
-                for p in reversed(parts):
+                # Decode, strip ANSI, and rejoin split PULSE tags
+                clean_parts = []
+                for p in parts:
                     try:
-                        need_status = result["status"] is None
-                        need_summary = result["summary"] is None
-                        need_lines = len(lines) < max_lines
-
-                        if not (need_status or need_summary or need_lines):
-                            break
-
-                        text = p.decode("utf-8", errors="replace")
-                        clean_line = strip_ansi(text)
-                        
-                        # Check for status/summary as we go
-                        if need_status:
-                            status_matches = STATUS_RE.findall(clean_line)
-                            if status_matches:
-                                result["status"] = clean_match(status_matches[-1])
-                                
-                        if need_summary:
-                            summary_matches = SUMMARY_RE.findall(clean_line)
-                            if summary_matches:
-                                result["summary"] = clean_match(summary_matches[-1])
-
-                        if need_lines and not _is_noise_line(clean_line):
-                            lines.insert(0, clean_line)
+                        clean_parts.append(strip_ansi(p.decode("utf-8", errors="replace")))
                     except Exception:
-                        pass
+                        clean_parts.append("")
+                clean_parts = _rejoin_pulse_lines(clean_parts)
+
+                for clean_line in reversed(clean_parts):
+                    need_status = result["status"] is None
+                    need_summary = result["summary"] is None
+                    need_lines = len(lines) < max_lines
+
+                    if not (need_status or need_summary or need_lines):
+                        break
+
+                    if need_status:
+                        status_matches = STATUS_RE.findall(clean_line)
+                        if status_matches:
+                            result["status"] = clean_match(status_matches[-1])
+
+                    if need_summary:
+                        summary_matches = SUMMARY_RE.findall(clean_line)
+                        if summary_matches:
+                            result["summary"] = clean_match(summary_matches[-1])
+
+                    if need_lines and not _is_noise_line(clean_line):
+                        lines.insert(0, clean_line)
                 
                 chunks_read += 1
                 

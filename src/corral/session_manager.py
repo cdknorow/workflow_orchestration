@@ -42,6 +42,54 @@ def clean_match(text: str) -> str:
     return " ".join(text.split())
 
 
+def _rejoin_pulse_lines(lines: list[str]) -> list[str]:
+    """Rejoin lines where ``||PULSE:...||`` tags were split by terminal wrapping.
+
+    ``tmux pipe-pane`` captures output with hard wraps at the terminal width,
+    which can split a single PULSE tag across multiple log lines, e.g.::
+
+        ||PULSE:SUMMARY Moving Settings button to top gear icon and creating
+        persistent settings store in database||
+
+    This function detects an opening ``||PULSE:`` without a closing ``||`` on
+    the same line and merges subsequent lines until the closing ``||`` is found
+    (up to *MAX_JOIN* continuation lines as a safety limit).
+    """
+    MAX_JOIN = 5
+    result: list[str] = []
+    pending: str | None = None
+    depth = 0
+
+    for line in lines:
+        if pending is not None:
+            # Accumulating continuation of a split PULSE tag
+            pending = pending + " " + line.strip()
+            depth += 1
+            if "||" in line or depth >= MAX_JOIN:
+                result.append(pending)
+                pending = None
+                depth = 0
+        elif "||PULSE:" in line:
+            # Check whether the tag is complete on this line
+            idx = line.rfind("||PULSE:")
+            rest = line[idx + len("||PULSE:"):]
+            if "||" in rest:
+                # Complete tag — emit as-is
+                result.append(line)
+            else:
+                # Incomplete tag — start accumulating
+                pending = line
+                depth = 0
+        else:
+            result.append(line)
+
+    # Flush any incomplete tag at end of chunk
+    if pending is not None:
+        result.append(pending)
+
+    return result
+
+
 async def discover_corral_agents() -> list[dict[str, Any]]:
     """Discover live corral agents from tmux sessions.
 
@@ -162,32 +210,35 @@ def get_log_status(log_path: str | Path) -> dict[str, Any]:
                 if pos > 0:
                     leftover = parts.pop(0)
 
-                for p in reversed(parts):
+                # Decode, strip ANSI, and rejoin split PULSE tags
+                clean_parts = []
+                for p in parts:
                     try:
-                        need_status = result["status"] is None
-                        need_summary = result["summary"] is None
-                        need_lines = len(lines) < 20
-
-                        if not (need_status or need_summary or need_lines):
-                            break
-
-                        text = p.decode("utf-8", errors="replace")
-                        clean_line = strip_ansi(text)
-                        
-                        if need_status:
-                            status_matches = STATUS_RE.findall(clean_line)
-                            if status_matches:
-                                result["status"] = clean_match(status_matches[-1])
-
-                        if need_summary:
-                            summary_matches = SUMMARY_RE.findall(clean_line)
-                            if summary_matches:
-                                result["summary"] = clean_match(summary_matches[-1])
-
-                        if need_lines:
-                            lines.insert(0, clean_line)
+                        clean_parts.append(strip_ansi(p.decode("utf-8", errors="replace")))
                     except Exception:
-                        pass
+                        clean_parts.append("")
+                clean_parts = _rejoin_pulse_lines(clean_parts)
+
+                for clean_line in reversed(clean_parts):
+                    need_status = result["status"] is None
+                    need_summary = result["summary"] is None
+                    need_lines = len(lines) < 20
+
+                    if not (need_status or need_summary or need_lines):
+                        break
+
+                    if need_status:
+                        status_matches = STATUS_RE.findall(clean_line)
+                        if status_matches:
+                            result["status"] = clean_match(status_matches[-1])
+
+                    if need_summary:
+                        summary_matches = SUMMARY_RE.findall(clean_line)
+                        if summary_matches:
+                            result["summary"] = clean_match(summary_matches[-1])
+
+                    if need_lines:
+                        lines.insert(0, clean_line)
                 
                 chunks_read += 1
                         

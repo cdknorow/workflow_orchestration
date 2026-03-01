@@ -9,7 +9,7 @@ from corral.session_manager import strip_ansi, clean_match
 
 # Only match known PULSE event types to avoid matching protocol documentation examples
 KNOWN_PULSE_TYPES = ("STATUS", "SUMMARY", "CONFIDENCE")
-PULSE_EVENT_RE = re.compile(r"^[\s●⏺]*\|\|PULSE:(" + "|".join(KNOWN_PULSE_TYPES) + r")\s+(.*?)\|\|", re.MULTILINE)
+PULSE_EVENT_RE = re.compile(r"^[\s●⏺]*\|\|PULSE:(" + "|".join(KNOWN_PULSE_TYPES) + r")\s+(.*?)\|\|", re.MULTILINE | re.DOTALL)
 
 # Track file positions to avoid re-scanning the same content
 _file_positions: dict[str, int] = {}
