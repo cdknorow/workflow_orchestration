@@ -119,6 +119,10 @@ export function renderPaginationControls(total, page, pageSize) {
     `;
 }
 
+function stripPulseLines(text) {
+    return text.replace(/^\|\|PULSE:(STATUS|SUMMARY|CONFIDENCE)\s[^\|]*\|\|$/gm, '').replace(/\n{3,}/g, '\n\n');
+}
+
 export function renderHistoryChat(messages) {
     const container = document.getElementById("history-messages");
     container.innerHTML = "";
@@ -139,15 +143,25 @@ export function renderHistoryChat(messages) {
 
         if (!content.trim()) continue;
 
-        const bubbleClass = type === "human" ? "human" : "assistant";
-        const roleLabel = type === "human" ? "You" : "Assistant";
+        const isHuman = type === "human" || type === "user";
+        const bubbleClass = isHuman ? "human" : "assistant";
+        const roleLabel = isHuman ? "You" : "Assistant";
 
         const bubble = document.createElement("div");
         bubble.className = `chat-bubble ${bubbleClass}`;
+
+        let messageHtml;
+        if (isHuman) {
+            messageHtml = escapeHtml(content);
+        } else {
+            const cleaned = stripPulseLines(content);
+            messageHtml = marked.parse(cleaned);
+        }
+
         bubble.innerHTML = `
             <div class="role-label">${roleLabel}</div>
-            <div class="message-text">${escapeHtml(content)}</div>
-            ${type === "human" ? `<button class="edit-btn" onclick="editAndResubmit(this)">Edit & Resubmit</button>` : ""}
+            <div class="message-text${!isHuman ? " markdown-body" : ""}">${messageHtml}</div>
+            ${isHuman ? `<button class="edit-btn" onclick="editAndResubmit(this)">Edit & Resubmit</button>` : ""}
         `;
         container.appendChild(bubble);
     }
