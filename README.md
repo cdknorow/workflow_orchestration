@@ -48,16 +48,6 @@ pip install git+https://github.com/cdknorow/corral.git
 
 ### Launch agents and web dashboard
 
-The launcher discovers worktree subdirectories, creates a tmux session with an agent for each one, and starts the web dashboard in its own tmux session:
-
-```bash
-# Launch Claude agents and web dashboard for worktrees in the current directory
-launch-corral
-
-# Launch Gemini agents from a specific path
-launch-corral <path-to-root> gemini
-
-```
 
 > **Note:** This system is currently mostly tested with Claude Code and to some extent Gemini CLI. However, the underlying architecture is designed to support other agents, which can be integrated with some additional work from others.
 
@@ -68,10 +58,21 @@ You can launch the web server directly using `corral` or `corral-dashboard`:
 
 ```bash
 # Start the web dashboard directly (default: http://localhost:8420)
-corral-dashboard
+corral
 
 # Custom host/port
-corral-dashboard --host 127.0.0.1 --port 9000
+corral --host 127.0.0.1 --port 9000
+
+```
+
+Or use launcher which discovers worktree subdirectories, creates a agent for each one, and starts launches the dashboard:
+
+```bash
+# Launch Claude agents and web dashboard for worktrees in the current directory
+launch-corral
+
+# Launch Gemini agents from a specific path
+launch-corral <path-to-root> gemini
 
 ```
 
