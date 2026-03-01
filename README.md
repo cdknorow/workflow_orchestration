@@ -80,7 +80,8 @@ launch-corral <path-to-root> gemini
 ### Managing sessions from the dashboard
 
 <!-- TODO: Add a GIF here showing the live pane capture updating, sending commands to an agent, and toggling plan/base mode. -->
-<img width="1510" height="813" alt="image" src="https://github.com/user-attachments/assets/5a2e7909-ef08-4371-b485-f6e141a5a02c" />
+<img width="1502" height="812" alt="image" src="https://github.com/user-attachments/assets/9a8d1b7b-1bef-414b-9002-c27dd928342b" />
+
 
 The web dashboard provides quick-action buttons for each live session:
 
@@ -102,7 +103,8 @@ You can also type arbitrary commands in the input bar and send them to the selec
 ### Session history search and filtering
 
 <!-- TODO: Add a GIF here showing full-text search across past Claude/Gemini sessions and adding notes/tags. -->
-<img width="1512" height="799" alt="image" src="https://github.com/user-attachments/assets/37561737-caf9-438b-81af-8c48a6cfe30a" />
+<img width="1507" height="821" alt="image" src="https://github.com/user-attachments/assets/89ba48ba-65b4-4292-9170-add2880bd5b7" />
+
 <img width="1498" height="815" alt="image" src="https://github.com/user-attachments/assets/a1f6bbb3-ee15-4fc3-867c-0d41d0f717ea" />
 
 
