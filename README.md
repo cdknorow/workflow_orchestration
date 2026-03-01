@@ -6,7 +6,8 @@
 Corral is an MIT licensed multi-agent orchestration application for managing AI coding agents across git worktrees running locally on your local or remote machine. The application is built using tmux and FastAPI for easy extensibilty and modification.
 
 
-<img width="1504" height="824" alt="image" src="https://github.com/user-attachments/assets/18fe9a2b-c00b-445e-8bb0-b6a3b2c55e60" />
+<img width="1506" height="819" alt="image" src="https://github.com/user-attachments/assets/23c03150-6332-4fb6-8d4a-d32e12e745df" />
+
 
 ## Features
 
