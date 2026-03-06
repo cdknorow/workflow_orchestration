@@ -4,7 +4,9 @@
 
 ## The Pitch
 
-Corral is designed to bring back some sanity to coding with AI agents with minimal disruption to your current workflow. The goal is to augment, not take over. The activity across all your agent is visible so you see which ones need attention. The system generates goals and status based on what you are doing in each session and displays them prominantly. It Provides text search across previous sessions, links to your git commits, and lets resume them from the UI. All of the things the AI agents are doing in the background is brought to light in the activity pannel so you can follow along and start to get a better understanding of just what these things are actually doing. 
+Corral is designed to bring back some sanity to coding with AI agents with minimal disruption to your current workflow. The goal is to augment, not take over. The activity across all your agent is visible so you see which ones need attention.
+
+The system generates goals and status based on what you are doing in each session and displays them prominantly. It Provides text search across previous sessions, links to your git commits, and lets resume them from the UI. All of the things the AI agents are doing in the background is brought to light in the activity pannel so you can follow along and start to get a better understanding of just what these things are actually doing. 
 
 Corral is an MIT licensed multi-agent orchestration application built using tmux and FastAPI and basic HTML5/JS for easy extensibilty and modification. We welcome feedback, commits and hope it brings you some stress releif to corral those little AIs.
 
