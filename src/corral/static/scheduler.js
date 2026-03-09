@@ -5,6 +5,7 @@ import { showToast } from './utils.js';
 
 let scheduledJobs = [];
 let selectedJobId = null;
+let editingJobId = null;  // non-null when editing an existing job
 
 // ── API helpers ──────────────────────────────────────────────────────────
 
@@ -98,6 +99,7 @@ function renderJobDetail(job, runs) {
         <div class="sched-header">
             <h2>${escapeHtml(job.name)}</h2>
             <div class="sched-actions">
+                <button class="btn btn-small" onclick="editScheduledJob(${job.id})">Edit</button>
                 <button class="btn btn-small" onclick="toggleScheduledJob(${job.id})">${toggleLabel}</button>
                 <button class="btn btn-small btn-warning" onclick="deleteScheduledJob(${job.id})">Delete</button>
             </div>
@@ -186,15 +188,18 @@ export async function deleteScheduledJob(jobId) {
     }
 }
 
-// ── Job creation modal ───────────────────────────────────────────────────
+// ── Job create/edit modal ────────────────────────────────────────────────
 
 export function showJobModal() {
+    editingJobId = null;
+    document.getElementById('job-modal-title').textContent = 'New Scheduled Job';
+    document.getElementById('job-modal-submit').textContent = 'Create Job';
     document.getElementById('job-modal').style.display = 'flex';
     document.getElementById('job-modal-name').value = '';
     document.getElementById('job-modal-description').value = '';
     document.getElementById('job-modal-cron').value = '0 2 * * *';
     document.getElementById('job-modal-timezone').value = 'UTC';
-    document.getElementById('job-modal-repo').value = '';
+    document.getElementById('job-modal-repo').value = document.getElementById('job-modal-repo').dataset.corralRoot || '';
     document.getElementById('job-modal-branch').value = 'main';
     document.getElementById('job-modal-agent').value = 'claude';
     document.getElementById('job-modal-prompt').value = '';
@@ -202,6 +207,31 @@ export function showJobModal() {
     document.getElementById('job-modal-cleanup').checked = true;
     document.getElementById('job-modal-flags').value = '';
     document.getElementById('cron-preview').innerHTML = '';
+    validateCronPreview();
+}
+
+export function editScheduledJob(jobId) {
+    const job = scheduledJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    editingJobId = jobId;
+    document.getElementById('job-modal-title').textContent = 'Edit Scheduled Job';
+    document.getElementById('job-modal-submit').textContent = 'Save Changes';
+    document.getElementById('job-modal').style.display = 'flex';
+    document.getElementById('job-modal-name').value = job.name;
+    document.getElementById('job-modal-description').value = job.description || '';
+    document.getElementById('job-modal-cron').value = job.cron_expr;
+    document.getElementById('job-modal-timezone').value = job.timezone || 'UTC';
+    document.getElementById('job-modal-repo').value = job.repo_path;
+    document.getElementById('job-modal-branch').value = job.base_branch || 'main';
+    document.getElementById('job-modal-agent').value = job.agent_type || 'claude';
+    document.getElementById('job-modal-prompt').value = job.prompt;
+    document.getElementById('job-modal-timeout').value = String(job.max_duration_s || 3600);
+    document.getElementById('job-modal-cleanup').checked = !!job.cleanup_worktree;
+    document.getElementById('job-modal-flags').value = job.flags || '';
+    document.getElementById('cron-preview').innerHTML = '';
+    // Sync flag button active states
+    document.getElementById('job-modal-flags').dispatchEvent(new Event('input'));
     validateCronPreview();
 }
 
@@ -233,7 +263,7 @@ export async function validateCronPreview() {
     }
 }
 
-export async function createScheduledJob() {
+export async function saveScheduledJob() {
     const body = {
         name: document.getElementById('job-modal-name').value.trim(),
         description: document.getElementById('job-modal-description').value.trim(),
@@ -254,8 +284,12 @@ export async function createScheduledJob() {
     }
 
     try {
-        const resp = await fetch('/api/scheduled/jobs', {
-            method: 'POST',
+        const isEdit = editingJobId !== null;
+        const url = isEdit ? `/api/scheduled/jobs/${editingJobId}` : '/api/scheduled/jobs';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const resp = await fetch(url, {
+            method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
@@ -264,12 +298,12 @@ export async function createScheduledJob() {
             showToast(data.error, true);
             return;
         }
-        showToast('Job created');
+        showToast(isEdit ? 'Job updated' : 'Job created');
         hideJobModal();
         await fetchJobs();
         selectScheduledJob(data.id);
     } catch (e) {
-        showToast('Failed to create job', true);
+        showToast('Failed to save job', true);
     }
 }
 
