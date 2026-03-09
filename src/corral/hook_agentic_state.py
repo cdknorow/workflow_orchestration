@@ -158,7 +158,7 @@ def main():
         return
 
     session_id = d.get("session_id")
-    hook_type = d.get("type", "")
+    hook_type = d.get("hook_event_name") or d.get("type", "")
 
     # Determine event_type and build summary
     tool = d.get("tool_name", "")
