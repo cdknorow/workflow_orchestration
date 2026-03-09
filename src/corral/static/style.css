@@ -355,17 +355,26 @@ body {
 }
 
 #history-sessions-list li {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .session-row-top {
-    display: contents;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.session-row-mid {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .session-row-bottom {
-    grid-column: 2;
+    margin-top: 1px;
 }
 
 .session-list li:hover {

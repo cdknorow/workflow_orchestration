@@ -29,7 +29,7 @@ async def get_history_sessions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     q: Optional[str] = Query(None),
-    fts_mode: str = Query("phrase"),
+    fts_mode: str = Query("and"),
     # Legacy single-value params (backward compat)
     tag_id: Optional[int] = Query(None),
     source_type: Optional[str] = Query(None),
@@ -77,7 +77,7 @@ async def get_history_sessions(
     if tag_logic not in ("AND", "OR"):
         tag_logic = "AND"
     if fts_mode not in ("phrase", "and", "or"):
-        fts_mode = "phrase"
+        fts_mode = "and"
 
     # Build keyword args for the new parameters
     advanced_kwargs = dict(

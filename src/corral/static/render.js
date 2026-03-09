@@ -141,7 +141,7 @@ export function renderHistorySessions(sessions, total, page, pageSize) {
         const label = s.summary_title || s.summary || s.session_id;
         const truncated = label.length > 40 ? label.substring(0, 40) + "..." : label;
         const isActive = state.currentSession && state.currentSession.type === "history" && state.currentSession.name === s.session_id;
-        const typeTag = s.source_type === "gemini" ? ' <span class="badge gemini">gemini</span>' : "";
+        const typeTag = s.source_type === "gemini" ? '<span class="badge gemini">gemini</span>' : "";
         const branchTag = s.branch ? `<span class="sidebar-branch">${escapeHtml(s.branch)}</span>` : "";
         const tagDots = s.tags ? renderSidebarTagDots(s.tags) : "";
         const timeStr = s.last_timestamp ? formatShortTime(s.last_timestamp) : "";
@@ -149,7 +149,8 @@ export function renderHistorySessions(sessions, total, page, pageSize) {
         const durStr = s.duration_sec != null ? formatDuration(s.duration_sec) : '';
         const durTag = durStr ? `<span class="session-dur">${escapeHtml(durStr)}</span>` : '';
         return `<li class="${isActive ? 'active' : ''}" onclick="selectHistorySession('${escapeHtml(s.session_id)}')">
-            <div class="session-row-top">${timeTag}${durTag}<span class="session-label" title="${escapeHtml(label)}">${escapeHtml(truncated)}${typeTag}${tagDots}</span></div>
+            <div class="session-row-top">${timeTag}${durTag}${typeTag}${tagDots}</div>
+            <div class="session-row-mid"><span class="session-label" title="${escapeHtml(label)}">${escapeHtml(truncated)}</span></div>
             ${branchTag ? `<div class="session-row-bottom">${branchTag}</div>` : ""}
         </li>`;
     }).join("");

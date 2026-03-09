@@ -325,7 +325,7 @@ class SessionStore(DatabaseManager):
         page: int = 1,
         page_size: int = 50,
         search: str | None = None,
-        fts_mode: str = "phrase",
+        fts_mode: str = "and",
         # Legacy single-value aliases (merged with list variants below)
         tag_id: int | None = None,
         source_type: str | None = None,
@@ -349,7 +349,7 @@ class SessionStore(DatabaseManager):
             effective_source_types.append(source_type)
 
         if fts_mode not in ("phrase", "and", "or"):
-            fts_mode = "phrase"
+            fts_mode = "and"
 
         conn = await self._get_conn()
         params: list[Any] = []
@@ -367,7 +367,7 @@ class SessionStore(DatabaseManager):
             safe_q = _sanitize_fts_query(search, fts_mode)
             if safe_q:
                 from_clause += " JOIN session_fts fts ON fts.session_id = si.session_id"
-                where_clauses.append("fts MATCH ?")
+                where_clauses.append("session_fts MATCH ?")
                 params.append(safe_q)
                 order_clause = "rank"
 
