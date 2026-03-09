@@ -5,6 +5,7 @@ import { showToast, escapeHtml, escapeAttr } from './utils.js';
 import { loadLiveSessions } from './api.js';
 import { getEngineNames, getEngineName, setRendererOverride } from './renderers.js';
 import { renderCaptureText } from './capture.js';
+import { hideRestartModal } from './controls.js';
 
 export function showLaunchModal() {
     document.getElementById("launch-modal").style.display = "flex";
@@ -40,6 +41,11 @@ export async function launchSession() {
 
     const payload = { working_dir: dir, agent_type: type };
     if (agentName) payload.display_name = agentName;
+
+    const flags = [];
+    if (document.getElementById("flag-chrome").checked) flags.push("--chrome");
+    if (document.getElementById("flag-skip-permissions").checked) flags.push("--dangerously-skip-permissions");
+    if (flags.length) payload.flags = flags;
 
     try {
         const resp = await fetch("/api/sessions/launch", {
@@ -269,6 +275,7 @@ document.addEventListener("click", (e) => {
     const infoModal = document.getElementById("info-modal");
     const resumeModal = document.getElementById("resume-modal");
     const settingsModal = document.getElementById("settings-modal");
+    const restartModal = document.getElementById("restart-modal");
     if (e.target === launchModal) {
         hideLaunchModal();
     }
@@ -281,6 +288,9 @@ document.addEventListener("click", (e) => {
     if (e.target === settingsModal) {
         hideSettingsModal();
     }
+    if (e.target === restartModal) {
+        hideRestartModal();
+    }
 });
 
 // Close modals on Escape
@@ -290,5 +300,6 @@ document.addEventListener("keydown", (e) => {
         hideInfoModal();
         hideResumeModal();
         hideSettingsModal();
+        hideRestartModal();
     }
 });
