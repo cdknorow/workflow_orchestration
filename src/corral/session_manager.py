@@ -462,6 +462,15 @@ async def kill_session(
             except OSError:
                 pass
 
+        # Unregister from persistent live sessions
+        if session_id:
+            try:
+                from corral.session_store import SessionStore
+                _store = SessionStore()
+                await _store.unregister_live_session(session_id)
+            except Exception:
+                pass  # Non-critical
+
         return None
     except Exception as e:
         return str(e)
@@ -651,14 +660,27 @@ async def restart_session(
             "tmux", "send-keys", "-t", target, "Enter"
         )
 
-        # Migrate display_name from old session to new
+        # Migrate display_name and update live session record
         if session_id:
             try:
                 from corral.session_store import SessionStore
                 _store = SessionStore()
                 await _store.migrate_display_name(session_id, new_session_id)
+                await _store.replace_live_session(
+                    session_id, new_session_id, effective_type, agent_name, working_dir,
+                )
             except Exception:
                 pass  # Non-critical
+        else:
+            # No old session_id — just register the new one
+            try:
+                from corral.session_store import SessionStore
+                _store = SessionStore()
+                await _store.register_live_session(
+                    new_session_id, effective_type, agent_name, working_dir,
+                )
+            except Exception:
+                pass
 
         return {
             "ok": True,
@@ -1023,14 +1045,17 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
             "tmux", "send-keys", "-t", f"{session_name}.0", cmd, "Enter"
         )
 
-        # Store display_name if provided
-        if display_name:
-            try:
-                from corral.session_store import SessionStore
-                _store = SessionStore()
+        # Store display_name and register live session
+        try:
+            from corral.session_store import SessionStore
+            _store = SessionStore()
+            if display_name:
                 await _store.set_display_name(session_id, display_name)
-            except Exception:
-                pass  # Non-critical
+            await _store.register_live_session(
+                session_id, agent_type, folder_name, working_dir, display_name,
+            )
+        except Exception:
+            pass  # Non-critical
 
         return {
             "session_name": session_name,

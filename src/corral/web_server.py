@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -66,19 +67,84 @@ async def _track_status_summary_events(
     _last_known[dedup_key] = {"status": status, "summary": summary}
 
 
+async def _resume_persistent_sessions():
+    """Resume live sessions that were running when Corral last stopped.
+
+    Compares the ``live_sessions`` DB table against currently running tmux
+    sessions.  Any registered session without a matching tmux session is
+    relaunched (with ``--resume`` for Claude agents so they pick up context).
+    Sessions whose working directory no longer exists are silently removed.
+    """
+    from corral.session_manager import discover_corral_agents, launch_claude_session
+
+    try:
+        registered = await store.get_all_live_sessions()
+        if not registered:
+            return
+
+        # Discover what is already alive in tmux
+        live_agents = await discover_corral_agents()
+        live_session_ids = {a["session_id"] for a in live_agents}
+
+        for rec in registered:
+            sid = rec["session_id"]
+            if sid in live_session_ids:
+                continue  # Already running — nothing to do
+
+            working_dir = rec["working_dir"]
+            if not os.path.isdir(working_dir):
+                # Working directory gone (worktree removed?) — clean up
+                await store.unregister_live_session(sid)
+                log.info("Removed stale live session %s (dir missing: %s)", sid[:8], working_dir)
+                continue
+
+            agent_type = rec["agent_type"]
+            display_name = rec.get("display_name")
+
+            log.info(
+                "Resuming session %s (%s) in %s",
+                sid[:8], agent_type, working_dir,
+            )
+
+            result = await launch_claude_session(
+                working_dir, agent_type, display_name=display_name,
+            )
+
+            if result.get("error"):
+                log.warning("Failed to resume session %s: %s", sid[:8], result["error"])
+                await store.unregister_live_session(sid)
+            else:
+                # Old session record is replaced by the new launch
+                # (launch_claude_session calls register_live_session with new id)
+                await store.unregister_live_session(sid)
+    except Exception:
+        log.exception("Error resuming persistent sessions")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background indexer, batch summarizer, and git poller on server startup."""
     from corral.session_indexer import SessionIndexer, BatchSummarizer
     from corral.git_poller import GitPoller
     from corral.utils import install_hooks
-    from corral.session_manager import discover_corral_agents
+    from corral.session_manager import discover_corral_agents, launch_claude_session
 
-    # Install hooks into each live agent's worktree
-    for agent in await discover_corral_agents():
+    # Resume any persistent live sessions that are no longer running in tmux
+    await _resume_persistent_sessions()
+
+    # Install hooks into each live agent's worktree, and register any
+    # tmux sessions not yet tracked in the live_sessions table.
+    live_agents = await discover_corral_agents()
+    tracked = {r["session_id"] for r in await store.get_all_live_sessions()}
+    for agent in live_agents:
         wd = agent.get("working_directory") or ""
         if wd:
             install_hooks(wd)
+        sid = agent.get("session_id")
+        if sid and sid not in tracked:
+            await store.register_live_session(
+                sid, agent["agent_type"], agent["agent_name"], wd,
+            )
 
     # Seed _last_known from DB so we don't re-insert events already stored.
     _last_known.update(await store.get_last_known_status_summary())

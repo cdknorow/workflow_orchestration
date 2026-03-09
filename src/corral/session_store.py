@@ -168,6 +168,15 @@ class SessionStore:
                 value TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS live_sessions (
+                session_id   TEXT PRIMARY KEY,
+                agent_type   TEXT NOT NULL DEFAULT 'claude',
+                agent_name   TEXT NOT NULL,
+                working_dir  TEXT NOT NULL,
+                display_name TEXT,
+                created_at   TEXT NOT NULL
+            );
+
         """)
         # FTS5 virtual table — created separately because CREATE VIRTUAL TABLE
         # cannot be used inside executescript on all SQLite builds.
@@ -717,6 +726,51 @@ class SessionStore:
             (agent_name,),
         )
         await conn.commit()
+
+    # ── Live Sessions (persistent session tracking) ─────────────────────
+
+    async def register_live_session(
+        self, session_id: str, agent_type: str, agent_name: str,
+        working_dir: str, display_name: str | None = None,
+    ) -> None:
+        """Record a live session so it can be resumed if Corral restarts."""
+        conn = await self._get_conn()
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            "INSERT OR REPLACE INTO live_sessions "
+            "(session_id, agent_type, agent_name, working_dir, display_name, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, agent_type, agent_name, working_dir, display_name, now),
+        )
+        await conn.commit()
+
+    async def unregister_live_session(self, session_id: str) -> None:
+        """Remove a live session record (e.g. on kill)."""
+        conn = await self._get_conn()
+        await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (session_id,))
+        await conn.commit()
+
+    async def replace_live_session(self, old_session_id: str, new_session_id: str, agent_type: str, agent_name: str, working_dir: str, display_name: str | None = None) -> None:
+        """Replace one live session record with a new one (e.g. on restart)."""
+        conn = await self._get_conn()
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (old_session_id,))
+        await conn.execute(
+            "INSERT OR REPLACE INTO live_sessions "
+            "(session_id, agent_type, agent_name, working_dir, display_name, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (new_session_id, agent_type, agent_name, working_dir, display_name, now),
+        )
+        await conn.commit()
+
+    async def get_all_live_sessions(self) -> list[dict[str, Any]]:
+        """Return all registered live sessions."""
+        conn = await self._get_conn()
+        rows = await (await conn.execute(
+            "SELECT session_id, agent_type, agent_name, working_dir, display_name, created_at "
+            "FROM live_sessions ORDER BY created_at"
+        )).fetchall()
+        return [dict(r) for r in rows]
 
     # ── Agent Tasks ────────────────────────────────────────────────────────
 
