@@ -137,6 +137,9 @@ class JobScheduler:
             session_name = result["session_name"]
             now = datetime.now(timezone.utc).isoformat()
 
+            # Tag the session as "scheduled"
+            await self._tag_session(session_id, "scheduled")
+
             await self._store.update_scheduled_run(
                 run_id,
                 session_id=session_id,
@@ -213,6 +216,20 @@ class JobScheduler:
         if job.get("cleanup_worktree", 1):
             repo_path = job["repo_path"]
             await self._cleanup_worktree(repo_path, worktree_path)
+
+    async def _tag_session(self, session_id: str, tag_name: str) -> None:
+        """Ensure a tag exists and apply it to the session."""
+        try:
+            from corral.store import CorralStore
+            store = CorralStore()
+            tags = await store.list_tags()
+            tag = next((t for t in tags if t["name"] == tag_name), None)
+            if not tag:
+                tag = await store.create_tag(tag_name, "#f78166")
+            await store.add_session_tag(session_id, tag["id"])
+            await store.close()
+        except Exception:
+            log.exception("Failed to tag session %s as '%s'", session_id, tag_name)
 
     async def _cleanup_worktree(self, repo_path: str, worktree_path: str) -> None:
         """Remove a git worktree."""

@@ -127,7 +127,7 @@ function renderJobDetail(job, runs) {
 
 function renderRunsTable(runs) {
     return `<table class="sched-runs-table">
-        <thead><tr><th>Scheduled</th><th>Status</th><th>Duration</th><th>Exit</th></tr></thead>
+        <thead><tr><th>Scheduled</th><th>Status</th><th>Duration</th><th>Exit</th><th>Session</th></tr></thead>
         <tbody>${runs.map(r => {
             const scheduled = new Date(r.scheduled_at).toLocaleString();
             const duration = r.started_at && r.finished_at
@@ -138,13 +138,14 @@ function renderRunsTable(runs) {
                 : r.status === 'running' ? 'status-running'
                 : '';
             const sessionLink = r.session_id
-                ? `<a href="#session/${r.session_id}" class="run-session-link" title="View session">${r.session_id.substring(0, 8)}</a>`
-                : '';
+                ? `<a href="javascript:void(0)" class="run-session-link" title="View session history" onclick="selectHistorySession('${r.session_id}')">${r.session_id.substring(0, 8)}</a>`
+                : '-';
             return `<tr>
                 <td>${scheduled}</td>
-                <td><span class="sched-status ${statusClass}">${r.status}</span> ${sessionLink}</td>
+                <td><span class="sched-status ${statusClass}">${r.status}</span></td>
                 <td>${duration}</td>
                 <td>${escapeHtml(r.exit_reason || '-')}</td>
+                <td>${sessionLink}</td>
             </tr>`;
         }).join('')}</tbody>
     </table>`;
