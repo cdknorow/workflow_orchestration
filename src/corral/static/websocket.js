@@ -1,7 +1,7 @@
 /* WebSocket connection for real-time corral updates */
 
 import { state } from './state.js';
-import { renderLiveSessions, updateSessionStatus, updateSessionSummary, updateSessionBranch } from './render.js';
+import { renderLiveSessions, updateSessionStatus, updateSessionSummary, updateSessionBranch, updateWaitingIndicator } from './render.js';
 
 export function connectCorralWs() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -41,6 +41,7 @@ export function connectCorralWs() {
                     updateSessionStatus(s.status);
                     updateSessionSummary(s.summary);
                     updateSessionBranch(s.branch);
+                    updateWaitingIndicator(s.waiting_for_input);
                 }
             }
         }

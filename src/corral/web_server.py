@@ -201,12 +201,14 @@ async def get_live_sessions():
     # Bulk-fetch display names for all live sessions
     session_ids = [a["session_id"] for a in agents if a.get("session_id")]
     display_names = await store.get_display_names(session_ids)
+    latest_events = await store.get_latest_event_types(session_ids)
     results = []
     for agent in agents:
         log_info = get_log_status(agent["log_path"])
         git = git_state.get(agent["agent_name"])
         name = agent["agent_name"]
         sid = agent.get("session_id")
+        waiting = latest_events.get(sid) == "stop" if sid else False
         entry = {
             "name": name,
             "agent_type": agent["agent_type"],
@@ -220,6 +222,7 @@ async def get_live_sessions():
             "branch": git["branch"] if git else None,
             "display_name": display_names.get(sid) if sid else None,
             "working_directory": agent.get("working_directory", ""),
+            "waiting_for_input": waiting,
         }
         results.append(entry)
         await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
@@ -773,12 +776,15 @@ async def ws_corral(websocket: WebSocket):
             # Bulk-fetch display names
             ws_session_ids = [a["session_id"] for a in agents if a.get("session_id")]
             ws_display_names = await store.get_display_names(ws_session_ids)
+            # Check which agents are waiting for input (latest event is "stop")
+            ws_latest_events = await store.get_latest_event_types(ws_session_ids)
             results = []
             for agent in agents:
                 log_info = get_log_status(agent["log_path"])
                 git = git_state.get(agent["agent_name"])
                 name = agent["agent_name"]
                 sid = agent.get("session_id")
+                waiting = ws_latest_events.get(sid) == "stop" if sid else False
                 results.append({
                     "name": name,
                     "agent_type": agent["agent_type"],
@@ -790,6 +796,7 @@ async def ws_corral(websocket: WebSocket):
                     "branch": git["branch"] if git else None,
                     "display_name": ws_display_names.get(sid) if sid else None,
                     "working_directory": agent.get("working_directory", ""),
+                    "waiting_for_input": waiting,
                 })
                 await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
                 await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
