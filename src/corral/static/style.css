@@ -291,18 +291,11 @@ body {
     50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(255, 193, 7, 0); }
 }
 
-/* Session hover tooltip */
-.session-group-item {
-    position: relative;
-}
-
+/* Session hover tooltip (positioned via JS as fixed) */
 .session-tooltip {
     display: none;
-    position: absolute;
-    left: 100%;
-    top: 0;
-    margin-left: 8px;
-    z-index: 100;
+    position: fixed;
+    z-index: 1000;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-light);
     border-radius: 8px;
@@ -311,10 +304,6 @@ body {
     pointer-events: none;
     white-space: nowrap;
     min-width: 220px;
-}
-
-.session-group-item:hover .session-tooltip {
-    display: block;
 }
 
 .session-tooltip-table {

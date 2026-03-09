@@ -101,6 +101,21 @@ export function renderLiveSessions(sessions) {
     }
 
     list.innerHTML = html;
+
+    // Attach hover listeners for fixed-position tooltips
+    for (const item of list.querySelectorAll(".session-group-item")) {
+        const tip = item.querySelector(".session-tooltip");
+        if (!tip) continue;
+        item.addEventListener("mouseenter", () => {
+            const rect = item.getBoundingClientRect();
+            tip.style.left = rect.right + 8 + "px";
+            tip.style.top = rect.top + "px";
+            tip.style.display = "block";
+        });
+        item.addEventListener("mouseleave", () => {
+            tip.style.display = "none";
+        });
+    }
 }
 
 export function renderHistorySessions(sessions, total, page, pageSize) {
