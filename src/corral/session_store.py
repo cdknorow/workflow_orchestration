@@ -997,7 +997,7 @@ class SessionStore:
         rows = await (await conn.execute(
             f"SELECT session_id, event_type FROM agent_events "
             f"WHERE session_id IN ({placeholders}) "
-            f"AND event_type NOT IN ('status', 'goal') "
+            f"AND event_type NOT IN ('status', 'goal', 'confidence') "
             f"ORDER BY created_at DESC",
             session_ids,
         )).fetchall()

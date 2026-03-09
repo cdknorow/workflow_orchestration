@@ -142,7 +142,7 @@ async def get_live_sessions():
         git = git_state.get(agent["agent_name"])
         name = agent["agent_name"]
         sid = agent.get("session_id")
-        waiting = latest_events.get(sid) == "stop" if sid else False
+        waiting = latest_events.get(sid) in ("stop", "notification") if sid else False
         entry = {
             "name": name,
             "agent_type": agent["agent_type"],
@@ -718,7 +718,7 @@ async def ws_corral(websocket: WebSocket):
                 git = git_state.get(agent["agent_name"])
                 name = agent["agent_name"]
                 sid = agent.get("session_id")
-                waiting = ws_latest_events.get(sid) == "stop" if sid else False
+                waiting = ws_latest_events.get(sid) in ("stop", "notification") if sid else False
                 results.append({
                     "name": name,
                     "agent_type": agent["agent_type"],
