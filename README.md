@@ -6,7 +6,7 @@
 
 Corral brings sanity to coding with AI agents without disrupting your workflow. The goal is to augment, not take over. Activity across all your agents is visible so you can see which ones need attention at a glance.
 
-The system tracks goals and status for each session and displays them prominently. It provides full-text search across previous sessions, links to your git commits, and lets you resume them from the UI. Everything the AI agents are doing in the background is surfaced in the activity panel so you can follow along and build a better understanding of what these things are actually doing.
+Stop losing track of what your AI coding agents are doing. As you scale your workflow, the chaos of scattered terminals, lost context, and untracked changes slows you down. Corral is the mission control center you need to effortlessly orchestrate your entire AI workforce. Maintain total visibility over every agent's progress, organize your history, and automate routine tasks so you can focus on building. Stop fighting your tools and start multiplying your productivity—with all your data completely secure and private on your own machine.
 
 Corral is an MIT-licensed multi-agent orchestration application built with tmux, FastAPI, and vanilla HTML5/JS for easy extensibility and modification. We welcome feedback and contributions.
 
