@@ -333,6 +333,8 @@ document.addEventListener("click", (e) => {
     if (e.target === macroModal) {
         macroModal.style.display = "none";
     }
+    const webhookModal = document.getElementById("webhook-modal");
+    if (e.target === webhookModal) window.hideWebhookModal?.();
 });
 
 // Close modals on Escape
@@ -345,5 +347,6 @@ document.addEventListener("keydown", (e) => {
         hideRestartModal();
         const mm = document.getElementById("macro-modal");
         if (mm) mm.style.display = "none";
+        window.hideWebhookModal?.();
     }
 });

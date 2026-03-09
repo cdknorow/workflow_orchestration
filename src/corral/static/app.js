@@ -20,6 +20,11 @@ import { switchAgenticTab, loadAgentEvents, toggleEventFilter, toggleAllEventFil
 import { toggleHistoryEventFilter, toggleAllHistoryEventFilters } from './history_tabs.js';
 import { copyBranchName, escapeHtml } from './utils.js';
 import { initScheduler, selectScheduledJob, toggleScheduledJob, deleteScheduledJob, editScheduledJob, showJobModal, hideJobModal, validateCronPreview, saveScheduledJob } from './scheduler.js';
+import {
+    showWebhookModal, hideWebhookModal, showWebhookCreate,
+    showWebhookList, showWebhookEdit, saveWebhook, deleteWebhook,
+    testWebhook, showWebhookHistory,
+} from './webhooks.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -93,6 +98,15 @@ window.showJobModal = showJobModal;
 window.hideJobModal = hideJobModal;
 window.validateCronPreview = validateCronPreview;
 window.saveScheduledJob = saveScheduledJob;
+window.showWebhookModal  = showWebhookModal;
+window.hideWebhookModal  = hideWebhookModal;
+window.showWebhookCreate = showWebhookCreate;
+window.showWebhookList   = showWebhookList;
+window.showWebhookEdit   = showWebhookEdit;
+window.saveWebhook       = saveWebhook;
+window.deleteWebhook     = deleteWebhook;
+window.testWebhook       = testWebhook;
+window.showWebhookHistory = showWebhookHistory;
 
 // ── History search/filter/pagination state ───────────────────────────────
 let historyPage = 1;  // page number only; all other filter state lives in filterState

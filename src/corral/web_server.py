@@ -28,6 +28,7 @@ from corral.api import live_sessions as live_sessions_api
 from corral.api import history as history_api
 from corral.api import system as system_api
 from corral.api import schedule as schedule_api
+from corral.api import webhooks as webhooks_api
 
 log = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
@@ -35,8 +36,8 @@ BASE_DIR = Path(__file__).parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start background indexer, batch summarizer, and git poller on server startup."""
-    from corral.background_tasks import SessionIndexer, BatchSummarizer, GitPoller
+    """Start background indexer, batch summarizer, git poller, and webhook dispatcher on server startup."""
+    from corral.background_tasks import SessionIndexer, BatchSummarizer, GitPoller, WebhookDispatcher, IdleDetector
     from corral.agents import get_agent
     from corral.tools.session_manager import discover_corral_agents, resume_persistent_sessions
 
@@ -64,10 +65,14 @@ async def lifespan(app: FastAPI):
     indexer = SessionIndexer(store)
     summarizer = BatchSummarizer(store)
     git_poller = GitPoller(store)
+    dispatcher = WebhookDispatcher(store)
+    idle_detector = IdleDetector(store)
 
     indexer_task = asyncio.create_task(indexer.run_forever(interval=120))
     summarizer_task = asyncio.create_task(summarizer.run_forever())
     git_task = asyncio.create_task(git_poller.run_forever(interval=120))
+    webhook_task = asyncio.create_task(dispatcher.run_forever(interval=15))
+    idle_task = asyncio.create_task(idle_detector.run_forever(interval=60))
 
     # Start job scheduler
     from corral.background_tasks.scheduler import JobScheduler
@@ -78,12 +83,22 @@ async def lifespan(app: FastAPI):
     # Store indexer on app state so endpoints can trigger refresh
     app.state.indexer = indexer
 
+    # Wire dispatcher into the API layer
+    live_sessions_api.webhook_dispatcher = dispatcher
+    app.state.webhook_dispatcher = dispatcher
+
     yield
 
     indexer_task.cancel()
     summarizer_task.cancel()
     git_task.cancel()
     scheduler_task.cancel()
+    webhook_task.cancel()
+    idle_task.cancel()
+    try:
+        await asyncio.wait_for(dispatcher.close(), timeout=5)
+    except asyncio.TimeoutError:
+        log.warning("Webhook dispatcher close timed out")
     await store.close()
 
 
@@ -102,12 +117,15 @@ history_api.store = store
 history_api._app = app
 system_api.store = store
 schedule_api.store = schedule_store
+webhooks_api.store = store
+webhooks_api._app = app
 
 # Register routers
 app.include_router(live_sessions_api.router)
 app.include_router(history_api.router)
 app.include_router(system_api.router)
 app.include_router(schedule_api.router)
+app.include_router(webhooks_api.router)
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -126,6 +144,7 @@ def _set_store(new_store):
     live_sessions_api.store = new_store
     history_api.store = new_store
     system_api.store = new_store
+    webhooks_api.store = new_store
 
 
 def _set_schedule_store(new_store):

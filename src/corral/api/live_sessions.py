@@ -40,6 +40,9 @@ router = APIRouter()
 store: CorralStore = None  # type: ignore[assignment]
 jsonl_reader: JsonlSessionReader = None  # type: ignore[assignment]
 
+# Webhook dispatcher, set by web_server.py during lifespan setup
+webhook_dispatcher = None  # WebhookDispatcher | None
+
 # Track last-known status/summary per session_id so we only emit events on change.
 _last_known: dict[str, dict[str, str | None]] = {}
 
@@ -57,10 +60,18 @@ async def _track_status_summary_events(
         await store.insert_agent_event(
             agent_name, "status", status, session_id=session_id,
         )
+        if webhook_dispatcher:
+            asyncio.create_task(
+                webhook_dispatcher.dispatch(agent_name, "status", status, session_id)
+            )
     if summary and summary != prev.get("summary"):
         await store.insert_agent_event(
             agent_name, "goal", summary, session_id=session_id,
         )
+        if webhook_dispatcher:
+            asyncio.create_task(
+                webhook_dispatcher.dispatch(agent_name, "goal", summary, session_id)
+            )
 
     _last_known[dedup_key] = {"status": status, "summary": summary}
 
@@ -375,6 +386,10 @@ async def create_agent_event(name: str, body: dict):
         name, event_type, summary,
         tool_name=tool_name, session_id=session_id, detail_json=detail_json,
     )
+    if webhook_dispatcher:
+        asyncio.create_task(
+            webhook_dispatcher.dispatch(name, event_type, summary, session_id)
+        )
     return event
 
 

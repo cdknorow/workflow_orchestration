@@ -15,6 +15,7 @@ from corral.store.sessions import SessionStore
 from corral.store.git import GitStore
 from corral.store.tasks import TaskStore
 from corral.store.schedule import ScheduleStore
+from corral.store.webhooks import WebhookStore
 
 
 class CorralStore(DatabaseManager):
@@ -31,6 +32,7 @@ class CorralStore(DatabaseManager):
         self._git = GitStore(db_path)
         self._tasks = TaskStore(db_path)
         self._schedule = ScheduleStore(db_path)
+        self._webhooks = WebhookStore(db_path)
 
     async def _get_conn(self):
         """Ensure all sub-stores share the same connection."""
@@ -44,6 +46,8 @@ class CorralStore(DatabaseManager):
         self._tasks._schema_ensured = True
         self._schedule._conn = self._conn
         self._schedule._schema_ensured = True
+        self._webhooks._conn = self._conn
+        self._webhooks._schema_ensured = True
         return conn
 
     async def close(self) -> None:
@@ -53,6 +57,7 @@ class CorralStore(DatabaseManager):
         self._git._conn = None
         self._tasks._conn = None
         self._schedule._conn = None
+        self._webhooks._conn = None
 
     # ── Delegate: SessionStore methods ─────────────────────────────────────
 
@@ -317,3 +322,73 @@ class CorralStore(DatabaseManager):
     async def list_events_by_session(self, session_id: str, limit: int = 200) -> list[dict[str, Any]]:
         await self._get_conn()
         return await self._tasks.list_events_by_session(session_id, limit)
+
+    # ── Delegate: WebhookStore methods ──────────────────────────────────────
+
+    async def list_webhook_configs(self, enabled_only: bool = False) -> list[dict[str, Any]]:
+        await self._get_conn()
+        return await self._webhooks.list_webhook_configs(enabled_only)
+
+    async def get_webhook_config(self, webhook_id: int) -> dict[str, Any] | None:
+        await self._get_conn()
+        return await self._webhooks.get_webhook_config(webhook_id)
+
+    async def create_webhook_config(self, name: str, platform: str, url: str,
+                                     event_filter: str = "*", idle_threshold_seconds: int = 0,
+                                     agent_filter: str | None = None,
+                                     low_confidence_only: bool = False) -> dict[str, Any]:
+        await self._get_conn()
+        return await self._webhooks.create_webhook_config(
+            name, platform, url, event_filter, idle_threshold_seconds,
+            agent_filter, low_confidence_only)
+
+    async def update_webhook_config(self, webhook_id: int, **fields) -> None:
+        await self._get_conn()
+        return await self._webhooks.update_webhook_config(webhook_id, **fields)
+
+    async def delete_webhook_config(self, webhook_id: int) -> None:
+        await self._get_conn()
+        return await self._webhooks.delete_webhook_config(webhook_id)
+
+    async def create_webhook_delivery(self, webhook_id: int, agent_name: str, event_type: str,
+                                       event_summary: str, session_id: str | None = None) -> dict[str, Any]:
+        await self._get_conn()
+        return await self._webhooks.create_webhook_delivery(
+            webhook_id, agent_name, event_type, event_summary, session_id)
+
+    async def mark_webhook_delivery(self, delivery_id: int, status: str,
+                                     http_status: int | None = None, error_msg: str | None = None,
+                                     attempt_count: int | None = None,
+                                     next_retry_at: str | None = None) -> None:
+        await self._get_conn()
+        return await self._webhooks.mark_webhook_delivery(
+            delivery_id, status, http_status, error_msg, attempt_count, next_retry_at)
+
+    async def get_pending_webhook_deliveries(self, limit: int = 50) -> list[dict[str, Any]]:
+        await self._get_conn()
+        return await self._webhooks.get_pending_webhook_deliveries(limit)
+
+    async def list_webhook_deliveries(self, webhook_id: int, limit: int = 50) -> list[dict[str, Any]]:
+        await self._get_conn()
+        return await self._webhooks.list_webhook_deliveries(webhook_id, limit)
+
+    async def get_last_event_times_by_agent(self) -> dict[str, str]:
+        await self._get_conn()
+        return await self._webhooks.get_last_event_times_by_agent()
+
+    async def idle_notification_exists(self, webhook_id: int, agent_name: str,
+                                        threshold_seconds: int) -> bool:
+        await self._get_conn()
+        return await self._webhooks.idle_notification_exists(webhook_id, agent_name, threshold_seconds)
+
+    async def increment_consecutive_failures(self, webhook_id: int) -> int:
+        await self._get_conn()
+        return await self._webhooks.increment_consecutive_failures(webhook_id)
+
+    async def reset_consecutive_failures(self, webhook_id: int) -> None:
+        await self._get_conn()
+        return await self._webhooks.reset_consecutive_failures(webhook_id)
+
+    async def auto_disable_webhook(self, webhook_id: int, reason: str) -> None:
+        await self._get_conn()
+        return await self._webhooks.auto_disable_webhook(webhook_id, reason)
