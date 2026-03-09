@@ -1,15 +1,23 @@
 # CLAUDE.md - Project Guide
 
 ## Project Overview
-**Corral** is a multi-agent orchestration system for managing AI coding agents (Claude and Gemini) running in parallel git worktrees using tmux. It features a web dashboard, real-time logging, complete session history with FTS5 search, and git state polling.
+**Corral** is a multi-agent orchestration system for managing AI coding agents (Claude and Gemini) running in parallel git worktrees using tmux. It features a web dashboard, real-time logging, complete session history with FTS5 search, git state polling, task management, agent notes, and event tracking.
 
 ## Project Structure Highlights
 - `src/corral/`: Main package directory
   - `launch_agents.sh`: Bash script to discover worktrees, launch tmux sessions, and start the web server.
+  - `launch.py`: Launcher entry point for the `launch-corral` CLI command.
   - `web_server.py`: FastAPI web dashboard (REST + WebSocket endpoints).
-  - `session_manager.py`: Core logic for tmux discovery, pane targeting, history loading, session launch/kill.
-  - `session_store.py`: SQLite storage (WAL mode) for notes, tags, session index, FTS, and summarizer queue.
   - `PROTOCOL.md`: Protocol for agents to follow (status/summary reporting).
+  - `agents/`: Agent implementations (`base.py`, `claude.py`, `gemini.py`).
+  - `api/`: REST API route modules (`live_sessions.py`, `history.py`, `system.py`).
+  - `store/`: SQLite storage layer (`connection.py`, `sessions.py`, `git.py`, `tasks.py`).
+  - `tools/`: Core utilities (`session_manager.py`, `tmux_manager.py`, `log_streamer.py`, `pulse_detector.py`, `jsonl_reader.py`, `utils.py`).
+  - `background_tasks/`: Background services (`session_indexer.py`, `auto_summarizer.py`, `git_poller.py`).
+  - `hooks/`: Claude Code integration hooks (`task_state.py`, `agentic_state.py`, `utils.py`).
+  - `templates/`: Jinja2 HTML templates (`index.html`, `includes/`).
+  - `static/`: JavaScript, CSS, images, and favicon assets.
+- `tests/`: Test suite (Python and JavaScript tests).
 - `DEVELOP.md`: Detailed developer guide containing full project structure, API endpoints, and database schema.
 - `pyproject.toml`: Project configuration and dependencies.
 
@@ -66,6 +74,7 @@ All agent events use the `||PULSE:<EVENT_TYPE> <payload>||` format. The dashboar
 
 ## Development Guidelines
 - **Build System:** Setuptools with `pyproject.toml`.
-- **Dependencies:** `fastapi`, `uvicorn`, `jinja2` (Python 3.8+).
+- **Dependencies:** `fastapi`, `uvicorn`, `jinja2`, `aiosqlite` (Python 3.8+).
 - **Database:** SQLite (`~/.corral/sessions.db`) using WAL mode.
 - **Logs:** Agents stream output to `/tmp/<agent_type>_corral_<folder_name>.log` via `tmux pipe-pane`.
+- **Entry Points:** `corral` (web server), `launch-corral` (agent launcher), `corral-hook-task-sync` (task sync hook), `corral-hook-agentic-state` (agentic state hook).
