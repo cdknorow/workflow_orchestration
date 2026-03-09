@@ -1,0 +1,190 @@
+"""Database connection manager for the Corral SQLite store."""
+
+from __future__ import annotations
+
+import aiosqlite
+from pathlib import Path
+
+DB_DIR = Path.home() / ".corral"
+DB_PATH = DB_DIR / "sessions.db"
+
+
+class DatabaseManager:
+    """Manages the shared aiosqlite connection, schema creation, and migrations."""
+
+    def __init__(self, db_path: Path = DB_PATH) -> None:
+        self._db_path = db_path
+        self._schema_ensured = False
+        self._conn: aiosqlite.Connection | None = None
+
+    async def _get_conn(self) -> aiosqlite.Connection:
+        """Return persistent connection, creating it lazily on first use."""
+        if self._conn is not None:
+            return self._conn
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = await aiosqlite.connect(str(self._db_path))
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.execute("PRAGMA foreign_keys=ON")
+        if not self._schema_ensured:
+            self._schema_ensured = True
+            await self._ensure_schema(conn)
+        self._conn = conn
+        return conn
+
+    async def close(self) -> None:
+        """Close the persistent connection. Call on shutdown."""
+        if self._conn is not None:
+            await self._conn.close()
+            self._conn = None
+
+    async def _ensure_schema(self, conn: aiosqlite.Connection) -> None:
+        await conn.executescript("""
+            CREATE TABLE IF NOT EXISTS session_meta (
+                session_id   TEXT PRIMARY KEY,
+                notes_md     TEXT DEFAULT '',
+                auto_summary TEXT DEFAULT '',
+                is_user_edited INTEGER DEFAULT 0,
+                display_name TEXT,
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS tags (
+                id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                name  TEXT UNIQUE NOT NULL,
+                color TEXT NOT NULL DEFAULT '#58a6ff'
+            );
+
+            CREATE TABLE IF NOT EXISTS session_tags (
+                session_id TEXT NOT NULL,
+                tag_id     INTEGER NOT NULL,
+                PRIMARY KEY (session_id, tag_id),
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS session_index (
+                session_id      TEXT PRIMARY KEY,
+                source_type     TEXT NOT NULL,
+                source_file     TEXT NOT NULL,
+                first_timestamp TEXT,
+                last_timestamp  TEXT,
+                message_count   INTEGER DEFAULT 0,
+                display_summary TEXT DEFAULT '',
+                indexed_at      TEXT NOT NULL,
+                file_mtime      REAL NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_session_index_last_ts
+                ON session_index(last_timestamp DESC);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS session_fts
+                USING fts5(session_id, body, tokenize='porter');
+
+            CREATE TABLE IF NOT EXISTS summarizer_queue (
+                session_id   TEXT PRIMARY KEY,
+                status       TEXT NOT NULL DEFAULT 'pending',
+                attempted_at TEXT,
+                error_msg    TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS git_snapshots (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name        TEXT NOT NULL,
+                agent_type        TEXT NOT NULL,
+                working_directory TEXT NOT NULL,
+                branch            TEXT NOT NULL,
+                commit_hash       TEXT NOT NULL,
+                commit_subject    TEXT DEFAULT '',
+                commit_timestamp  TEXT,
+                session_id        TEXT,
+                remote_url        TEXT,
+                recorded_at       TEXT NOT NULL,
+                UNIQUE(agent_name, commit_hash)
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_tasks (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name  TEXT NOT NULL,
+                session_id  TEXT,
+                title       TEXT NOT NULL,
+                completed   INTEGER DEFAULT 0,
+                sort_order  INTEGER DEFAULT 0,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_notes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name  TEXT NOT NULL,
+                session_id  TEXT,
+                content     TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name  TEXT NOT NULL,
+                session_id  TEXT,
+                event_type  TEXT NOT NULL,
+                tool_name   TEXT,
+                summary     TEXT NOT NULL,
+                detail_json TEXT,
+                created_at  TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS live_sessions (
+                session_id    TEXT PRIMARY KEY,
+                agent_type    TEXT NOT NULL,
+                agent_name    TEXT NOT NULL,
+                working_dir   TEXT NOT NULL,
+                display_name  TEXT,
+                resume_from_id TEXT,
+                flags         TEXT,
+                created_at    TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS user_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+        """)
+
+        # Migrations: add columns that may not exist in older schemas
+        try:
+            await conn.execute("ALTER TABLE agent_notes ADD COLUMN session_id TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        try:
+            await conn.execute("ALTER TABLE agent_tasks ADD COLUMN session_id TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        try:
+            await conn.execute("ALTER TABLE session_meta ADD COLUMN display_name TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        # Create agent_live_state if missing (migration)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS agent_live_state (
+                agent_name         TEXT PRIMARY KEY,
+                current_session_id TEXT
+            )
+        """)
+
+        try:
+            await conn.execute("ALTER TABLE live_sessions ADD COLUMN resume_from_id TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        try:
+            await conn.execute("ALTER TABLE live_sessions ADD COLUMN flags TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)")
+
+        await conn.commit()

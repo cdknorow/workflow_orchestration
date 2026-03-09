@@ -169,7 +169,7 @@ async def test_resume_relaunches_missing_session(store, tmp_path):
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
-    mock_launch.assert_called_once_with(work_dir, "claude", display_name="My Agent", resume_session_id="old-sid")
+    mock_launch.assert_called_once_with(work_dir, "claude", display_name="My Agent", resume_session_id="old-sid", flags=None)
 
 
 @pytest.mark.asyncio
@@ -196,7 +196,7 @@ async def test_resume_uses_resume_from_id(store, tmp_path):
         await _resume_persistent_sessions()
 
     # Should use the original-sid (resume_from_id), not new-sid (session_id)
-    mock_launch.assert_called_once_with(work_dir, "claude", display_name="My Agent", resume_session_id="original-sid")
+    mock_launch.assert_called_once_with(work_dir, "claude", display_name="My Agent", resume_session_id="original-sid", flags=None)
     # Old session should be cleaned up (new one registered by launch_claude_session)
     sessions = await store.get_all_live_sessions()
     old_ids = {s["session_id"] for s in sessions}
@@ -249,7 +249,7 @@ async def test_resume_multiple_sessions(store, tmp_path):
 
     call_count = 0
 
-    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None):
+    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None, flags=None):
         nonlocal call_count
         call_count += 1
         return {
@@ -343,7 +343,7 @@ async def test_resume_preserves_display_name_across_multiple_restarts(store, tmp
     work_dir = str(tmp_path)
     call_log = []
 
-    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None):
+    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None, flags=None):
         """Simulate launch_claude_session: register a new session in the store."""
         new_sid = f"sid-cycle-{len(call_log) + 1}"
         call_log.append({
@@ -411,7 +411,7 @@ async def test_resume_preserves_agent_name_across_restarts(store, tmp_path):
 
     await store.register_live_session("sid-1", "claude", "my_worktree", work_dir)
 
-    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None):
+    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None, flags=None):
         folder = os.path.basename(working_dir)
         await store.register_live_session(
             "sid-2", agent_type, folder, working_dir,
@@ -457,7 +457,7 @@ async def test_resume_without_display_name_passes_none(store, tmp_path):
         await _resume_persistent_sessions()
 
     mock_launch.assert_called_once_with(
-        work_dir, "claude", display_name=None, resume_session_id="sid-1",
+        work_dir, "claude", display_name=None, resume_session_id="sid-1", flags=None,
     )
 
 
@@ -510,5 +510,5 @@ async def test_display_name_set_via_ui_persists_on_resume(store, tmp_path):
         await _resume_persistent_sessions()
 
     mock_launch.assert_called_once_with(
-        work_dir, "claude", display_name="Dashboard Name", resume_session_id="sid-1",
+        work_dir, "claude", display_name="Dashboard Name", resume_session_id="sid-1", flags=None,
     )

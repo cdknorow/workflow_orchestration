@@ -26,6 +26,7 @@ async def tmp_store(tmp_path):
 async def client(tmp_store, monkeypatch):
     """AsyncClient wired to the real FastAPI app with a temp database."""
     import corral.web_server as ws
+    ws._set_store(tmp_store)
     monkeypatch.setattr(ws, "store", tmp_store)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -130,7 +131,7 @@ async def test_events_per_agent_isolation(tmp_store):
 async def test_track_status_creates_event(tmp_store, monkeypatch):
     """_track_status_summary_events inserts a status event on change."""
     import corral.web_server as ws
-    monkeypatch.setattr(ws, "store", tmp_store)
+    ws._set_store(tmp_store)
     ws._last_known.clear()
 
     await ws._track_status_summary_events("agent1", "Reading files", None)
@@ -144,7 +145,7 @@ async def test_track_status_creates_event(tmp_store, monkeypatch):
 async def test_track_summary_creates_event(tmp_store, monkeypatch):
     """_track_status_summary_events inserts a goal event on change."""
     import corral.web_server as ws
-    monkeypatch.setattr(ws, "store", tmp_store)
+    ws._set_store(tmp_store)
     ws._last_known.clear()
 
     await ws._track_status_summary_events("agent1", None, "Implement auth feature")
@@ -158,7 +159,7 @@ async def test_track_summary_creates_event(tmp_store, monkeypatch):
 async def test_track_no_duplicate_on_same_status(tmp_store, monkeypatch):
     """Repeated calls with the same status/summary do not create duplicates."""
     import corral.web_server as ws
-    monkeypatch.setattr(ws, "store", tmp_store)
+    ws._set_store(tmp_store)
     ws._last_known.clear()
 
     await ws._track_status_summary_events("agent1", "Reading files", "Build auth")
@@ -173,7 +174,7 @@ async def test_track_no_duplicate_on_same_status(tmp_store, monkeypatch):
 async def test_track_new_status_creates_new_event(tmp_store, monkeypatch):
     """Changing status inserts a new event while same summary does not."""
     import corral.web_server as ws
-    monkeypatch.setattr(ws, "store", tmp_store)
+    ws._set_store(tmp_store)
     ws._last_known.clear()
 
     await ws._track_status_summary_events("agent1", "Reading files", "Build auth")
@@ -190,7 +191,7 @@ async def test_track_new_status_creates_new_event(tmp_store, monkeypatch):
 async def test_track_with_session_id(tmp_store, monkeypatch):
     """Events are tagged with the agent's current session_id."""
     import corral.web_server as ws
-    monkeypatch.setattr(ws, "store", tmp_store)
+    ws._set_store(tmp_store)
     ws._last_known.clear()
 
     await tmp_store.set_agent_session_id("agent1", "sess-123")

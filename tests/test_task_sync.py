@@ -32,6 +32,7 @@ async def tmp_store(tmp_path):
 async def client(tmp_store, monkeypatch):
     """AsyncClient wired to the real FastAPI app with a temp database."""
     import corral.web_server as ws
+    ws._set_store(tmp_store)
     monkeypatch.setattr(ws, "store", tmp_store)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
