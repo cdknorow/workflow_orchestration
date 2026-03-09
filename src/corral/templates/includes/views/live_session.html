@@ -1,0 +1,89 @@
+            <!-- Live Session View -->
+            <div id="live-session-view" class="session-view" style="display:none">
+                <div class="session-header">
+                    <div class="session-title">
+                        <span id="session-status-dot" class="status-dot"></span>
+                        <span id="session-type-badge" class="badge">claude</span>
+                        <h2 id="session-name"></h2>
+                        <span id="session-branch" class="title-branch" style="display:none">
+                            <span class="branch-icon">&#x2387;</span> <span class="branch-text"></span>
+                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
+                        </span>
+                        <div class="session-title-actions">
+                            <button class="btn btn-icon-label" onclick="showInfoModal()" title="View session details: agent type, tmux session, working directory, and log path"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg><span>Info</span></button>
+                            <button class="btn btn-icon-label btn-primary" onclick="attachTerminal()" title="Open this session in a new terminal window via tmux attach"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg><span>Attach</span></button>
+                            <span class="actions-divider"></span>
+                            <button class="btn btn-icon-label btn-warning" onclick="restartSession()" title="Exit and relaunch the agent with the same system prompt and working directory"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg><span>Restart</span></button>
+                            <button class="btn btn-icon-label btn-danger" onclick="killSession()" title="Terminate the tmux session and stop the agent process"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg><span>Kill</span></button>
+                        </div>
+                    </div>
+                    <div class="session-meta">
+                        <div id="session-summary" class="summary-line" style="display:none">
+                            <strong>Goal:</strong> <span class="summary-text"></span>
+                        </div>
+                        <div id="session-status" class="status-line">
+                            <strong>Status:</strong> <span class="status-text">Idle</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="waiting-banner" class="waiting-banner" style="display:none">
+                    ⏳ Agent is waiting for input
+                </div>
+
+                <div class="live-body">
+                    <div class="live-left-column">
+                        <div id="capture-wrapper" style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column">
+                            <div id="pane-capture" class="output-scroll capture-text"></div>
+                            <div id="selection-pause-badge" class="selection-pause-badge" style="display:none">Updates paused — text selected</div>
+                        </div>
+                        <div class="command-pane-resize-handle" id="command-pane-resize-handle"></div>
+                        <div class="command-pane" id="command-pane">
+                            <div class="command-pane-toolbar" id="command-toolbar">
+                                <!-- All buttons populated dynamically -->
+                            </div>
+                            <div class="command-pane-body">
+                                <div class="command-editor">
+                                    <textarea id="command-input" placeholder="Type a command..." rows="3" autocomplete="off"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="task-bar-resize-handle" id="task-bar-resize-handle"></div>
+                    <div class="agentic-state" id="agentic-state">
+                        <div class="agentic-state-tabs">
+                            <button class="agentic-tab active" onclick="switchAgenticTab('activity')" id="agentic-tab-activity">Activity</button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('tasks')" id="agentic-tab-tasks">Tasks <span id="task-bar-count" class="task-bar-count"></span></button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('notes')" id="agentic-tab-notes">Notes <span id="note-bar-count" class="task-bar-count"></span></button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('history')" id="agentic-tab-history">History</button>
+                        </div>
+                        <!-- Activity tab -->
+                        <div id="agentic-panel-activity" class="agentic-panel active">
+                            <div class="event-filter-bar" id="event-filters"></div>
+                            <div class="agentic-events-body">
+                                <div id="agentic-state-events">
+                                    <div class="event-empty">No activity yet</div>
+                                </div>
+                            </div>
+                            <div id="live-activity-chart" class="activity-chart activity-chart-bottom"></div>
+                        </div>
+                        <!-- Tasks tab -->
+                        <div id="agentic-panel-tasks" class="agentic-panel">
+                            <div class="task-bar-list" id="task-bar-list">
+                                <div class="task-empty">No tasks yet</div>
+                            </div>
+                        </div>
+                        <!-- Notes tab -->
+                        <div id="agentic-panel-notes" class="agentic-panel">
+                            <div id="note-md-rendered" class="note-md-rendered notes-rendered">
+                                <div class="note-md-placeholder">Click to add notes...</div>
+                            </div>
+                            <textarea id="note-md-editor" class="note-md-editor" placeholder="Write notes in markdown..." style="display:none"></textarea>
+                        </div>
+                        <!-- History tab (read-only JSONL conversation log) -->
+                        <div id="agentic-panel-history" class="agentic-panel">
+                            <div id="live-history-messages" class="chat-messages live-history-panel"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
