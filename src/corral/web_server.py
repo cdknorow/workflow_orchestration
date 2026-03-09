@@ -214,7 +214,9 @@ async def get_live_sessions():
         git = git_state.get(agent["agent_name"])
         name = agent["agent_name"]
         sid = agent.get("session_id")
-        waiting = latest_events.get(sid) in ("stop", "notification") if sid else False
+        latest_ev = latest_events.get(sid) if sid else None
+        waiting = latest_ev in ("stop", "notification")
+        working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
         entry = {
             "name": name,
             "agent_type": agent["agent_type"],
@@ -229,6 +231,7 @@ async def get_live_sessions():
             "display_name": display_names.get(sid) if sid else None,
             "working_directory": agent.get("working_directory", ""),
             "waiting_for_input": waiting,
+            "working": working,
         }
         results.append(entry)
         await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
@@ -790,7 +793,9 @@ async def ws_corral(websocket: WebSocket):
                 git = git_state.get(agent["agent_name"])
                 name = agent["agent_name"]
                 sid = agent.get("session_id")
-                waiting = ws_latest_events.get(sid) in ("stop", "notification") if sid else False
+                latest_ev = ws_latest_events.get(sid) if sid else None
+                waiting = latest_ev in ("stop", "notification")
+                working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
                 results.append({
                     "name": name,
                     "agent_type": agent["agent_type"],
@@ -803,6 +808,7 @@ async def ws_corral(websocket: WebSocket):
                     "display_name": ws_display_names.get(sid) if sid else None,
                     "working_directory": agent.get("working_directory", ""),
                     "waiting_for_input": waiting,
+                    "working": working,
                 })
                 await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
                 await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)

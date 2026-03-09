@@ -67,7 +67,7 @@ export async function selectLiveSession(name, agentType, sessionId) {
     // Update branch and waiting indicator from live sessions data
     const agent = state.liveSessions.find(s => s.session_id === sessionId);
     updateSessionBranch(agent && agent.branch ? agent.branch : null);
-    updateWaitingIndicator(agent ? agent.waiting_for_input : false);
+    updateWaitingIndicator(agent ? agent.waiting_for_input : false, agent ? agent.working : false);
 
     // Set up quick action buttons
     state.currentCommands = (agent && agent.commands) || { compress: "/compact", clear: "/clear" };
