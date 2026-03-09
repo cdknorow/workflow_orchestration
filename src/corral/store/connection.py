@@ -238,4 +238,13 @@ class DatabaseManager:
         except aiosqlite.OperationalError:
             pass  # Column already exists
 
+        for ddl in [
+            "CREATE INDEX IF NOT EXISTS idx_session_tags_tag_id ON session_tags(tag_id)",
+            "CREATE INDEX IF NOT EXISTS idx_session_index_first_ts ON session_index(first_timestamp)",
+        ]:
+            try:
+                await conn.execute(ddl)
+            except Exception:
+                pass
+
         await conn.commit()

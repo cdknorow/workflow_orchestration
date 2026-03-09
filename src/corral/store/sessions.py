@@ -17,6 +17,76 @@ def _extract_first_header(text: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+def _sanitize_fts_query(raw: str, mode: str = "phrase") -> str:
+    """Translate a plain user query into a safe FTS5 expression.
+
+    mode='phrase' → "full phrase in quotes"
+    mode='and'    → token1 AND token2 AND ...
+    mode='or'     → token1 OR token2 OR ...
+
+    Existing quoted sub-phrases in the input are preserved intact.
+    FTS5 operator tokens (AND, OR, NOT) entered as bare words by the user
+    are dropped to prevent injection.
+    Returns empty string for blank input (caller skips the MATCH clause).
+    """
+    raw = raw.strip()
+    if not raw:
+        return ""
+
+    if mode not in ("phrase", "and", "or"):
+        mode = "phrase"
+
+    if mode == "phrase":
+        cleaned = raw.replace('"', ' ').strip()
+        return f'"{cleaned}"' if cleaned else ""
+
+    # Tokenise: keep "quoted phrases" together, split bare words
+    tokens: list[str] = []
+    i = 0
+    while i < len(raw):
+        if raw[i] == '"':
+            j = raw.find('"', i + 1)
+            end = j if j != -1 else len(raw) - 1
+            tokens.append(raw[i : end + 1])
+            i = end + 1
+        elif raw[i].isspace():
+            i += 1
+        else:
+            j = i
+            while j < len(raw) and not raw[j].isspace() and raw[j] != '"':
+                j += 1
+            word = raw[i:j]
+            if word.upper() not in ("AND", "OR", "NOT"):
+                tokens.append(word)
+            i = j
+
+    if not tokens:
+        return ""
+
+    joiner = " AND " if mode == "and" else " OR "
+    return joiner.join(tokens)
+
+
+def _compute_duration(first_ts: str | None, last_ts: str | None) -> int | None:
+    """Return session duration in seconds, or None if timestamps are missing/invalid."""
+    if not first_ts or not last_ts:
+        return None
+    try:
+        def _parse(ts: str) -> datetime:
+            base = ts.split("+")[0].split("Z")[0]
+            dot = base.find(".")
+            if dot != -1:
+                base = base[:dot]
+            return datetime.fromisoformat(base)
+
+        a = _parse(first_ts)
+        b = _parse(last_ts)
+        delta = int((b - a).total_seconds())
+        return max(0, delta)
+    except Exception:
+        return None
+
+
 class SessionStore(DatabaseManager):
     """Session-related DB operations: index, FTS, notes, tags, settings, display names, live state."""
 
@@ -255,10 +325,32 @@ class SessionStore(DatabaseManager):
         page: int = 1,
         page_size: int = 50,
         search: str | None = None,
+        fts_mode: str = "phrase",
+        # Legacy single-value aliases (merged with list variants below)
         tag_id: int | None = None,
         source_type: str | None = None,
+        # New multi-value filters
+        tag_ids: list[int] | None = None,
+        tag_logic: str = "AND",
+        source_types: list[str] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        min_duration_sec: int | None = None,
+        max_duration_sec: int | None = None,
     ) -> dict[str, Any]:
-        """Paginated session listing with optional full-text search, tag filter, and source filter."""
+        """Paginated session listing with advanced search filters."""
+        # Merge legacy single-value aliases into list variants
+        effective_tag_ids: list[int] = list(tag_ids or [])
+        if tag_id is not None and tag_id not in effective_tag_ids:
+            effective_tag_ids.append(tag_id)
+
+        effective_source_types: list[str] = list(source_types or [])
+        if source_type and source_type not in effective_source_types:
+            effective_source_types.append(source_type)
+
+        if fts_mode not in ("phrase", "and", "or"):
+            fts_mode = "phrase"
+
         conn = await self._get_conn()
         params: list[Any] = []
         where_clauses: list[str] = []
@@ -272,20 +364,50 @@ class SessionStore(DatabaseManager):
         order_clause = "si.last_timestamp DESC"
 
         if search:
-            from_clause += " JOIN session_fts fts ON fts.session_id = si.session_id"
-            where_clauses.append("session_fts MATCH ?")
-            params.append(search)
-            order_clause = "rank"
+            safe_q = _sanitize_fts_query(search, fts_mode)
+            if safe_q:
+                from_clause += " JOIN session_fts fts ON fts.session_id = si.session_id"
+                where_clauses.append("fts MATCH ?")
+                params.append(safe_q)
+                order_clause = "rank"
 
-        if tag_id is not None:
+        if date_from:
+            where_clauses.append("si.last_timestamp >= ?")
+            params.append(date_from + "T00:00:00")
+
+        if date_to:
+            where_clauses.append("si.last_timestamp <= ?")
+            params.append(date_to + "T23:59:59")
+
+        if min_duration_sec is not None:
             where_clauses.append(
-                "si.session_id IN (SELECT session_id FROM session_tags WHERE tag_id = ?)"
+                "(julianday(si.last_timestamp) - julianday(si.first_timestamp)) * 86400 >= ?"
             )
-            params.append(tag_id)
+            params.append(min_duration_sec)
 
-        if source_type:
-            where_clauses.append("si.source_type = ?")
-            params.append(source_type)
+        if max_duration_sec is not None:
+            where_clauses.append(
+                "(julianday(si.last_timestamp) - julianday(si.first_timestamp)) * 86400 <= ?"
+            )
+            params.append(max_duration_sec)
+
+        if effective_tag_ids and tag_logic == "AND":
+            for tid in effective_tag_ids:
+                where_clauses.append(
+                    "si.session_id IN (SELECT session_id FROM session_tags WHERE tag_id = ?)"
+                )
+                params.append(tid)
+        elif effective_tag_ids and tag_logic == "OR":
+            ph = ",".join("?" for _ in effective_tag_ids)
+            where_clauses.append(
+                f"si.session_id IN (SELECT session_id FROM session_tags WHERE tag_id IN ({ph}))"
+            )
+            params.extend(effective_tag_ids)
+
+        if effective_source_types:
+            ph = ",".join("?" for _ in effective_source_types)
+            where_clauses.append(f"si.source_type IN ({ph})")
+            params.extend(effective_source_types)
 
         where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -367,6 +489,7 @@ class SessionStore(DatabaseManager):
                 "has_notes": meta.get("has_notes", False),
                 "tags": tags_map.get(sid, []),
                 "branch": branch_map.get(sid),
+                "duration_sec": _compute_duration(r["first_timestamp"], r["last_timestamp"]),
             })
 
         return {

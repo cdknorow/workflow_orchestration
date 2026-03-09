@@ -2,6 +2,9 @@
 
 import { state } from './state.js';
 import { loadLiveSessions, loadHistorySessions, loadHistorySessionsPaged } from './api.js';
+import { filterState, deserializeFromUrl, serializeToUrl,
+         hasActiveFilters, countActiveFilters, resetFilters }
+    from './search_filters.js';
 import { connectCorralWs } from './websocket.js';
 import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
@@ -15,7 +18,7 @@ import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAge
 import { loadAgentNotes, initNotesMd } from './agent_notes.js';
 import { switchAgenticTab, loadAgentEvents, toggleEventFilter, toggleAllEventFilters, toggleFilterDropdown, showFilterPopup, hideFilterPopup } from './agentic_state.js';
 import { toggleHistoryEventFilter, toggleAllHistoryEventFilters } from './history_tabs.js';
-import { copyBranchName } from './utils.js';
+import { copyBranchName, escapeHtml } from './utils.js';
 import { initScheduler, selectScheduledJob, toggleScheduledJob, deleteScheduledJob, editScheduledJob, showJobModal, hideJobModal, validateCronPreview, saveScheduledJob } from './scheduler.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
@@ -92,10 +95,7 @@ window.validateCronPreview = validateCronPreview;
 window.saveScheduledJob = saveScheduledJob;
 
 // ── History search/filter/pagination state ───────────────────────────────
-let historyPage = 1;
-let historySearch = '';
-let historyTagId = null;
-let historySourceType = null;
+let historyPage = 1;  // page number only; all other filter state lives in filterState
 
 function loadHistoryPage(page) {
     historyPage = page;
@@ -103,36 +103,119 @@ function loadHistoryPage(page) {
 }
 
 function loadHistoryFiltered() {
-    loadHistorySessionsPaged(historyPage, 50, historySearch || null, historyTagId, historySourceType || null);
+    serializeToUrl(historyPage);
+    loadHistorySessionsPaged(historyPage, 50);
+    updateFilterBadge();
 }
 
-async function populateTagFilter() {
-    await loadAllTags();
-    try {
-        const resp = await fetch('/api/tags');
-        const tags = await resp.json();
-        const select = document.getElementById('tag-filter');
-        if (!select) return;
-        select.innerHTML = '<option value="">All tags</option>';
-        for (const tag of tags) {
-            const opt = document.createElement('option');
-            opt.value = tag.id;
-            opt.textContent = tag.name;
-            select.appendChild(opt);
-        }
-    } catch (e) {
-        console.error('Failed to load tags for filter:', e);
+async function populateHfTagSelect() {
+    const tags = await loadAllTags();
+    const sel = document.getElementById('hf-tag-add');
+    if (!sel || !tags) return;
+    sel.innerHTML = '<option value="">+ tag</option>';
+    for (const tag of tags) {
+        const opt = document.createElement('option');
+        opt.value = tag.id;
+        opt.textContent = tag.name;
+        sel.appendChild(opt);
     }
+}
+
+function renderFilterTagPills() {
+    const container = document.getElementById('hf-tag-pills');
+    if (!container) return;
+    const sel = document.getElementById('hf-tag-add');
+    const tagMap = {};
+    if (sel) {
+        for (const opt of sel.options) {
+            if (opt.value) tagMap[parseInt(opt.value)] = opt.textContent;
+        }
+    }
+    container.innerHTML = filterState.tagIds.map(id => {
+        const name = tagMap[id] || `Tag ${id}`;
+        return `<span class="hf-tag-pill" data-tag-id="${id}">
+            ${escapeHtml(name)}
+            <span class="hf-tag-remove">&times;</span>
+        </span>`;
+    }).join('');
+
+    container.querySelectorAll('.hf-tag-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tagId = parseInt(e.target.closest('[data-tag-id]').dataset.tagId);
+            filterState.tagIds = filterState.tagIds.filter(id => id !== tagId);
+            renderFilterTagPills();
+            const logicRow = document.getElementById('hf-tag-logic-row');
+            if (logicRow) logicRow.style.display = filterState.tagIds.length > 1 ? '' : 'none';
+            historyPage = 1;
+            loadHistoryFiltered();
+        });
+    });
+}
+
+function updateFilterBadge() {
+    const badge = document.getElementById('hf-active-count');
+    if (!badge) return;
+    const n = countActiveFilters();
+    badge.textContent = String(n);
+    badge.style.display = n > 0 ? '' : 'none';
+}
+
+function syncFilterDomToState() {
+    const searchInput = document.getElementById('history-search');
+    if (searchInput) searchInput.value = filterState.q;
+
+    const dateFrom = document.getElementById('hf-date-from');
+    if (dateFrom) dateFrom.value = filterState.dateFrom;
+    const dateTo = document.getElementById('hf-date-to');
+    if (dateTo) dateTo.value = filterState.dateTo;
+
+    const durMin = document.getElementById('hf-dur-min');
+    if (durMin && filterState.minDurationSec != null)
+        durMin.value = String(Math.round(filterState.minDurationSec / 60));
+    const durMax = document.getElementById('hf-dur-max');
+    if (durMax && filterState.maxDurationSec != null)
+        durMax.value = String(Math.round(filterState.maxDurationSec / 60));
+
+    document.querySelectorAll('[data-source]').forEach(b => {
+        if (b.dataset.source === 'all')
+            b.classList.toggle('active', filterState.sourceTypes.length === 0);
+        else
+            b.classList.toggle('active', filterState.sourceTypes.includes(b.dataset.source));
+    });
+    document.querySelectorAll('[data-logic]').forEach(b =>
+        b.classList.toggle('active', b.dataset.logic === filterState.tagLogic));
+    document.querySelectorAll('[data-mode]').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === filterState.ftsMode));
+
+    if (hasActiveFilters()) {
+        const panel = document.getElementById('hf-advanced');
+        if (panel) panel.style.display = '';
+    }
+
+    const ftsModeRow = document.getElementById('hf-fts-mode-row');
+    if (ftsModeRow) ftsModeRow.style.display = filterState.q ? '' : 'none';
+
+    renderFilterTagPills();
+    updateFilterBadge();
 }
 
 // ── Initialization ────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
     loadSettings();
+
+    // Restore filter state from URL query params before first load
+    const restored = deserializeFromUrl();
+    historyPage = restored.page;
+
     loadLiveSessions();
-    loadHistorySessions();
     connectCorralWs();
-    populateTagFilter();
+    populateHfTagSelect().then(() => {
+        syncFilterDomToState();
+        loadHistoryFiltered();
+    });
     initScheduler();
+
+    // ── Filter event wiring ─────────────────────────────────────────────
 
     // Search bar with debounce
     const searchInput = document.getElementById('history-search');
@@ -141,28 +224,132 @@ document.addEventListener("DOMContentLoaded", () => {
         searchInput.addEventListener('input', () => {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
-                historySearch = searchInput.value.trim();
+                filterState.q = searchInput.value.trim();
                 historyPage = 1;
+                const ftsModeRow = document.getElementById('hf-fts-mode-row');
+                if (ftsModeRow)
+                    ftsModeRow.style.display = filterState.q ? '' : 'none';
                 loadHistoryFiltered();
             }, 300);
         });
     }
 
-    // Tag filter
-    const tagFilter = document.getElementById('tag-filter');
-    if (tagFilter) {
-        tagFilter.addEventListener('change', (e) => {
-            historyTagId = e.target.value ? parseInt(e.target.value) : null;
+    // Advanced panel toggle
+    const advToggle = document.getElementById('hf-adv-toggle');
+    if (advToggle) {
+        advToggle.addEventListener('click', () => {
+            const panel = document.getElementById('hf-advanced');
+            if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none';
+        });
+    }
+
+    // FTS mode buttons
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterState.ftsMode = btn.dataset.mode;
+            document.querySelectorAll('[data-mode]')
+                .forEach(b => b.classList.toggle('active', b.dataset.mode === filterState.ftsMode));
+            historyPage = 1;
+            loadHistoryFiltered();
+        });
+    });
+
+    // Source toggle buttons
+    document.querySelectorAll('[data-source]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const source = btn.dataset.source;
+            if (source === 'all') {
+                filterState.sourceTypes = [];
+            } else {
+                const idx = filterState.sourceTypes.indexOf(source);
+                if (idx >= 0) filterState.sourceTypes.splice(idx, 1);
+                else filterState.sourceTypes.push(source);
+            }
+            document.querySelectorAll('[data-source]').forEach(b => {
+                if (b.dataset.source === 'all')
+                    b.classList.toggle('active', filterState.sourceTypes.length === 0);
+                else
+                    b.classList.toggle('active', filterState.sourceTypes.includes(b.dataset.source));
+            });
+            historyPage = 1;
+            loadHistoryFiltered();
+        });
+    });
+
+    // Tag add select
+    const tagAddSel = document.getElementById('hf-tag-add');
+    if (tagAddSel) {
+        tagAddSel.addEventListener('change', () => {
+            const id = parseInt(tagAddSel.value);
+            if (!id || filterState.tagIds.includes(id)) return;
+            filterState.tagIds.push(id);
+            tagAddSel.value = '';
+            renderFilterTagPills();
+            const logicRow = document.getElementById('hf-tag-logic-row');
+            if (logicRow) logicRow.style.display = filterState.tagIds.length > 1 ? '' : 'none';
             historyPage = 1;
             loadHistoryFiltered();
         });
     }
 
-    // Source type filter
-    const sourceFilter = document.getElementById('source-filter');
-    if (sourceFilter) {
-        sourceFilter.addEventListener('change', (e) => {
-            historySourceType = e.target.value || null;
+    // Tag logic buttons
+    document.querySelectorAll('[data-logic]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterState.tagLogic = btn.dataset.logic;
+            document.querySelectorAll('[data-logic]')
+                .forEach(b => b.classList.toggle('active', b.dataset.logic === filterState.tagLogic));
+            historyPage = 1;
+            loadHistoryFiltered();
+        });
+    });
+
+    // Date filters
+    const dateFrom = document.getElementById('hf-date-from');
+    const dateTo = document.getElementById('hf-date-to');
+    if (dateFrom) dateFrom.addEventListener('change', () => {
+        filterState.dateFrom = dateFrom.value || '';
+        historyPage = 1;
+        loadHistoryFiltered();
+    });
+    if (dateTo) dateTo.addEventListener('change', () => {
+        filterState.dateTo = dateTo.value || '';
+        historyPage = 1;
+        loadHistoryFiltered();
+    });
+
+    // Duration filters
+    const durMin = document.getElementById('hf-dur-min');
+    const durMax = document.getElementById('hf-dur-max');
+    if (durMin) durMin.addEventListener('change', () => {
+        const val = parseFloat(durMin.value);
+        filterState.minDurationSec = isNaN(val) ? null : Math.round(val * 60);
+        historyPage = 1;
+        loadHistoryFiltered();
+    });
+    if (durMax) durMax.addEventListener('change', () => {
+        const val = parseFloat(durMax.value);
+        filterState.maxDurationSec = isNaN(val) ? null : Math.round(val * 60);
+        historyPage = 1;
+        loadHistoryFiltered();
+    });
+
+    // Clear all filters button
+    const clearBtn = document.querySelector('.hf-clear-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            resetFilters();
+            if (searchInput) searchInput.value = '';
+            if (dateFrom) dateFrom.value = '';
+            if (dateTo) dateTo.value = '';
+            if (durMin) durMin.value = '';
+            if (durMax) durMax.value = '';
+            document.querySelectorAll('[data-source]')
+                .forEach(b => b.classList.toggle('active', b.dataset.source === 'all'));
+            document.querySelectorAll('[data-logic]')
+                .forEach(b => b.classList.toggle('active', b.dataset.logic === 'AND'));
+            document.querySelectorAll('[data-mode]')
+                .forEach(b => b.classList.toggle('active', b.dataset.mode === 'phrase'));
+            renderFilterTagPills();
             historyPage = 1;
             loadHistoryFiltered();
         });

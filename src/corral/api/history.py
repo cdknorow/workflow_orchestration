@@ -29,22 +29,88 @@ async def get_history_sessions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     q: Optional[str] = Query(None),
+    fts_mode: str = Query("phrase"),
+    # Legacy single-value params (backward compat)
     tag_id: Optional[int] = Query(None),
     source_type: Optional[str] = Query(None),
+    # New multi-value params (comma-separated strings)
+    tag_ids: Optional[str] = Query(None),
+    tag_logic: str = Query("AND"),
+    source_types: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    min_duration_sec: Optional[int] = Query(None, ge=0),
+    max_duration_sec: Optional[int] = Query(None, ge=0),
 ):
-    """Paginated history sessions from the index, with search/tag/source filters."""
-    result = await store.list_sessions_paged(page, page_size, q, tag_id, source_type)
+    """Paginated history sessions with advanced search filters."""
+    import re as _re
 
-    if result["total"] == 0 and not q and not tag_id and not source_type:
-        # Cold start — index hasn't run yet; trigger immediate index and fall back
-        from fastapi import Request
-        # Access app.state.indexer via the store's parent app
-        indexer = getattr(_app, "state", None) and getattr(_app.state, "indexer", None) if _app else None
+    # Parse comma-separated tag_ids
+    resolved_tag_ids: list[int] = []
+    if tag_ids:
+        resolved_tag_ids = [int(x) for x in tag_ids.split(",") if x.strip().isdigit()]
+    if tag_id is not None and tag_id not in resolved_tag_ids:
+        resolved_tag_ids.append(tag_id)
+
+    # Parse comma-separated source_types
+    resolved_source_types: list[str] | None = None
+    if source_types:
+        resolved_source_types = [s.strip() for s in source_types.split(",") if s.strip()]
+    elif source_type:
+        resolved_source_types = [source_type]
+
+    # Validate date format
+    _DATE_RE = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    if date_from and not _DATE_RE.match(date_from):
+        date_from = None
+    if date_to and not _DATE_RE.match(date_to):
+        date_to = None
+    if date_from and date_to and date_from > date_to:
+        date_from, date_to = date_to, date_from
+
+    # Guard duration bounds
+    if min_duration_sec is not None and max_duration_sec is not None:
+        if min_duration_sec > max_duration_sec:
+            min_duration_sec, max_duration_sec = max_duration_sec, min_duration_sec
+
+    # Normalize tag_logic and fts_mode
+    if tag_logic not in ("AND", "OR"):
+        tag_logic = "AND"
+    if fts_mode not in ("phrase", "and", "or"):
+        fts_mode = "phrase"
+
+    # Build keyword args for the new parameters
+    advanced_kwargs = dict(
+        fts_mode=fts_mode,
+        tag_ids=resolved_tag_ids or None,
+        tag_logic=tag_logic,
+        source_types=resolved_source_types,
+        date_from=date_from,
+        date_to=date_to,
+        min_duration_sec=min_duration_sec,
+        max_duration_sec=max_duration_sec,
+    )
+
+    result = await store.list_sessions_paged(page, page_size, q, **advanced_kwargs)
+
+    # Cold-start fallback
+    has_any_filter = (
+        q or resolved_tag_ids or resolved_source_types
+        or date_from or date_to
+        or min_duration_sec is not None or max_duration_sec is not None
+    )
+
+    if result["total"] == 0 and not has_any_filter:
+        indexer = (
+            getattr(_app, "state", None)
+            and getattr(_app.state, "indexer", None)
+            if _app else None
+        )
         if indexer:
             try:
                 await indexer.run_once()
                 result = await store.list_sessions_paged(
-                    page, page_size, q, tag_id, source_type
+                    page, page_size, q, **advanced_kwargs
                 )
             except Exception:
                 pass
@@ -61,7 +127,12 @@ async def get_history_sessions(
                 else:
                     s["tags"] = []
                     s["has_notes"] = False
-            return {"sessions": sessions, "total": len(sessions), "page": 1, "page_size": len(sessions)}
+            return {
+                "sessions": sessions,
+                "total": len(sessions),
+                "page": 1,
+                "page_size": len(sessions),
+            }
 
     return result
 

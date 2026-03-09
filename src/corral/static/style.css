@@ -190,25 +190,153 @@ body {
     border-color: var(--accent);
 }
 
-.history-filter-row {
+/* Advanced filter panel */
+.hf-search-row {
     display: flex;
     gap: 6px;
+    align-items: center;
 }
-
-.history-filter-row select {
+.hf-search-row input[type="search"] {
     flex: 1;
-    padding: 4px 6px;
+    min-width: 0;
+}
+.hf-adv-btn {
+    flex-shrink: 0;
+    position: relative;
+    padding: 5px 8px;
+}
+.hf-active-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    padding: 0 2px;
+}
+.hf-advanced {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0 4px;
+    border-top: 1px solid var(--border);
+    margin-top: 2px;
+}
+.hf-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 22px;
+}
+.hf-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 44px;
+    flex-shrink: 0;
+}
+.hf-toggle-group {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+}
+.hf-toggle {
+    padding: 2px 8px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+}
+.hf-toggle.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: #fff;
+}
+.hf-toggle:hover:not(.active) {
+    background: var(--bg-hover);
+}
+.hf-tag-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+.hf-tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    background: var(--accent-dim);
+    color: #fff;
+}
+.hf-tag-remove {
+    cursor: pointer;
+    opacity: 0.75;
+    font-size: 13px;
+    line-height: 1;
+}
+.hf-tag-remove:hover { opacity: 1; }
+.hf-tag-add-select {
+    max-width: 90px;
+    padding: 2px 4px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 4px;
     color: var(--text-secondary);
     font-size: 11px;
     outline: none;
-    min-width: 0;
+    cursor: pointer;
 }
-
-.history-filter-row select:focus {
-    border-color: var(--accent);
+.hf-tag-add-select:focus { border-color: var(--accent); }
+.hf-date {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 11px;
+    outline: none;
+}
+.hf-date:focus { border-color: var(--accent); }
+.hf-dur-input {
+    width: 50px;
+    padding: 3px 5px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 11px;
+    outline: none;
+}
+.hf-dur-input:focus { border-color: var(--accent); }
+.hf-dur-sep,
+.hf-dur-unit {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.hf-clear-btn {
+    align-self: flex-start;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+/* Duration badge in sidebar items */
+.session-dur {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 4px;
 }
 
 .session-list {

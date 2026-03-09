@@ -13,6 +13,15 @@ function formatShortTime(isoStr) {
     return `${dd}/${mm}/${yy}`;
 }
 
+function formatDuration(sec) {
+    if (sec == null || sec <= 0) return '';
+    if (sec < 60) return `${sec}s`;
+    if (sec < 3600) return `${Math.round(sec / 60)}m`;
+    const h = Math.floor(sec / 3600);
+    const m = Math.round((sec % 3600) / 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 function formatStaleness(seconds) {
     if (seconds === null || seconds === undefined) return "Unknown";
     if (seconds < 5) return "Just now";
@@ -137,8 +146,10 @@ export function renderHistorySessions(sessions, total, page, pageSize) {
         const tagDots = s.tags ? renderSidebarTagDots(s.tags) : "";
         const timeStr = s.last_timestamp ? formatShortTime(s.last_timestamp) : "";
         const timeTag = timeStr ? `<span class="session-time">${escapeHtml(timeStr)}</span>` : "";
+        const durStr = s.duration_sec != null ? formatDuration(s.duration_sec) : '';
+        const durTag = durStr ? `<span class="session-dur">${escapeHtml(durStr)}</span>` : '';
         return `<li class="${isActive ? 'active' : ''}" onclick="selectHistorySession('${escapeHtml(s.session_id)}')">
-            <div class="session-row-top">${timeTag}<span class="session-label" title="${escapeHtml(label)}">${escapeHtml(truncated)}${typeTag}${tagDots}</span></div>
+            <div class="session-row-top">${timeTag}${durTag}<span class="session-label" title="${escapeHtml(label)}">${escapeHtml(truncated)}${typeTag}${tagDots}</span></div>
             ${branchTag ? `<div class="session-row-bottom">${branchTag}</div>` : ""}
         </li>`;
     }).join("");

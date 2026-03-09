@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { renderLiveSessions, renderHistorySessions } from './render.js';
+import { buildApiParams } from './search_filters.js';
 
 export async function loadLiveSessions() {
     try {
@@ -25,12 +26,9 @@ export async function loadHistorySessions() {
     }
 }
 
-export async function loadHistorySessionsPaged(page = 1, pageSize = 50, search = null, tagId = null, sourceType = null) {
+export async function loadHistorySessionsPaged(page = 1, pageSize = 50) {
     try {
-        const params = new URLSearchParams({ page, page_size: pageSize });
-        if (search) params.set("q", search);
-        if (tagId) params.set("tag_id", tagId);
-        if (sourceType) params.set("source_type", sourceType);
+        const params = buildApiParams(page, pageSize);
         const resp = await fetch(`/api/sessions/history?${params}`);
         const data = await resp.json();
         const sessions = data.sessions || data;

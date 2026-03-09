@@ -21,16 +21,83 @@
             <section class="sidebar-section">
                 <h2>History</h2>
                 <div class="history-filters">
-                    <input id="history-search" type="search" placeholder="Search sessions...">
-                    <div class="history-filter-row">
-                        <select id="tag-filter">
-                            <option value="">All tags</option>
-                        </select>
-                        <select id="source-filter">
-                            <option value="">All sources</option>
-                            <option value="claude">Claude</option>
-                            <option value="gemini">Gemini</option>
-                        </select>
+                    <!-- Row 1: Text search + advanced toggle -->
+                    <div class="hf-search-row">
+                        <input id="history-search" type="search" placeholder="Search sessions...">
+                        <button id="hf-adv-toggle" class="btn btn-small hf-adv-btn"
+                                title="Advanced filters">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
+                                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                <line x1="2" y1="4" x2="14" y2="4"/>
+                                <line x1="4" y1="8" x2="12" y2="8"/>
+                                <line x1="6" y1="12" x2="10" y2="12"/>
+                            </svg>
+                            <span id="hf-active-count" class="hf-active-badge"
+                                  style="display:none">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Advanced panel (collapsed by default) -->
+                    <div id="hf-advanced" class="hf-advanced" style="display:none">
+
+                        <!-- FTS mode (shown only when search box has text) -->
+                        <div class="hf-row" id="hf-fts-mode-row" style="display:none">
+                            <label class="hf-label">Match</label>
+                            <div class="hf-toggle-group">
+                                <button class="hf-toggle active" data-mode="phrase">Phrase</button>
+                                <button class="hf-toggle" data-mode="and">All words</button>
+                                <button class="hf-toggle" data-mode="or">Any word</button>
+                            </div>
+                        </div>
+
+                        <!-- Source multi-select -->
+                        <div class="hf-row">
+                            <label class="hf-label">Source</label>
+                            <div class="hf-toggle-group">
+                                <button class="hf-toggle active" data-source="all">All</button>
+                                <button class="hf-toggle" data-source="claude">Claude</button>
+                                <button class="hf-toggle" data-source="gemini">Gemini</button>
+                            </div>
+                        </div>
+
+                        <!-- Tag multi-filter -->
+                        <div class="hf-row">
+                            <label class="hf-label">Tags</label>
+                            <div class="hf-tag-filter" id="hf-tag-pills"></div>
+                            <select id="hf-tag-add" class="hf-tag-add-select">
+                                <option value="">+ tag</option>
+                            </select>
+                        </div>
+                        <div class="hf-row" id="hf-tag-logic-row" style="display:none">
+                            <label class="hf-label">Tag logic</label>
+                            <div class="hf-toggle-group">
+                                <button class="hf-toggle active" data-logic="AND">AND</button>
+                                <button class="hf-toggle" data-logic="OR">OR</button>
+                            </div>
+                        </div>
+
+                        <!-- Date range -->
+                        <div class="hf-row">
+                            <label class="hf-label">From</label>
+                            <input type="date" id="hf-date-from" class="hf-date">
+                        </div>
+                        <div class="hf-row">
+                            <label class="hf-label">To</label>
+                            <input type="date" id="hf-date-to" class="hf-date">
+                        </div>
+
+                        <!-- Duration range (in minutes for usability) -->
+                        <div class="hf-row">
+                            <label class="hf-label">Duration</label>
+                            <input type="number" id="hf-dur-min" class="hf-dur-input"
+                                   placeholder="min" min="0" step="1">
+                            <span class="hf-dur-sep">&ndash;</span>
+                            <input type="number" id="hf-dur-max" class="hf-dur-input"
+                                   placeholder="max" min="0" step="1">
+                            <span class="hf-dur-unit">min</span>
+                        </div>
+
+                        <button class="btn btn-small hf-clear-btn">Clear filters</button>
                     </div>
                 </div>
                 <ul id="history-sessions-list" class="session-list">
