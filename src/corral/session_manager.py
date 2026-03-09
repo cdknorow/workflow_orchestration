@@ -625,7 +625,23 @@ async def restart_session(
         )
         await asyncio.sleep(0.3)
 
-        # 6. Re-launch the agent with the same system prompt
+        # 6. Load persisted flags from the live session record
+        stored_flags = []
+        if session_id:
+            try:
+                import json as _json
+                from corral.session_store import SessionStore
+                _flag_store = SessionStore()
+                _flag_conn = await _flag_store._get_conn()
+                _flag_row = await (await _flag_conn.execute(
+                    "SELECT flags FROM live_sessions WHERE session_id = ?", (session_id,)
+                )).fetchone()
+                if _flag_row and _flag_row["flags"]:
+                    stored_flags = _json.loads(_flag_row["flags"])
+            except Exception:
+                pass
+
+        # 7. Re-launch the agent with the same system prompt
         script_dir = Path(__file__).parent
         protocol_path = script_dir / "PROTOCOL.md"
 
@@ -646,6 +662,8 @@ async def restart_session(
                 parts.append(f"--append-system-prompt \"$(cat '{protocol_path}')\"")
             if extra_flags:
                 parts.append(extra_flags)
+            # Apply persisted flags (e.g. --chrome, --dangerously-skip-permissions)
+            parts.extend(stored_flags)
             cmd = " ".join(parts)
 
         rc, _, stderr = await run_cmd(
@@ -985,7 +1003,7 @@ def load_history_session_messages(session_id: str) -> list[dict[str, Any]]:
     return []
 
 
-async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None) -> dict[str, str]:
+async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None) -> dict[str, str]:
     """Launch a new tmux session with a Claude/Gemini agent.
 
     Returns dict with session_name, session_id, log_file, and any error.
@@ -1049,6 +1067,8 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
                 parts = [f"claude --session-id {session_id}"]
             if protocol_path.exists():
                 parts.append(f"--append-system-prompt \"$(cat '{protocol_path}')\"")
+            if flags:
+                parts.extend(flags)
             cmd = " ".join(parts)
 
         await asyncio.create_subprocess_exec(
@@ -1064,6 +1084,7 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
             await _store.register_live_session(
                 session_id, agent_type, folder_name, working_dir, display_name,
                 resume_from_id=resume_session_id,
+                flags=flags or None,
             )
         except Exception:
             pass  # Non-critical

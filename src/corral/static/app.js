@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { loadLiveSessions, loadHistorySessions, loadHistorySessionsPaged } from './api.js';
 import { connectCorralWs } from './websocket.js';
-import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, sendResetCommand, attachTerminal, killSession, restartSession } from './controls.js';
+import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, sendResetCommand, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
 import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
@@ -26,6 +26,8 @@ window.sendResetCommand = sendResetCommand;
 window.attachTerminal = attachTerminal;
 window.killSession = killSession;
 window.restartSession = restartSession;
+window.hideRestartModal = hideRestartModal;
+window.confirmRestart = confirmRestart;
 window.showSettingsModal = showSettingsModal;
 window.hideSettingsModal = hideSettingsModal;
 window.applySettings = applySettings;

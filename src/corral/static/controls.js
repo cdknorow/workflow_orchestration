@@ -151,25 +151,38 @@ export async function killSession() {
     }
 }
 
-export async function restartSession() {
+export function restartSession() {
     if (!state.currentSession || state.currentSession.type !== "live") {
         showToast("No live session selected", true);
         return;
     }
+    showRestartModal();
+}
 
-    const extraFlags = prompt(
-        `Restart session "${state.currentSession.name}"?\n\nOptional extra flags (e.g. --chrome):`,
-        ""
-    );
-    if (extraFlags === null) {
-        return;
-    }
+function showRestartModal() {
+    document.getElementById("restart-modal-name").textContent =
+        `Session: ${state.currentSession.name}`;
+    document.getElementById("restart-flag-chrome").checked = false;
+    document.getElementById("restart-flag-skip-permissions").checked = false;
+    document.getElementById("restart-modal").style.display = "flex";
+}
+
+export function hideRestartModal() {
+    document.getElementById("restart-modal").style.display = "none";
+}
+
+export async function confirmRestart() {
+    const flags = [];
+    if (document.getElementById("restart-flag-chrome").checked) flags.push("--chrome");
+    if (document.getElementById("restart-flag-skip-permissions").checked) flags.push("--dangerously-skip-permissions");
+
+    hideRestartModal();
 
     try {
         showToast(`Restarting ${state.currentSession.name}...`);
         const payload = { agent_type: state.currentSession.agent_type, session_id: state.currentSession.session_id };
-        if (extraFlags.trim()) {
-            payload.extra_flags = extraFlags.trim();
+        if (flags.length) {
+            payload.extra_flags = flags.join(" ");
         }
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/restart`, {
             method: "POST",
@@ -192,7 +205,7 @@ export async function restartSession() {
         }
     } catch (e) {
         showToast("Failed to restart session", true);
-        console.error("restartSession exception:", e);
+        console.error("confirmRestart exception:", e);
     }
 }
 
