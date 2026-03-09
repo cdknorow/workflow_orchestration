@@ -4,7 +4,7 @@ import { state, sessionKey } from './state.js';
 import { showToast } from './utils.js';
 import { loadLiveSessionDetail, loadHistoryMessages } from './api.js';
 import { stopCaptureRefresh, startCaptureRefresh } from './capture.js';
-import { updateSessionStatus, updateSessionSummary, updateSessionBranch, renderHistoryChat } from './render.js';
+import { updateSessionStatus, updateSessionSummary, updateSessionBranch, updateWaitingIndicator, renderHistoryChat } from './render.js';
 import { renderQuickActions, updateSidebarActive } from './controls.js';
 import { loadSessionNotes, switchHistoryTab } from './notes.js';
 import { loadSessionTags } from './tags.js';
@@ -64,9 +64,10 @@ export async function selectLiveSession(name, agentType, sessionId) {
         }
     }
 
-    // Update branch from live sessions data — match by session_id for precision
+    // Update branch and waiting indicator from live sessions data
     const agent = state.liveSessions.find(s => s.session_id === sessionId);
     updateSessionBranch(agent && agent.branch ? agent.branch : null);
+    updateWaitingIndicator(agent ? agent.waiting_for_input : false);
 
     // Set up quick action buttons
     state.currentCommands = (agent && agent.commands) || { compress: "/compact", clear: "/clear" };
