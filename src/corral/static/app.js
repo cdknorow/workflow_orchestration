@@ -5,7 +5,7 @@ import { loadLiveSessions, loadHistorySessions, loadHistorySessionsPaged } from 
 import { connectCorralWs } from './websocket.js';
 import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, sendResetCommand, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
-import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings } from './modals.js';
+import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
 import { initSidebarResize, initCommandPaneResize, initTaskBarResize } from './sidebar.js';
 import { loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab } from './notes.js';
@@ -38,6 +38,7 @@ window.renameAgent = renameAgent;
 window.showLaunchModal = showLaunchModal;
 window.hideLaunchModal = hideLaunchModal;
 window.launchSession = launchSession;
+window.toggleFlag = toggleFlag;
 window.showInfoModal = showInfoModal;
 window.hideInfoModal = hideInfoModal;
 window.copyInfoCommand = copyInfoCommand;

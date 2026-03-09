@@ -277,10 +277,12 @@
                     <option value="gemini">Gemini</option>
                 </select>
             </label>
-            <div class="launch-flags">
-                <span class="launch-flags-label">Flags:</span>
-                <label class="flag-checkbox"><input type="checkbox" id="flag-chrome"> <code>--chrome</code></label>
-                <label class="flag-checkbox"><input type="checkbox" id="flag-skip-permissions"> <code>--dangerously-skip-permissions</code></label>
+            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="launch-flags" placeholder="e.g. --verbose">
+            </label>
+            <div class="flag-shortcuts">
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--chrome')">--chrome</button>
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
             </div>
             <div class="modal-actions">
                 <button class="btn" onclick="hideLaunchModal()">Cancel</button>
@@ -294,10 +296,12 @@
         <div class="modal-content" style="width:480px">
             <h3>Restart Session</h3>
             <p id="restart-modal-name" style="color:var(--text-secondary);font-size:13px;margin-bottom:12px"></p>
-            <div class="launch-flags">
-                <span class="launch-flags-label">Flags:</span>
-                <label class="flag-checkbox"><input type="checkbox" id="restart-flag-chrome"> <code>--chrome</code></label>
-                <label class="flag-checkbox"><input type="checkbox" id="restart-flag-skip-permissions"> <code>--dangerously-skip-permissions</code></label>
+            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="restart-flags" placeholder="e.g. --verbose">
+            </label>
+            <div class="flag-shortcuts">
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('restart-flags','--chrome')">--chrome</button>
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('restart-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
             </div>
             <div class="modal-actions">
                 <button class="btn" onclick="hideRestartModal()">Cancel</button>
