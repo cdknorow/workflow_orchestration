@@ -45,6 +45,7 @@ class ScheduleStore(DatabaseManager):
         enabled: bool = True,
         max_duration_s: int = 3600,
         cleanup_worktree: bool = True,
+        flags: str = "",
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         conn = await self._get_conn()
@@ -52,11 +53,11 @@ class ScheduleStore(DatabaseManager):
             """INSERT INTO scheduled_jobs
                (name, description, cron_expr, timezone, agent_type, repo_path,
                 base_branch, prompt, enabled, max_duration_s, cleanup_worktree,
-                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                flags, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, description, cron_expr, timezone_name, agent_type, repo_path,
              base_branch, prompt, int(enabled), max_duration_s, int(cleanup_worktree),
-             now, now),
+             flags, now, now),
         )
         await conn.commit()
         return await self.get_scheduled_job(cur.lastrowid)  # type: ignore[return-value]
@@ -65,7 +66,7 @@ class ScheduleStore(DatabaseManager):
         allowed = {
             "name", "description", "cron_expr", "timezone", "agent_type",
             "repo_path", "base_branch", "prompt", "enabled",
-            "max_duration_s", "cleanup_worktree",
+            "max_duration_s", "cleanup_worktree", "flags",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:

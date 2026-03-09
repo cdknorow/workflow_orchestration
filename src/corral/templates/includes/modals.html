@@ -170,6 +170,13 @@
             <label>Prompt:
                 <textarea id="job-modal-prompt" rows="4" placeholder="Run the full test suite and report failures..." style="width:100%;resize:vertical"></textarea>
             </label>
+            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="job-modal-flags" placeholder="e.g. --verbose">
+            </label>
+            <div class="flag-shortcuts">
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('job-modal-flags','--chrome')">--chrome</button>
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('job-modal-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+            </div>
             <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
                 <label>Max Duration (seconds):
                     <input type="number" id="job-modal-timeout" value="3600" min="60">

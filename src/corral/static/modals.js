@@ -301,7 +301,7 @@ function _syncFlagButtons(inputId) {
 
 // Attach input listeners for flag sync (after DOM is ready)
 document.addEventListener("DOMContentLoaded", () => {
-    for (const id of ["launch-flags", "restart-flags"]) {
+    for (const id of ["launch-flags", "restart-flags", "job-modal-flags"]) {
         const el = document.getElementById(id);
         if (el) el.addEventListener("input", () => _syncFlagButtons(id));
     }

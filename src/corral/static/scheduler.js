@@ -112,6 +112,7 @@ function renderJobDetail(job, runs) {
             <dt>Branch</dt><dd>${escapeHtml(job.base_branch || 'main')}</dd>
             <dt>Timeout</dt><dd>${job.max_duration_s}s</dd>
             <dt>Cleanup Worktree</dt><dd>${job.cleanup_worktree ? 'Yes' : 'No'}</dd>
+            ${job.flags ? `<dt>Flags</dt><dd><code>${escapeHtml(job.flags)}</code></dd>` : ''}
         </dl>
         <div class="sched-prompt-section">
             <h3>Prompt</h3>
@@ -198,6 +199,7 @@ export function showJobModal() {
     document.getElementById('job-modal-prompt').value = '';
     document.getElementById('job-modal-timeout').value = '3600';
     document.getElementById('job-modal-cleanup').checked = true;
+    document.getElementById('job-modal-flags').value = '';
     document.getElementById('cron-preview').innerHTML = '';
     validateCronPreview();
 }
@@ -242,6 +244,7 @@ export async function createScheduledJob() {
         prompt: document.getElementById('job-modal-prompt').value.trim(),
         max_duration_s: parseInt(document.getElementById('job-modal-timeout').value) || 3600,
         cleanup_worktree: document.getElementById('job-modal-cleanup').checked,
+        flags: document.getElementById('job-modal-flags').value.trim(),
     };
 
     if (!body.name || !body.cron_expr || !body.repo_path || !body.prompt) {

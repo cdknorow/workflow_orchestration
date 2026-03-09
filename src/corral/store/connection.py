@@ -164,6 +164,7 @@ class DatabaseManager:
                 enabled         INTEGER NOT NULL DEFAULT 1,
                 max_duration_s  INTEGER NOT NULL DEFAULT 3600,
                 cleanup_worktree INTEGER NOT NULL DEFAULT 1,
+                flags           TEXT DEFAULT '',
                 created_at      TEXT NOT NULL,
                 updated_at      TEXT NOT NULL
             );
@@ -231,5 +232,10 @@ class DatabaseManager:
             pass  # Column already exists
 
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)")
+
+        try:
+            await conn.execute("ALTER TABLE scheduled_jobs ADD COLUMN flags TEXT DEFAULT ''")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
 
         await conn.commit()

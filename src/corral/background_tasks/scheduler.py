@@ -112,10 +112,14 @@ class JobScheduler:
 
         # Launch agent session in the worktree
         try:
+            flags_str = job.get("flags", "")
+            flags_list = flags_str.split() if flags_str else None
+
             result = await launch_claude_session(
                 working_dir=worktree_dir,
                 agent_type=job.get("agent_type", "claude"),
                 display_name=f"[sched] {job['name']}",
+                flags=flags_list,
             )
 
             if "error" in result:

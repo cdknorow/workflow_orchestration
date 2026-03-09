@@ -222,6 +222,7 @@ export async function killSession() {
             stopCaptureRefresh();
             state.currentSession = null;
             document.getElementById("live-session-view").style.display = "none";
+            document.getElementById("scheduler-view").style.display = "none";
             document.getElementById("welcome-screen").style.display = "flex";
             // Remove from cached list and re-render immediately
             state.liveSessions = state.liveSessions.filter(s => s.session_id !== killedSid);

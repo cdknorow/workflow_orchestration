@@ -75,6 +75,7 @@ async def create_job(body: dict):
         enabled=body.get("enabled", True),
         max_duration_s=body.get("max_duration_s", 3600),
         cleanup_worktree=body.get("cleanup_worktree", True),
+        flags=body.get("flags", ""),
     )
     return job
 
