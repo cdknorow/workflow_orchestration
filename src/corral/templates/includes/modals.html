@@ -1,0 +1,154 @@
+    <!-- Launch Modal -->
+    <div id="launch-modal" class="modal" style="display:none">
+        <div class="modal-content modal-content-wide">
+            <h3>Launch New Session</h3>
+            <label>Agent Name <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="launch-agent-name" placeholder="e.g. Auth Feature, Bug Fix #123">
+            </label>
+            <label>Working Directory:
+                <div class="dir-input-row">
+                    <input type="text" id="launch-dir" placeholder="/path/to/project" data-corral-root="{{ corral_root }}" value="{{ corral_root }}">
+                    <button class="btn" id="btn-browse" onclick="toggleBrowser()">Browse</button>
+                </div>
+            </label>
+            <div id="dir-browser" class="dir-browser" style="display:none">
+                <div class="dir-browser-header">
+                    <button class="btn btn-small dir-browser-up" onclick="browserNavigateUp()" title="Go up">..</button>
+                    <span class="dir-browser-path" id="browser-current-path">~</span>
+                </div>
+                <ul class="dir-browser-list" id="browser-list">
+                    <li class="empty-state">Loading...</li>
+                </ul>
+            </div>
+            <label>Agent Type:
+                <select id="launch-type">
+                    <option value="claude">Claude</option>
+                    <option value="gemini">Gemini</option>
+                </select>
+            </label>
+            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="launch-flags" placeholder="e.g. --verbose">
+            </label>
+            <div class="flag-shortcuts">
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--chrome')">--chrome</button>
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideLaunchModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="launchSession()">Launch</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restart Modal -->
+    <div id="restart-modal" class="modal" style="display:none">
+        <div class="modal-content" style="width:480px">
+            <h3>Restart Session</h3>
+            <p id="restart-modal-name" style="color:var(--text-secondary);font-size:13px;margin-bottom:12px"></p>
+            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="restart-flags" placeholder="e.g. --verbose">
+            </label>
+            <div class="flag-shortcuts">
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('restart-flags','--chrome')">--chrome</button>
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('restart-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideRestartModal()">Cancel</button>
+                <button class="btn btn-warning" onclick="confirmRestart()">Restart</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal -->
+    <div id="info-modal" class="modal" style="display:none">
+        <div class="modal-content" style="width:480px">
+            <h3>Session Info</h3>
+            <dl class="info-grid">
+                <dt>Agent Name</dt>
+                <dd id="info-agent-name"></dd>
+                <dt>Agent Type</dt>
+                <dd id="info-agent-type"></dd>
+                <dt>Tmux Session</dt>
+                <dd id="info-tmux-session"></dd>
+                <dt>Attach Command</dt>
+                <dd>
+                    <code id="info-tmux-command"></code>
+                    <button class="copy-btn" onclick="copyInfoCommand()" title="Copy to clipboard">Copy</button>
+                </dd>
+                <dt>Working Directory</dt>
+                <dd id="info-working-dir"></dd>
+                <dt>Log Path</dt>
+                <dd id="info-log-path"></dd>
+                <dt>Pane Title</dt>
+                <dd id="info-pane-title"></dd>
+                <dt>Branch</dt>
+                <dd id="info-git-branch"></dd>
+                <dt>Latest Commit</dt>
+                <dd id="info-git-commit"></dd>
+            </dl>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideInfoModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resume Modal -->
+    <div id="resume-modal" class="modal" style="display:none">
+        <div class="modal-content" style="width:440px">
+            <h3>Resume Session</h3>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">
+                Select a live agent to restart with this session:
+            </p>
+            <div id="resume-session-list"></div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideResumeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal" style="display:none">
+        <div class="modal-content" style="width:440px">
+            <h3>Settings</h3>
+            <dl class="info-grid">
+                <dt>Default Render Engine</dt>
+                <dd>
+                    <select id="settings-renderer-select" class="settings-select"></select>
+                </dd>
+                <dt>Default Agent Type</dt>
+                <dd>
+                    <select id="settings-agent-type" class="settings-select">
+                        <option value="claude">Claude</option>
+                        <option value="gemini">Gemini</option>
+                    </select>
+                </dd>
+                <dt>Default Working Directory</dt>
+                <dd>
+                    <input type="text" id="settings-working-dir" class="settings-input" data-corral-root="{{ corral_root }}" placeholder="{{ corral_root }}">
+                </dd>
+            </dl>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideSettingsModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="applySettings()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Macro Modal -->
+    <div id="macro-modal" class="modal" style="display:none">
+        <div class="modal-content" style="width:400px">
+            <h3>Add Macro</h3>
+            <label>Label:
+                <input type="text" id="macro-label-input" placeholder="e.g. Commit & Push" style="width:100%">
+            </label>
+            <label style="margin-top:8px;display:block">Command:
+                <input type="text" id="macro-command-input" placeholder="e.g. /commit && git push" style="width:100%">
+            </label>
+            <p style="color:var(--text-muted);font-size:11px;margin-top:6px">Use <code>&&</code> to chain multiple commands (1s delay between each).</p>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideMacroModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="addMacro()">Add</button>
+            </div>
+        </div>
+    </div>
+

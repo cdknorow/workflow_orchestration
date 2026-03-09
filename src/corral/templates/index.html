@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons&display=swap">
 </head>
+
 <body>
     <header class="top-bar">
         <div class="top-bar-brand">
@@ -16,46 +18,18 @@
         </div>
         <div class="top-bar-actions">
             <button class="top-bar-btn" onclick="showSettingsModal()" title="Settings">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6.7 1.4h2.6l.4 1.8.5.2 1.6-.9 1.8 1.8-.9 1.6.2.5 1.8.4v2.6l-1.8.4-.2.5.9 1.6-1.8 1.8-1.6-.9-.5.2-.4 1.8H6.7l-.4-1.8-.5-.2-1.6.9-1.8-1.8.9-1.6-.2-.5-1.8-.4V6.7l1.8-.4.2-.5-.9-1.6 1.8-1.8 1.6.9.5-.2z"/>
-                    <circle cx="8" cy="8" r="2.5"/>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M6.7 1.4h2.6l.4 1.8.5.2 1.6-.9 1.8 1.8-.9 1.6.2.5 1.8.4v2.6l-1.8.4-.2.5.9 1.6-1.8 1.8-1.6-.9-.5.2-.4 1.8H6.7l-.4-1.8-.5-.2-1.6.9-1.8-1.8.9-1.6-.2-.5-1.8-.4V6.7l1.8-.4.2-.5-.9-1.6 1.8-1.8 1.6.9.5-.2z" />
+                    <circle cx="8" cy="8" r="2.5" />
                 </svg>
             </button>
         </div>
     </header>
 
     <div class="layout">
-        <!-- Left Sidebar -->
-        <aside class="sidebar">
-            <section class="sidebar-section">
-                <div class="sidebar-section-header">
-                    <h2>Live Sessions</h2>
-                    <button class="btn btn-small btn-primary sidebar-new-btn" onclick="showLaunchModal()">+ New</button>
-                </div>
-                <ul id="live-sessions-list" class="session-list">
-                    <li class="empty-state">No live sessions</li>
-                </ul>
-            </section>
-            <section class="sidebar-section">
-                <h2>History</h2>
-                <div class="history-filters">
-                    <input id="history-search" type="search" placeholder="Search sessions...">
-                    <div class="history-filter-row">
-                        <select id="tag-filter">
-                            <option value="">All tags</option>
-                        </select>
-                        <select id="source-filter">
-                            <option value="">All sources</option>
-                            <option value="claude">Claude</option>
-                            <option value="gemini">Gemini</option>
-                        </select>
-                    </div>
-                </div>
-                <ul id="history-sessions-list" class="session-list">
-                    <li class="empty-state">Loading...</li>
-                </ul>
-            </section>
-        </aside>
+        {% include "includes/sidebar.html" %}
         <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
 
         <!-- Main Content -->
@@ -65,346 +39,16 @@
                 <p>Click on a live session to view real-time output, or browse historical sessions.</p>
             </div>
 
-            <!-- Live Session View -->
-            <div id="live-session-view" class="session-view" style="display:none">
-                <div class="session-header">
-                    <div class="session-title">
-                        <span id="session-status-dot" class="status-dot"></span>
-                        <span id="session-type-badge" class="badge">claude</span>
-                        <h2 id="session-name"></h2>
-                        <span id="session-branch" class="title-branch" style="display:none">
-                            <span class="branch-icon">&#x2387;</span> <span class="branch-text"></span>
-                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
-                        </span>
-                        <div class="session-title-actions">
-                            <button class="btn btn-icon-label" onclick="showInfoModal()" title="View session details: agent type, tmux session, working directory, and log path"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg><span>Info</span></button>
-                            <button class="btn btn-icon-label btn-primary" onclick="attachTerminal()" title="Open this session in a new terminal window via tmux attach"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg><span>Attach</span></button>
-                            <span class="actions-divider"></span>
-                            <button class="btn btn-icon-label btn-warning" onclick="restartSession()" title="Exit and relaunch the agent with the same system prompt and working directory"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg><span>Restart</span></button>
-                            <button class="btn btn-icon-label btn-danger" onclick="killSession()" title="Terminate the tmux session and stop the agent process"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg><span>Kill</span></button>
-                        </div>
-                    </div>
-                    <div class="session-meta">
-                        <div id="session-summary" class="summary-line" style="display:none">
-                            <strong>Goal:</strong> <span class="summary-text"></span>
-                        </div>
-                        <div id="session-status" class="status-line">
-                            <strong>Status:</strong> <span class="status-text">Idle</span>
-                        </div>
-                    </div>
-                </div>
+            {% include "includes/views/live_session.html" %}
 
-                <div id="waiting-banner" class="waiting-banner" style="display:none">
-                    ⏳ Agent is waiting for input
-                </div>
-
-                <div class="live-body">
-                    <div class="live-left-column">
-                        <div id="capture-wrapper" style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column">
-                            <div id="pane-capture" class="output-scroll capture-text"></div>
-                            <div id="selection-pause-badge" class="selection-pause-badge" style="display:none">Updates paused — text selected</div>
-                        </div>
-                        <div class="command-pane-resize-handle" id="command-pane-resize-handle"></div>
-                        <div class="command-pane" id="command-pane">
-                            <div class="command-pane-toolbar" id="command-toolbar">
-                                <!-- All buttons populated dynamically -->
-                            </div>
-                            <div class="command-pane-body">
-                                <div class="command-editor">
-                                    <textarea id="command-input" placeholder="Type a command..." rows="3" autocomplete="off"></textarea>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="task-bar-resize-handle" id="task-bar-resize-handle"></div>
-                    <div class="agentic-state" id="agentic-state">
-                        <div class="agentic-state-tabs">
-                            <button class="agentic-tab active" onclick="switchAgenticTab('activity')" id="agentic-tab-activity">Activity</button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('tasks')" id="agentic-tab-tasks">Tasks <span id="task-bar-count" class="task-bar-count"></span></button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('notes')" id="agentic-tab-notes">Notes <span id="note-bar-count" class="task-bar-count"></span></button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('history')" id="agentic-tab-history">History</button>
-                        </div>
-                        <!-- Activity tab -->
-                        <div id="agentic-panel-activity" class="agentic-panel active">
-                            <div class="event-filter-bar" id="event-filters"></div>
-                            <div class="agentic-events-body">
-                                <div id="agentic-state-events">
-                                    <div class="event-empty">No activity yet</div>
-                                </div>
-                            </div>
-                            <div id="live-activity-chart" class="activity-chart activity-chart-bottom"></div>
-                        </div>
-                        <!-- Tasks tab -->
-                        <div id="agentic-panel-tasks" class="agentic-panel">
-                            <div class="task-bar-list" id="task-bar-list">
-                                <div class="task-empty">No tasks yet</div>
-                            </div>
-                        </div>
-                        <!-- Notes tab -->
-                        <div id="agentic-panel-notes" class="agentic-panel">
-                            <div id="note-md-rendered" class="note-md-rendered notes-rendered">
-                                <div class="note-md-placeholder">Click to add notes...</div>
-                            </div>
-                            <textarea id="note-md-editor" class="note-md-editor" placeholder="Write notes in markdown..." style="display:none"></textarea>
-                        </div>
-                        <!-- History tab (read-only JSONL conversation log) -->
-                        <div id="agentic-panel-history" class="agentic-panel">
-                            <div id="live-history-messages" class="chat-messages live-history-panel"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- History Session View -->
-            <div id="history-session-view" class="session-view" style="display:none">
-                <div class="session-header">
-                    <div class="history-title-row">
-                        <h2 id="history-session-title">Session History</h2>
-                        <span id="history-session-branch" class="title-branch" style="display:none">
-                            <span class="branch-icon">&#x2387;</span> <span class="branch-text"></span>
-                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
-                        </span>
-                        <span id="history-session-id" class="session-id-label"></span>
-                        <div id="history-session-tags" class="tag-list"></div>
-                        <button class="btn btn-small" onclick="showTagDropdown()" title="Add tag">+ Tag</button>
-                        <button id="btn-resume-session" class="btn btn-small btn-primary"
-                          onclick="showResumeModal()" title="Resume this session in a live agent"
-                          style="display:none">Resume</button>
-                    </div>
-                    <!-- Tag Dropdown -->
-                    <div id="tag-dropdown" class="tag-dropdown" style="display:none">
-                        <div class="tag-dropdown-header">
-                            <span>Add Tag</span>
-                            <button class="btn btn-small" onclick="hideTagDropdown()">Close</button>
-                        </div>
-                        <div class="tag-dropdown-list" id="tag-dropdown-list"></div>
-                        <div class="tag-dropdown-create">
-                            <input type="text" id="new-tag-name" placeholder="New tag name...">
-                            <input type="color" id="new-tag-color" value="#58a6ff">
-                            <button class="btn btn-small btn-primary" onclick="createTag()">Add</button>
-                        </div>
-                    </div>
-                </div>
-                <!-- Tab Bar -->
-                <div class="history-tabs">
-                    <button class="history-tab-btn active" onclick="switchHistoryTab('notes')">Summary</button>
-                    <button class="history-tab-btn" onclick="switchHistoryTab('chat')">Chat</button>
-                    <button class="history-tab-btn" onclick="switchHistoryTab('activity')" id="history-tab-btn-activity">Activity <span id="history-activity-count" class="task-bar-count"></span></button>
-                    <button class="history-tab-btn" onclick="switchHistoryTab('tasks')" id="history-tab-btn-tasks">Tasks <span id="history-tasks-count" class="task-bar-count"></span></button>
-                    <button class="history-tab-btn" onclick="switchHistoryTab('agent-notes')" id="history-tab-btn-agent-notes">Notes <span id="history-agent-notes-count" class="task-bar-count"></span></button>
-                    <button class="history-tab-btn" onclick="switchHistoryTab('commits')">Commits</button>
-                </div>
-                <!-- Chat Tab Content -->
-                <div id="history-tab-chat" class="history-tab-content active">
-                    <div id="history-messages" class="chat-messages"></div>
-                </div>
-                <!-- Notes Tab Content -->
-                <div id="history-tab-notes" class="history-tab-content">
-                    <div class="notes-view">
-                        <div class="notes-header">
-                            <button id="notes-edit-btn" class="btn btn-small" onclick="toggleNotesEdit()">Edit</button>
-                            <button id="notes-resummarize-btn" class="btn btn-small" onclick="resummarize()">Re-summarize</button>
-                        </div>
-                        <div id="notes-spinner" class="notes-spinner" style="display:none">
-                            <span>Generating summary...</span>
-                        </div>
-                        <div id="notes-rendered" class="notes-rendered"></div>
-                        <div id="notes-edit-area" style="display:none">
-                            <textarea id="notes-textarea" class="notes-textarea" placeholder="Write session notes in markdown..."></textarea>
-                            <div class="notes-edit-actions">
-                                <button class="btn btn-small" onclick="cancelNotesEdit()">Cancel</button>
-                                <button class="btn btn-small btn-primary" onclick="saveNotes()">Save</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Activity Tab Content (read-only) -->
-                <div id="history-tab-activity" class="history-tab-content">
-                    <div id="history-activity-chart" class="activity-chart"></div>
-                    <div class="event-filter-bar" id="history-event-filters"></div>
-                    <div class="agentic-events-body">
-                        <div id="history-events-list">
-                            <div class="event-empty">No activity recorded</div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Tasks Tab Content (read-only) -->
-                <div id="history-tab-tasks" class="history-tab-content">
-                    <div class="task-bar-list" id="history-task-list">
-                        <div class="task-empty">No tasks recorded</div>
-                    </div>
-                </div>
-                <!-- Agent Notes Tab Content (read-only) -->
-                <div id="history-tab-agent-notes" class="history-tab-content">
-                    <div id="history-note-list" class="notes-rendered" style="padding: 12px 14px; overflow-y: auto; flex: 1;">
-                        <div class="empty-notes">No agent notes recorded</div>
-                    </div>
-                </div>
-                <!-- Commits Tab Content -->
-                <div id="history-tab-commits" class="history-tab-content">
-                    <div id="commits-list" class="commits-view">
-                        <div class="empty-notes">Loading commits...</div>
-                    </div>
-                </div>
-            </div>
+            {% include "includes/views/history_session.html" %}
         </main>
     </div>
 
-    <!-- Launch Modal -->
-    <div id="launch-modal" class="modal" style="display:none">
-        <div class="modal-content modal-content-wide">
-            <h3>Launch New Session</h3>
-            <label>Agent Name <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
-                <input type="text" id="launch-agent-name" placeholder="e.g. Auth Feature, Bug Fix #123">
-            </label>
-            <label>Working Directory:
-                <div class="dir-input-row">
-                    <input type="text" id="launch-dir" placeholder="/path/to/project" data-corral-root="{{ corral_root }}" value="{{ corral_root }}">
-                    <button class="btn" id="btn-browse" onclick="toggleBrowser()">Browse</button>
-                </div>
-            </label>
-            <div id="dir-browser" class="dir-browser" style="display:none">
-                <div class="dir-browser-header">
-                    <button class="btn btn-small dir-browser-up" onclick="browserNavigateUp()" title="Go up">..</button>
-                    <span class="dir-browser-path" id="browser-current-path">~</span>
-                </div>
-                <ul class="dir-browser-list" id="browser-list">
-                    <li class="empty-state">Loading...</li>
-                </ul>
-            </div>
-            <label>Agent Type:
-                <select id="launch-type">
-                    <option value="claude">Claude</option>
-                    <option value="gemini">Gemini</option>
-                </select>
-            </label>
-            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
-                <input type="text" id="launch-flags" placeholder="e.g. --verbose">
-            </label>
-            <div class="flag-shortcuts">
-                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--chrome')">--chrome</button>
-                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
-            </div>
-            <div class="modal-actions">
-                <button class="btn" onclick="hideLaunchModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="launchSession()">Launch</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Restart Modal -->
-    <div id="restart-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:480px">
-            <h3>Restart Session</h3>
-            <p id="restart-modal-name" style="color:var(--text-secondary);font-size:13px;margin-bottom:12px"></p>
-            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
-                <input type="text" id="restart-flags" placeholder="e.g. --verbose">
-            </label>
-            <div class="flag-shortcuts">
-                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('restart-flags','--chrome')">--chrome</button>
-                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('restart-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
-            </div>
-            <div class="modal-actions">
-                <button class="btn" onclick="hideRestartModal()">Cancel</button>
-                <button class="btn btn-warning" onclick="confirmRestart()">Restart</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Info Modal -->
-    <div id="info-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:480px">
-            <h3>Session Info</h3>
-            <dl class="info-grid">
-                <dt>Agent Name</dt>
-                <dd id="info-agent-name"></dd>
-                <dt>Agent Type</dt>
-                <dd id="info-agent-type"></dd>
-                <dt>Tmux Session</dt>
-                <dd id="info-tmux-session"></dd>
-                <dt>Attach Command</dt>
-                <dd>
-                    <code id="info-tmux-command"></code>
-                    <button class="copy-btn" onclick="copyInfoCommand()" title="Copy to clipboard">Copy</button>
-                </dd>
-                <dt>Working Directory</dt>
-                <dd id="info-working-dir"></dd>
-                <dt>Log Path</dt>
-                <dd id="info-log-path"></dd>
-                <dt>Pane Title</dt>
-                <dd id="info-pane-title"></dd>
-                <dt>Branch</dt>
-                <dd id="info-git-branch"></dd>
-                <dt>Latest Commit</dt>
-                <dd id="info-git-commit"></dd>
-            </dl>
-            <div class="modal-actions">
-                <button class="btn" onclick="hideInfoModal()">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Resume Modal -->
-    <div id="resume-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:440px">
-            <h3>Resume Session</h3>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">
-                Select a live agent to restart with this session:
-            </p>
-            <div id="resume-session-list"></div>
-            <div class="modal-actions">
-                <button class="btn" onclick="hideResumeModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:440px">
-            <h3>Settings</h3>
-            <dl class="info-grid">
-                <dt>Default Render Engine</dt>
-                <dd>
-                    <select id="settings-renderer-select" class="settings-select"></select>
-                </dd>
-                <dt>Default Agent Type</dt>
-                <dd>
-                    <select id="settings-agent-type" class="settings-select">
-                        <option value="claude">Claude</option>
-                        <option value="gemini">Gemini</option>
-                    </select>
-                </dd>
-                <dt>Default Working Directory</dt>
-                <dd>
-                    <input type="text" id="settings-working-dir" class="settings-input" data-corral-root="{{ corral_root }}" placeholder="{{ corral_root }}">
-                </dd>
-            </dl>
-            <div class="modal-actions">
-                <button class="btn" onclick="hideSettingsModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="applySettings()">Apply</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Macro Modal -->
-    <div id="macro-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:400px">
-            <h3>Add Macro</h3>
-            <label>Label:
-                <input type="text" id="macro-label-input" placeholder="e.g. Commit & Push" style="width:100%">
-            </label>
-            <label style="margin-top:8px;display:block">Command:
-                <input type="text" id="macro-command-input" placeholder="e.g. /commit && git push" style="width:100%">
-            </label>
-            <p style="color:var(--text-muted);font-size:11px;margin-top:6px">Use <code>&&</code> to chain multiple commands (1s delay between each).</p>
-            <div class="modal-actions">
-                <button class="btn" onclick="hideMacroModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="addMacro()">Add</button>
-            </div>
-        </div>
-    </div>
+    {% include "includes/modals.html" %}
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script type="module" src="/static/app.js"></script>
 </body>
+
 </html>

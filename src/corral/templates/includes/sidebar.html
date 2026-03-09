@@ -1,0 +1,31 @@
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <section class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <h2>Live Sessions</h2>
+                    <button class="btn btn-small btn-primary sidebar-new-btn" onclick="showLaunchModal()">+ New</button>
+                </div>
+                <ul id="live-sessions-list" class="session-list">
+                    <li class="empty-state">No live sessions</li>
+                </ul>
+            </section>
+            <section class="sidebar-section">
+                <h2>History</h2>
+                <div class="history-filters">
+                    <input id="history-search" type="search" placeholder="Search sessions...">
+                    <div class="history-filter-row">
+                        <select id="tag-filter">
+                            <option value="">All tags</option>
+                        </select>
+                        <select id="source-filter">
+                            <option value="">All sources</option>
+                            <option value="claude">Claude</option>
+                            <option value="gemini">Gemini</option>
+                        </select>
+                    </div>
+                </div>
+                <ul id="history-sessions-list" class="session-list">
+                    <li class="empty-state">Loading...</li>
+                </ul>
+            </section>
+        </aside>
