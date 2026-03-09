@@ -7,9 +7,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from corral.session_manager import discover_corral_agents, _find_pane
+from corral.tools.session_manager import discover_corral_agents, _find_pane
 from corral.store import CorralStore
-from corral.utils import run_cmd, HISTORY_PATH
+from corral.tools.utils import run_cmd, HISTORY_PATH
 
 log = logging.getLogger(__name__)
 

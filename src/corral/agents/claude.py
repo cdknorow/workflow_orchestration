@@ -11,7 +11,7 @@ from typing import Any
 
 from corral.agents.base import BaseAgent, ExtractedSession
 from corral.hooks.utils import resolve_session_id, truncate
-from corral.utils import HISTORY_PATH
+from corral.tools.utils import HISTORY_PATH
 
 SUMMARY_RE = re.compile(r"^[\s\u25cf\u23fa]*\|\|PULSE:SUMMARY (.*?)\|\|", re.MULTILINE)
 
@@ -631,7 +631,7 @@ class ClaudeAgent(BaseAgent):
 
     def extract_sessions(self, path: Path) -> list[ExtractedSession]:
         """Parse a Claude JSONL file and return extracted session data."""
-        from corral.session_manager import SUMMARY_RE as SM_SUMMARY_RE, clean_match
+        from corral.tools.session_manager import SUMMARY_RE as SM_SUMMARY_RE, clean_match
 
         sessions: dict[str, dict[str, Any]] = {}
         try:

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from corral.agents.base import BaseAgent, ExtractedSession
-from corral.utils import GEMINI_HISTORY_BASE
+from corral.tools.utils import GEMINI_HISTORY_BASE
 
 SUMMARY_RE = re.compile(r"^[\s\u25cf\u23fa]*\|\|PULSE:SUMMARY (.*?)\|\|", re.MULTILINE)
 
@@ -146,7 +146,7 @@ class GeminiAgent(BaseAgent):
 
     def extract_sessions(self, path: Path) -> list[ExtractedSession]:
         """Parse a Gemini session JSON file and return extracted session data."""
-        from corral.session_manager import SUMMARY_RE as SM_SUMMARY_RE, clean_match
+        from corral.tools.session_manager import SUMMARY_RE as SM_SUMMARY_RE, clean_match
 
         try:
             data = json.loads(path.read_text(errors="replace"))

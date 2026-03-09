@@ -8,7 +8,7 @@ from typing import Optional, TYPE_CHECKING
 
 from fastapi import APIRouter, Query
 
-from corral.session_manager import (
+from corral.tools.session_manager import (
     load_history_sessions,
     load_history_session_messages,
 )

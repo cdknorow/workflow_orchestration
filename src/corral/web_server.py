@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from corral.store import CorralStore
-from corral.jsonl_reader import JsonlSessionReader
+from corral.tools.jsonl_reader import JsonlSessionReader
 
 # Import routers
 from corral.api import live_sessions as live_sessions_api
@@ -40,7 +40,7 @@ async def _resume_persistent_sessions():
     relaunched (with ``--resume`` for Claude agents so they pick up context).
     Sessions whose working directory no longer exists are silently removed.
     """
-    from corral.session_manager import discover_corral_agents, launch_claude_session
+    from corral.tools.session_manager import discover_corral_agents, launch_claude_session
 
     try:
         registered = await store.get_all_live_sessions()
@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
     """Start background indexer, batch summarizer, and git poller on server startup."""
     from corral.background_tasks import SessionIndexer, BatchSummarizer, GitPoller
     from corral.agents import get_agent
-    from corral.session_manager import discover_corral_agents
+    from corral.tools.session_manager import discover_corral_agents
 
     # Resume any persistent live sessions that are no longer running in tmux
     await _resume_persistent_sessions()

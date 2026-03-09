@@ -138,8 +138,8 @@ async def test_resume_skips_already_running(store, tmp_path):
     mock_agents = [{"session_id": "sid-1", "agent_type": "claude", "agent_name": "wt1", "working_directory": str(tmp_path)}]
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=mock_agents)), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock()) as mock_launch:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=mock_agents)), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock()) as mock_launch:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -164,8 +164,8 @@ async def test_resume_relaunches_missing_session(store, tmp_path):
     }
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -190,8 +190,8 @@ async def test_resume_uses_resume_from_id(store, tmp_path):
     }
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -210,8 +210,8 @@ async def test_resume_removes_stale_missing_dir(store, tmp_path):
     await store.register_live_session("sid-1", "claude", "wt1", missing_dir)
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock()) as mock_launch:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock()) as mock_launch:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -227,8 +227,8 @@ async def test_resume_handles_launch_failure(store, tmp_path):
     await store.register_live_session("sid-1", "claude", "wt1", work_dir)
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(return_value={"error": "tmux not found"})):
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(return_value={"error": "tmux not found"})):
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -261,8 +261,8 @@ async def test_resume_multiple_sessions(store, tmp_path):
         }
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -273,7 +273,7 @@ async def test_resume_multiple_sessions(store, tmp_path):
 async def test_resume_no_registered_sessions(store):
     """With no registered sessions, resume should be a no-op."""
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock()) as mock_discover:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock()) as mock_discover:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -370,8 +370,8 @@ async def test_resume_preserves_display_name_across_multiple_restarts(store, tmp
 
     # Cycle 1: First Corral restart
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -388,8 +388,8 @@ async def test_resume_preserves_display_name_across_multiple_restarts(store, tmp
 
     # Cycle 2: Second Corral restart — should still use original session ID
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
         await _resume_persistent_sessions()
 
     assert call_log[1]["display_name"] == "My Custom Name"
@@ -426,8 +426,8 @@ async def test_resume_preserves_agent_name_across_restarts(store, tmp_path):
         }
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -451,8 +451,8 @@ async def test_resume_without_display_name_passes_none(store, tmp_path):
     }
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
@@ -504,8 +504,8 @@ async def test_display_name_set_via_ui_persists_on_resume(store, tmp_path):
     }
 
     with patch("corral.web_server.store", store), \
-         patch("corral.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
-         patch("corral.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
+         patch("corral.tools.session_manager.discover_corral_agents", AsyncMock(return_value=[])), \
+         patch("corral.tools.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 

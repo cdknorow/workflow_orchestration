@@ -11,15 +11,15 @@ import tempfile
 
 import pytest
 
-from corral.session_manager import (
+from corral.tools.session_manager import (
     _rejoin_pulse_lines,
     get_log_status,
     STATUS_RE,
     SUMMARY_RE,
     clean_match,
 )
-from corral.log_streamer import get_log_snapshot
-from corral.pulse_detector import PULSE_EVENT_RE
+from corral.tools.log_streamer import get_log_snapshot
+from corral.tools.pulse_detector import PULSE_EVENT_RE
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import pytest
-from corral.session_manager import strip_ansi, clean_match
+from corral.tools.session_manager import strip_ansi, clean_match
 
 def test_strip_ansi():
     # Test basic string

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from corral.session_manager import strip_ansi, clean_match
+from corral.tools.session_manager import strip_ansi, clean_match
 
 # Only match known PULSE event types to avoid matching protocol documentation examples
 KNOWN_PULSE_TYPES = ("STATUS", "SUMMARY", "CONFIDENCE")

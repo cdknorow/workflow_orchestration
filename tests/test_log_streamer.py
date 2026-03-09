@@ -1,5 +1,5 @@
 import pytest
-from corral.log_streamer import _is_noise_line
+from corral.tools.log_streamer import _is_noise_line
 
 def test_is_noise_line():
     # Empty or whitespace
@@ -34,7 +34,7 @@ def test_is_noise_line():
 
 def test_pulse_regex_with_spinner_prefix():
     """PULSE regexes must match lines with spinner/indent prefixes from terminal output."""
-    from corral.session_manager import STATUS_RE, SUMMARY_RE
+    from corral.tools.session_manager import STATUS_RE, SUMMARY_RE
 
     # Bare (no prefix)
     assert STATUS_RE.search("||PULSE:STATUS Waiting||")
@@ -59,7 +59,7 @@ def test_pulse_regex_with_spinner_prefix():
 
 def test_pulse_event_regex_with_spinner_prefix():
     """PULSE_EVENT_RE in pulse_detector must match spinner-prefixed lines."""
-    from corral.pulse_detector import PULSE_EVENT_RE
+    from corral.tools.pulse_detector import PULSE_EVENT_RE
 
     # Bare
     m = PULSE_EVENT_RE.search("||PULSE:CONFIDENCE Low Unfamiliar with library||")

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from corral.session_manager import (
+from corral.tools.session_manager import (
     STATUS_RE,
     SUMMARY_RE,
     strip_ansi,

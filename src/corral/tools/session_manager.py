@@ -12,7 +12,7 @@ import uuid as _uuid
 from pathlib import Path
 from typing import Any
 
-from corral.utils import run_cmd, LOG_DIR, LOG_PATTERN, HISTORY_PATH
+from corral.tools.utils import run_cmd, LOG_DIR, LOG_PATTERN, HISTORY_PATH
 
 ANSI_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")

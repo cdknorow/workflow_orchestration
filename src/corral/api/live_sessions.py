@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from corral.session_manager import (
+from corral.tools.session_manager import (
     discover_corral_agents,
     get_agent_log_path,
     get_log_status,
@@ -23,12 +23,12 @@ from corral.session_manager import (
     launch_claude_session,
 )
 from corral.agents import get_agent
-from corral.log_streamer import get_log_snapshot
-from corral.pulse_detector import scan_log_for_pulse_events
+from corral.tools.log_streamer import get_log_snapshot
+from corral.tools.pulse_detector import scan_log_for_pulse_events
 
 if TYPE_CHECKING:
     from corral.store import CorralStore
-    from corral.jsonl_reader import JsonlSessionReader
+    from corral.tools.jsonl_reader import JsonlSessionReader
 
 log = logging.getLogger(__name__)
 
