@@ -7,9 +7,26 @@ import { getEngineNames, getEngineName, setRendererOverride } from './renderers.
 import { renderCaptureText } from './capture.js';
 import { hideRestartModal } from './controls.js';
 
+export function toggleFlag(inputId, flag) {
+    const input = document.getElementById(inputId);
+    const current = input.value.trim();
+    const flags = current ? current.split(/\s+/) : [];
+    const idx = flags.indexOf(flag);
+    if (idx >= 0) {
+        flags.splice(idx, 1);
+    } else {
+        flags.push(flag);
+    }
+    input.value = flags.join(" ");
+    // Update button active states
+    input.dispatchEvent(new Event("input"));
+}
+
 export function showLaunchModal() {
     document.getElementById("launch-modal").style.display = "flex";
     document.getElementById("launch-agent-name").value = "";
+    document.getElementById("launch-flags").value = "";
+    _syncFlagButtons("launch-flags");
 
     // Pre-fill from global settings
     const s = state.settings || {};
@@ -42,10 +59,10 @@ export async function launchSession() {
     const payload = { working_dir: dir, agent_type: type };
     if (agentName) payload.display_name = agentName;
 
-    const flags = [];
-    if (document.getElementById("flag-chrome").checked) flags.push("--chrome");
-    if (document.getElementById("flag-skip-permissions").checked) flags.push("--dangerously-skip-permissions");
-    if (flags.length) payload.flags = flags;
+    const flagsStr = document.getElementById("launch-flags").value.trim();
+    if (flagsStr) {
+        payload.flags = flagsStr.split(/\s+/);
+    }
 
     try {
         const resp = await fetch("/api/sessions/launch", {
@@ -268,6 +285,27 @@ export async function applySettings() {
 
     hideSettingsModal();
 }
+
+// Sync flag shortcut button active states with the text input
+function _syncFlagButtons(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const flags = input.value.trim() ? input.value.trim().split(/\s+/) : [];
+    const container = input.closest("label")?.nextElementSibling;
+    if (!container) return;
+    container.querySelectorAll(".flag-shortcut-btn").forEach(btn => {
+        const flag = btn.textContent.trim();
+        btn.classList.toggle("active", flags.includes(flag));
+    });
+}
+
+// Attach input listeners for flag sync (after DOM is ready)
+document.addEventListener("DOMContentLoaded", () => {
+    for (const id of ["launch-flags", "restart-flags"]) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", () => _syncFlagButtons(id));
+    }
+});
 
 // Close modals on outside click
 document.addEventListener("click", (e) => {

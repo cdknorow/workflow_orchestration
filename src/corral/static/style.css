@@ -1613,38 +1613,34 @@ body {
     font-size: 12px;
 }
 
-.launch-flags {
+.flag-shortcuts {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 12px;
-    font-size: 13px;
-}
-
-.launch-flags-label {
-    color: var(--text-secondary);
-    flex-shrink: 0;
-}
-
-.flag-checkbox {
-    display: flex !important;
-    align-items: center;
     gap: 6px;
-    margin-bottom: 0 !important;
-    cursor: pointer;
+    margin-top: -8px;
+    margin-bottom: 12px;
+}
+
+.flag-shortcut-btn {
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    padding: 3px 8px;
+    border-radius: 4px;
     color: var(--text-secondary);
-}
-
-.flag-checkbox input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
-}
-
-.flag-checkbox code {
-    font-size: 12px;
+    border: 1px solid var(--border);
     background: var(--bg-secondary);
-    padding: 1px 5px;
-    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.flag-shortcut-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.flag-shortcut-btn.active {
+    background: var(--accent, #4a9eff);
+    color: #fff;
+    border-color: var(--accent, #4a9eff);
 }
 
 .dir-browser {

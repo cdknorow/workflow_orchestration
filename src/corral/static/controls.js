@@ -162,8 +162,7 @@ export function restartSession() {
 function showRestartModal() {
     document.getElementById("restart-modal-name").textContent =
         `Session: ${state.currentSession.name}`;
-    document.getElementById("restart-flag-chrome").checked = false;
-    document.getElementById("restart-flag-skip-permissions").checked = false;
+    document.getElementById("restart-flags").value = "";
     document.getElementById("restart-modal").style.display = "flex";
 }
 
@@ -172,17 +171,15 @@ export function hideRestartModal() {
 }
 
 export async function confirmRestart() {
-    const flags = [];
-    if (document.getElementById("restart-flag-chrome").checked) flags.push("--chrome");
-    if (document.getElementById("restart-flag-skip-permissions").checked) flags.push("--dangerously-skip-permissions");
+    const flagsStr = document.getElementById("restart-flags").value.trim();
 
     hideRestartModal();
 
     try {
         showToast(`Restarting ${state.currentSession.name}...`);
         const payload = { agent_type: state.currentSession.agent_type, session_id: state.currentSession.session_id };
-        if (flags.length) {
-            payload.extra_flags = flags.join(" ");
+        if (flagsStr) {
+            payload.extra_flags = flagsStr;
         }
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/restart`, {
             method: "POST",
