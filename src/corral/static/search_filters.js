@@ -2,7 +2,7 @@
 
 export const filterState = {
     q: '',
-    ftsMode: 'phrase',       // 'phrase' | 'and' | 'or'
+    ftsMode: 'and',       // 'phrase' | 'and' | 'or'
     tagIds: [],              // array of int
     tagLogic: 'AND',         // 'AND' | 'OR'
     sourceTypes: [],         // array of string; empty = all
@@ -16,7 +16,7 @@ export function buildApiParams(page, pageSize) {
     const p = new URLSearchParams({ page, page_size: pageSize });
     if (filterState.q)
         p.set('q', filterState.q);
-    if (filterState.q && filterState.ftsMode !== 'phrase')
+    if (filterState.q && filterState.ftsMode !== 'and')
         p.set('fts_mode', filterState.ftsMode);
     if (filterState.tagIds.length)
         p.set('tag_ids', filterState.tagIds.join(','));
@@ -46,7 +46,7 @@ export function deserializeFromUrl() {
     const p = new URLSearchParams(window.location.search);
     filterState.q = p.get('q') || '';
     filterState.ftsMode = ['phrase', 'and', 'or'].includes(p.get('fts_mode'))
-        ? p.get('fts_mode') : 'phrase';
+        ? p.get('fts_mode') : 'and';
     filterState.tagIds = (p.get('tag_ids') || '')
         .split(',').filter(Boolean).map(Number).filter(n => !isNaN(n));
     filterState.tagLogic = p.get('tag_logic') === 'OR' ? 'OR' : 'AND';
@@ -66,7 +66,7 @@ export function deserializeFromUrl() {
 
 export function resetFilters() {
     filterState.q = '';
-    filterState.ftsMode = 'phrase';
+    filterState.ftsMode = 'and';
     filterState.tagIds = [];
     filterState.tagLogic = 'AND';
     filterState.sourceTypes = [];

@@ -150,10 +150,9 @@ class CorralStore(DatabaseManager):
         return await self._sessions.get_indexed_mtimes()
 
     async def list_sessions_paged(self, page: int = 1, page_size: int = 50,
-                                   search: str | None = None, tag_id: int | None = None,
-                                   source_type: str | None = None) -> dict[str, Any]:
+                                   search: str | None = None, **kwargs) -> dict[str, Any]:
         await self._get_conn()
-        return await self._sessions.list_sessions_paged(page, page_size, search, tag_id, source_type)
+        return await self._sessions.list_sessions_paged(page, page_size, search, **kwargs)
 
     # Agent Live State
     async def get_agent_session_id(self, agent_name: str) -> str | None:
