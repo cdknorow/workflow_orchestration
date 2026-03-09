@@ -1038,6 +1038,31 @@ class SessionStore:
             )).fetchall()
         return [{"tool_name": r["tool_name"], "count": r["count"]} for r in rows]
 
+    async def get_latest_event_types(self, session_ids: list[str]) -> dict[str, str]:
+        """Return the latest event_type for each session_id (excluding status/goal).
+
+        Used to detect 'stop' events indicating an agent is waiting for input.
+        Returns dict mapping session_id -> latest event_type.
+        """
+        if not session_ids:
+            return {}
+        conn = await self._get_conn()
+        placeholders = ",".join("?" for _ in session_ids)
+        rows = await (await conn.execute(
+            f"SELECT session_id, event_type FROM agent_events "
+            f"WHERE session_id IN ({placeholders}) "
+            f"AND event_type NOT IN ('status', 'goal') "
+            f"ORDER BY created_at DESC",
+            session_ids,
+        )).fetchall()
+        # Keep only the first (latest) per session_id
+        result: dict[str, str] = {}
+        for r in rows:
+            sid = r["session_id"]
+            if sid not in result:
+                result[sid] = r["event_type"]
+        return result
+
     async def clear_agent_events(self, agent_name: str, session_id: str | None = None) -> None:
         conn = await self._get_conn()
         if session_id is not None:
