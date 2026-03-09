@@ -982,7 +982,7 @@ def load_history_session_messages(session_id: str) -> list[dict[str, Any]]:
     return []
 
 
-async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None) -> dict[str, str]:
+async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None) -> dict[str, str]:
     """Launch a new tmux session with a Claude/Gemini agent.
 
     Returns dict with session_name, session_id, log_file, and any error.
@@ -997,6 +997,10 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
     session_id = str(_uuid.uuid4())
     session_name = f"{agent_type}-{session_id}"
     log_file = f"{log_dir}/{agent_type}_corral_{session_id}.log"
+
+    # If resuming, ensure the session file exists in the target project dir
+    if resume_session_id:
+        _ensure_session_in_project_dir(resume_session_id, working_dir)
 
     try:
         # Install hooks before launching the agent
@@ -1036,7 +1040,10 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
             else:
                 cmd = "gemini"
         else:
-            parts = [f"claude --session-id {session_id}"]
+            if resume_session_id:
+                parts = [f"claude --resume {resume_session_id}"]
+            else:
+                parts = [f"claude --session-id {session_id}"]
             if protocol_path.exists():
                 parts.append(f"--append-system-prompt \"$(cat '{protocol_path}')\"")
             cmd = " ".join(parts)

@@ -169,7 +169,7 @@ async def test_resume_relaunches_missing_session(store, tmp_path):
         from corral.web_server import _resume_persistent_sessions
         await _resume_persistent_sessions()
 
-    mock_launch.assert_called_once_with(work_dir, "claude", display_name="My Agent")
+    mock_launch.assert_called_once_with(work_dir, "claude", display_name="My Agent", resume_session_id="old-sid")
     # Old session should be cleaned up (new one registered by launch_claude_session)
     sessions = await store.get_all_live_sessions()
     old_ids = {s["session_id"] for s in sessions}
@@ -222,7 +222,7 @@ async def test_resume_multiple_sessions(store, tmp_path):
 
     call_count = 0
 
-    async def mock_launch(working_dir, agent_type, display_name=None):
+    async def mock_launch(working_dir, agent_type, display_name=None, resume_session_id=None):
         nonlocal call_count
         call_count += 1
         return {

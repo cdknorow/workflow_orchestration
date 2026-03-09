@@ -108,6 +108,7 @@ async def _resume_persistent_sessions():
 
             result = await launch_claude_session(
                 working_dir, agent_type, display_name=display_name,
+                resume_session_id=sid,
             )
 
             if result.get("error"):

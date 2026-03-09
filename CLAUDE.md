@@ -17,8 +17,16 @@
 
 ### Setup & Installation
 ```bash
-# Install the package in editable mode
-pip install -e .
+# Create a virtual env in the worktree and install
+python3 -m venv .venv
+.venv/bin/pip install -e .
+.venv/bin/pip install pytest pytest-asyncio httpx
+```
+
+### Running Tests
+```bash
+# Always use the worktree venv to run tests
+.venv/bin/python -m pytest tests/ -v
 ```
 
 ### Launching the Corral
