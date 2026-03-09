@@ -1557,6 +1557,40 @@ body {
     font-size: 12px;
 }
 
+.launch-flags {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+
+.launch-flags-label {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.flag-checkbox {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 0 !important;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.flag-checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.flag-checkbox code {
+    font-size: 12px;
+    background: var(--bg-secondary);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
 .dir-browser {
     border: 1px solid var(--border);
     border-radius: 8px;

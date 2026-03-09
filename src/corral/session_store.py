@@ -175,6 +175,7 @@ class SessionStore:
                 working_dir    TEXT NOT NULL,
                 display_name   TEXT,
                 resume_from_id TEXT,
+                flags          TEXT,
                 created_at     TEXT NOT NULL
             );
 
@@ -222,6 +223,12 @@ class SessionStore:
         # Add resume_from_id to live_sessions if missing (migration)
         try:
             await conn.execute("ALTER TABLE live_sessions ADD COLUMN resume_from_id TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        # Add flags to live_sessions if missing (migration)
+        try:
+            await conn.execute("ALTER TABLE live_sessions ADD COLUMN flags TEXT")
         except aiosqlite.OperationalError:
             pass  # Column already exists
 
@@ -740,15 +747,18 @@ class SessionStore:
         self, session_id: str, agent_type: str, agent_name: str,
         working_dir: str, display_name: str | None = None,
         resume_from_id: str | None = None,
+        flags: list[str] | None = None,
     ) -> None:
         """Record a live session so it can be resumed if Corral restarts."""
+        import json as _json
         conn = await self._get_conn()
         now = datetime.now(timezone.utc).isoformat()
+        flags_json = _json.dumps(flags) if flags else None
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, now),
         )
         await conn.commit()
 
@@ -767,27 +777,50 @@ class SessionStore:
         await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (session_id,))
         await conn.commit()
 
-    async def replace_live_session(self, old_session_id: str, new_session_id: str, agent_type: str, agent_name: str, working_dir: str, display_name: str | None = None, resume_from_id: str | None = None) -> None:
+    async def replace_live_session(self, old_session_id: str, new_session_id: str, agent_type: str, agent_name: str, working_dir: str, display_name: str | None = None, resume_from_id: str | None = None, flags: list[str] | None = None) -> None:
         """Replace one live session record with a new one (e.g. on restart)."""
+        import json as _json
         conn = await self._get_conn()
         now = datetime.now(timezone.utc).isoformat()
+        # Carry forward flags from old session if not explicitly provided
+        if flags is None:
+            row = await (await conn.execute(
+                "SELECT flags FROM live_sessions WHERE session_id = ?", (old_session_id,)
+            )).fetchone()
+            if row and row["flags"]:
+                flags_json = row["flags"]
+            else:
+                flags_json = None
+        else:
+            flags_json = _json.dumps(flags) if flags else None
         await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (old_session_id,))
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, now),
         )
         await conn.commit()
 
     async def get_all_live_sessions(self) -> list[dict[str, Any]]:
         """Return all registered live sessions."""
+        import json as _json
         conn = await self._get_conn()
         rows = await (await conn.execute(
-            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, created_at "
+            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, created_at "
             "FROM live_sessions ORDER BY created_at"
         )).fetchall()
-        return [dict(r) for r in rows]
+        results = []
+        for r in rows:
+            d = dict(r)
+            # Deserialize flags from JSON string to list
+            if d.get("flags"):
+                try:
+                    d["flags"] = _json.loads(d["flags"])
+                except (ValueError, TypeError):
+                    d["flags"] = None
+            results.append(d)
+        return results
 
     # ── Agent Tasks ────────────────────────────────────────────────────────
 

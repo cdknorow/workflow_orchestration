@@ -100,6 +100,7 @@ async def _resume_persistent_sessions():
 
             agent_type = rec["agent_type"]
             display_name = rec.get("display_name")
+            flags = rec.get("flags")  # Already deserialized by get_all_live_sessions
 
             log.info(
                 "Resuming session %s (%s) in %s",
@@ -114,6 +115,7 @@ async def _resume_persistent_sessions():
             result = await launch_claude_session(
                 working_dir, agent_type, display_name=display_name,
                 resume_session_id=resume_id,
+                flags=flags,
             )
 
             if result.get("error"):
@@ -529,11 +531,12 @@ async def launch_session(body: dict):
     working_dir = body.get("working_dir", "").strip()
     agent_type = body.get("agent_type", "claude").strip()
     display_name = body.get("display_name", "").strip() or None
+    flags = body.get("flags", [])
 
     if not working_dir:
         return {"error": "working_dir is required"}
 
-    result = await launch_claude_session(working_dir, agent_type, display_name=display_name)
+    result = await launch_claude_session(working_dir, agent_type, display_name=display_name, flags=flags)
     return result
 
 
