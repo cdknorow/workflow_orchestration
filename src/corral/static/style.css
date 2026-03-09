@@ -271,11 +271,19 @@ body {
 }
 
 .session-dot.active { background: var(--success); }
-.session-dot.recent { background: var(--warning); }
 .session-dot.stale { background: var(--text-muted); }
+.session-dot.working {
+    background: #3b82f6;
+    animation: pulse-working 1.5s ease-in-out infinite;
+}
 .session-dot.waiting {
     background: var(--warning);
     animation: pulse-waiting 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-working {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
 }
 
 @keyframes pulse-waiting {
@@ -522,6 +530,11 @@ body {
     border-radius: 50%;
     margin-right: 6px;
     background: var(--success);
+}
+
+.status-dot.working {
+    background: #3b82f6;
+    animation: pulse-working 1.5s ease-in-out infinite;
 }
 
 .status-dot.waiting {

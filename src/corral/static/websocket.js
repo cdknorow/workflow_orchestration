@@ -41,7 +41,7 @@ export function connectCorralWs() {
                     updateSessionStatus(s.status);
                     updateSessionSummary(s.summary);
                     updateSessionBranch(s.branch);
-                    updateWaitingIndicator(s.waiting_for_input);
+                    updateWaitingIndicator(s.waiting_for_input, s.working);
                 }
             }
         }

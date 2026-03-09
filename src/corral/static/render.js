@@ -13,11 +13,11 @@ function formatShortTime(isoStr) {
     return `${dd}/${mm}/${yy}`;
 }
 
-function getDotClass(staleness, waitingForInput) {
+function getDotClass(staleness, waitingForInput, working) {
     if (waitingForInput) return "waiting";
+    if (working) return "working";
     if (staleness === null || staleness === undefined) return "stale";
     if (staleness < 60) return "active";
-    if (staleness < 300) return "recent";
     return "stale";
 }
 
@@ -44,7 +44,7 @@ export function renderLiveSessions(sessions) {
         html += `<li class="session-group-header">${escapeHtml(groupName)}${countBadge}</li>`;
 
         for (const s of groupSessions) {
-            const dotClass = getDotClass(s.staleness_seconds, s.waiting_for_input);
+            const dotClass = getDotClass(s.staleness_seconds, s.waiting_for_input, s.working);
             const isActive = state.currentSession && state.currentSession.type === "live" && state.currentSession.session_id === s.session_id;
             const typeTag = s.agent_type && s.agent_type !== "claude" ? ` <span class="badge ${escapeHtml(s.agent_type)}">${escapeHtml(s.agent_type)}</span>` : "";
             const branchTag = s.branch ? ` <span class="sidebar-branch">${escapeHtml(s.branch)}</span>` : "";
@@ -189,15 +189,12 @@ export function updateSessionBranch(branch) {
     }
 }
 
-export function updateWaitingIndicator(waiting) {
+export function updateWaitingIndicator(waiting, working) {
     const dot = document.getElementById("session-status-dot");
     const banner = document.getElementById("waiting-banner");
     if (dot) {
-        if (waiting) {
-            dot.classList.add("waiting");
-        } else {
-            dot.classList.remove("waiting");
-        }
+        dot.classList.toggle("waiting", !!waiting);
+        dot.classList.toggle("working", !!working);
     }
     if (banner) {
         banner.style.display = waiting ? "" : "none";
