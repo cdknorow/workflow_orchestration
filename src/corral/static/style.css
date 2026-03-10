@@ -3486,3 +3486,66 @@ body {
     padding-left: 4px;
     font-family: monospace;
 }
+
+/* ── Jobs sidebar ───────────────────────────────────────────────────────── */
+
+.live-job-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    font-size: 12px;
+}
+
+.live-job-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fg);
+}
+
+.live-job-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.live-job-badge-api {
+    background: rgba(136, 87, 229, 0.2);
+    color: #b392f0;
+}
+
+.live-job-badge-cron {
+    background: rgba(88, 166, 255, 0.2);
+    color: #58a6ff;
+}
+
+.live-job-elapsed {
+    font-size: 10px;
+    color: var(--fg-muted);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.status-dot-stale {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--fg-muted);
+    flex-shrink: 0;
+}
+
+.status-dot-working {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse-working 1.5s ease-in-out infinite;
+    flex-shrink: 0;
+}

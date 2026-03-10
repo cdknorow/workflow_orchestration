@@ -276,6 +276,17 @@ class DatabaseManager:
         except aiosqlite.OperationalError:
             pass  # Column already exists
 
+        # Live Jobs / one-shot task runs: new columns on scheduled_runs
+        for col, defn in [
+            ("trigger_type", "TEXT DEFAULT 'cron'"),
+            ("webhook_url", "TEXT"),
+            ("display_name", "TEXT"),
+        ]:
+            try:
+                await conn.execute(f"ALTER TABLE scheduled_runs ADD COLUMN {col} {defn}")
+            except aiosqlite.OperationalError:
+                pass  # Column already exists
+
         for ddl in [
             "CREATE INDEX IF NOT EXISTS idx_session_tags_tag_id ON session_tags(tag_id)",
             "CREATE INDEX IF NOT EXISTS idx_session_index_first_ts ON session_index(first_timestamp)",

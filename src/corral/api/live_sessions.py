@@ -32,6 +32,7 @@ from corral.tools.pulse_detector import scan_log_for_pulse_events
 
 if TYPE_CHECKING:
     from corral.store import CorralStore
+    from corral.store.schedule import ScheduleStore
     from corral.tools.jsonl_reader import JsonlSessionReader
 
 log = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ router = APIRouter()
 # Module-level dependencies, set by web_server.py during app setup
 store: CorralStore = None  # type: ignore[assignment]
 jsonl_reader: JsonlSessionReader = None  # type: ignore[assignment]
+schedule_store: ScheduleStore = None  # type: ignore[assignment]
 
 # Track last-known status/summary per session_id so we only emit events on change.
 _last_known: dict[str, dict[str, str | None]] = {}
@@ -103,6 +105,16 @@ async def get_live_sessions():
         results.append(entry)
         await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
         await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
+
+    # Exclude sessions owned by job runs (any status)
+    if schedule_store:
+        try:
+            job_sids = await schedule_store.get_all_job_session_ids()
+            if job_sids:
+                results = [s for s in results if s.get("session_id") not in job_sids]
+        except Exception:
+            pass
+
     return results
 
 
@@ -475,9 +487,29 @@ async def ws_corral(websocket: WebSocket):
                 await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
                 await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
 
-            current_state = json.dumps(results, sort_keys=True)
+            # Fetch active job runs for Jobs sidebar
+            active_runs = []
+            if schedule_store:
+                try:
+                    active_runs = await schedule_store.list_active_runs()
+                    for r in active_runs:
+                        if r.get("job_name") == "__oneshot__":
+                            r["job_name"] = None
+                except Exception:
+                    pass
+
+                # Exclude sessions owned by job runs (any status) from live sessions
+                try:
+                    job_session_ids = await schedule_store.get_all_job_session_ids()
+                    if job_session_ids:
+                        results = [s for s in results if s.get("session_id") not in job_session_ids]
+                except Exception:
+                    pass
+
+            payload = {"type": "corral_update", "sessions": results, "active_runs": active_runs}
+            current_state = json.dumps(payload, sort_keys=True)
             if current_state != last_state:
-                await websocket.send_json({"type": "corral_update", "sessions": results})
+                await websocket.send_json(payload)
                 last_state = current_state
 
             await asyncio.sleep(3)

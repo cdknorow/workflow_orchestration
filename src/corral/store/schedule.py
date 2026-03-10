@@ -17,11 +17,11 @@ class ScheduleStore(DatabaseManager):
         conn = await self._get_conn()
         if enabled_only:
             rows = await (await conn.execute(
-                "SELECT * FROM scheduled_jobs WHERE enabled = 1 ORDER BY name"
+                "SELECT * FROM scheduled_jobs WHERE enabled = 1 AND name != '__oneshot__' ORDER BY name"
             )).fetchall()
         else:
             rows = await (await conn.execute(
-                "SELECT * FROM scheduled_jobs ORDER BY name"
+                "SELECT * FROM scheduled_jobs WHERE name != '__oneshot__' ORDER BY name"
             )).fetchall()
         return [dict(r) for r in rows]
 
@@ -155,4 +155,97 @@ class ScheduleStore(DatabaseManager):
                ORDER BY r.scheduled_at DESC LIMIT ?""",
             (limit,),
         )).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── One-shot / Live Jobs ─────────────────────────────────────────────────
+
+    async def get_or_create_sentinel_job(self) -> int:
+        """Return the id of the __oneshot__ sentinel job, creating it if needed."""
+        conn = await self._get_conn()
+        row = await (await conn.execute(
+            "SELECT id FROM scheduled_jobs WHERE name = '__oneshot__'"
+        )).fetchone()
+        if row:
+            return row["id"]
+        now = datetime.now(timezone.utc).isoformat()
+        cur = await conn.execute(
+            """INSERT INTO scheduled_jobs
+               (name, cron_expr, timezone, agent_type, repo_path, prompt,
+                enabled, max_duration_s, cleanup_worktree, created_at, updated_at)
+               VALUES ('__oneshot__', '0 0 31 2 *', 'UTC', 'claude', '/dev/null',
+                       'sentinel', 0, 3600, 1, ?, ?)""",
+            (now, now),
+        )
+        await conn.commit()
+        return cur.lastrowid  # type: ignore[return-value]
+
+    async def create_oneshot_run(
+        self,
+        scheduled_at: str,
+        display_name: str | None = None,
+        webhook_url: str | None = None,
+    ) -> int:
+        """Create a run record for a one-shot API task."""
+        sentinel_id = await self.get_or_create_sentinel_job()
+        now = datetime.now(timezone.utc).isoformat()
+        conn = await self._get_conn()
+        cur = await conn.execute(
+            """INSERT INTO scheduled_runs
+               (job_id, status, scheduled_at, trigger_type, display_name, webhook_url, created_at)
+               VALUES (?, 'pending', ?, 'api', ?, ?, ?)""",
+            (sentinel_id, scheduled_at, display_name, webhook_url, now),
+        )
+        await conn.commit()
+        return cur.lastrowid  # type: ignore[return-value]
+
+    async def get_scheduled_run(self, run_id: int) -> dict[str, Any] | None:
+        """Return a single run by id."""
+        conn = await self._get_conn()
+        row = await (await conn.execute(
+            "SELECT * FROM scheduled_runs WHERE id = ?", (run_id,)
+        )).fetchone()
+        return dict(row) if row else None
+
+    async def list_active_runs(self) -> list[dict[str, Any]]:
+        """Return all pending/running runs with job name for sidebar display."""
+        conn = await self._get_conn()
+        rows = await (await conn.execute(
+            """SELECT r.*, j.name as job_name
+               FROM scheduled_runs r
+               LEFT JOIN scheduled_jobs j ON j.id = r.job_id
+               WHERE r.status IN ('pending', 'running')
+               ORDER BY r.scheduled_at DESC"""
+        )).fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_running_count(self) -> int:
+        """Return count of currently pending/running runs."""
+        conn = await self._get_conn()
+        row = await (await conn.execute(
+            "SELECT COUNT(*) as cnt FROM scheduled_runs WHERE status IN ('pending', 'running')"
+        )).fetchone()
+        return row["cnt"] if row else 0
+
+    async def get_all_job_session_ids(self) -> set[str]:
+        """Return session_ids for ALL runs (any status) to filter from live sessions."""
+        conn = await self._get_conn()
+        rows = await (await conn.execute(
+            "SELECT session_id FROM scheduled_runs WHERE session_id IS NOT NULL"
+        )).fetchall()
+        return {r["session_id"] for r in rows}
+
+    async def list_oneshot_runs(
+        self, limit: int = 50, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Return recent one-shot (API-triggered) runs."""
+        conn = await self._get_conn()
+        sql = """SELECT * FROM scheduled_runs
+                 WHERE trigger_type = 'api'"""
+        params: list[Any] = []
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY scheduled_at DESC LIMIT ?"
+        params.append(limit)
+        rows = await (await conn.execute(sql, params)).fetchall()
         return [dict(r) for r in rows]

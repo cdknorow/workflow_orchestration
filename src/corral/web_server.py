@@ -29,6 +29,7 @@ from corral.api import history as history_api
 from corral.api import system as system_api
 from corral.api import schedule as schedule_api
 from corral.api import webhooks as webhooks_api
+from corral.api import tasks as tasks_api
 
 log = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
@@ -79,6 +80,7 @@ async def lifespan(app: FastAPI):
     scheduler = JobScheduler(schedule_store)
     scheduler_task = asyncio.create_task(scheduler.run_forever())
     app.state.scheduler = scheduler
+    tasks_api.scheduler = scheduler
 
     # Store indexer on app state so endpoints can trigger refresh
     app.state.indexer = indexer
@@ -111,12 +113,14 @@ schedule_store = ScheduleStore()
 # Wire up module-level dependencies in router modules
 live_sessions_api.store = store
 live_sessions_api.jsonl_reader = jsonl_reader
+live_sessions_api.schedule_store = schedule_store
 history_api.store = store
 history_api._app = app
 system_api.store = store
 schedule_api.store = schedule_store
 webhooks_api.store = store
 webhooks_api._app = app
+tasks_api.store = schedule_store
 
 # Register routers
 app.include_router(live_sessions_api.router)
@@ -124,6 +128,7 @@ app.include_router(history_api.router)
 app.include_router(system_api.router)
 app.include_router(schedule_api.router)
 app.include_router(webhooks_api.router)
+app.include_router(tasks_api.router)
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -150,6 +155,8 @@ def _set_schedule_store(new_store):
     global schedule_store
     schedule_store = new_store
     schedule_api.store = new_store
+    tasks_api.store = new_store
+    live_sessions_api.schedule_store = new_store
 
 
 # ── Dashboard SPA ──────────────────────────────────────────────────────────

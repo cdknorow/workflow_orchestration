@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { renderLiveSessions, updateSessionStatus, updateSessionSummary, updateSessionBranch, updateWaitingIndicator } from './render.js';
+import { renderLiveJobs } from './live_jobs.js';
 
 export function connectCorralWs() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -14,6 +15,11 @@ export function connectCorralWs() {
         if (data.type === "corral_update") {
             state.liveSessions = data.sessions;
             renderLiveSessions(data.sessions);
+
+            // Update Jobs sidebar
+            if (data.active_runs) {
+                renderLiveJobs(data.active_runs);
+            }
 
             // Update status/summary/branch if we're viewing a live session
             if (state.currentSession && state.currentSession.type === "live") {

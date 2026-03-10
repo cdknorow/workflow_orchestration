@@ -27,6 +27,7 @@ import {
     showWebhookList, showWebhookEdit, saveWebhook, deleteWebhook,
     testWebhook, showWebhookHistory,
 } from './webhooks.js';
+import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -109,6 +110,7 @@ window.saveWebhook       = saveWebhook;
 window.deleteWebhook     = deleteWebhook;
 window.testWebhook       = testWebhook;
 window.showWebhookHistory = showWebhookHistory;
+window.selectLiveJobRun = selectLiveJobRun;
 
 // ── History search/filter/pagination state ───────────────────────────────
 let historyPage = 1;  // page number only; all other filter state lives in filterState
@@ -230,6 +232,7 @@ document.addEventListener("DOMContentLoaded", () => {
         loadHistoryFiltered();
     });
     initScheduler();
+    initLiveJobs();
 
     // ── Filter event wiring ─────────────────────────────────────────────
 
