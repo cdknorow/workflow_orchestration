@@ -544,6 +544,7 @@ class SessionStore(DatabaseManager):
         working_dir: str, display_name: str | None = None,
         resume_from_id: str | None = None,
         flags: list[str] | None = None,
+        is_job: bool = False,
     ) -> None:
         import json as _json
         conn = await self._get_conn()
@@ -551,9 +552,9 @@ class SessionStore(DatabaseManager):
         flags_json = _json.dumps(flags) if flags else None
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), now),
         )
         await conn.commit()
 
@@ -605,7 +606,7 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         rows = await (await conn.execute(
-            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, created_at "
+            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, created_at "
             "FROM live_sessions ORDER BY created_at"
         )).fetchall()
         results = []
