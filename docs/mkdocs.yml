@@ -16,3 +16,4 @@ nav:
   - Webhook Notifications: webhooks.md
   - API:
     - Jobs: api/jobs.md
+    - Webhooks: api/webhooks.md
