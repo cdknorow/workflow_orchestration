@@ -5,6 +5,28 @@ import { state } from './state.js';
 let terminal = null;
 let fitAddon = null;
 let terminalWs = null;
+let _selectionDisposable = null;
+
+// Buffered content for when updates are paused due to text selection
+let _pendingContent = null;
+let _xtermSelecting = false;
+
+function _setPauseBadge(visible) {
+    const badge = document.getElementById("selection-pause-badge");
+    if (badge) badge.style.display = visible ? "" : "none";
+}
+
+/** Write buffered content to the terminal (called when selection clears). */
+function _flushPending() {
+    if (_pendingContent !== null && terminal) {
+        terminal.reset();
+        terminal.write(_pendingContent.replace(/\n/g, '\r\n'));
+        if (state.autoScroll) {
+            terminal.scrollToBottom();
+        }
+        _pendingContent = null;
+    }
+}
 
 export function createTerminal(containerEl) {
     if (terminal) {
@@ -55,6 +77,17 @@ export function createTerminal(containerEl) {
         terminal.loadAddon(webLinksAddon);
     }
 
+    // Track selection state: pause updates while user has text selected
+    _selectionDisposable = terminal.onSelectionChange(() => {
+        const hasSelection = terminal.hasSelection();
+        _xtermSelecting = hasSelection;
+        state.isSelecting = hasSelection;
+        _setPauseBadge(hasSelection);
+        if (!hasSelection) {
+            _flushPending();
+        }
+    });
+
     terminal.open(containerEl);
     fitAddon.fit();
 
@@ -77,6 +110,11 @@ export function connectTerminalWs(name, agentType, sessionId) {
     terminalWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "terminal_update" && terminal) {
+            // Buffer the update if user has text selected
+            if (_xtermSelecting) {
+                _pendingContent = data.content;
+                return;
+            }
             terminal.reset();
             // tmux outputs \n but xterm.js needs \r\n for proper line breaks
             terminal.write(data.content.replace(/\n/g, '\r\n'));
@@ -106,6 +144,12 @@ export function disconnectTerminalWs() {
 
 export function disposeTerminal() {
     disconnectTerminalWs();
+    if (_selectionDisposable) {
+        _selectionDisposable.dispose();
+        _selectionDisposable = null;
+    }
+    _xtermSelecting = false;
+    _pendingContent = null;
     if (terminal) {
         terminal.dispose();
         terminal = null;
