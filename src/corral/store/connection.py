@@ -142,6 +142,7 @@ class DatabaseManager:
                 display_name  TEXT,
                 resume_from_id TEXT,
                 flags         TEXT,
+                is_job        INTEGER NOT NULL DEFAULT 0,
                 created_at    TEXT NOT NULL
             );
 
@@ -266,6 +267,11 @@ class DatabaseManager:
 
         try:
             await conn.execute("ALTER TABLE live_sessions ADD COLUMN flags TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
+        try:
+            await conn.execute("ALTER TABLE live_sessions ADD COLUMN is_job INTEGER NOT NULL DEFAULT 0")
         except aiosqlite.OperationalError:
             pass  # Column already exists
 

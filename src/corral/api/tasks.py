@@ -35,6 +35,12 @@ async def submit_task(body: dict):
     if not Path(repo_path).is_dir():
         return {"error": f"repo_path '{repo_path}' does not exist"}, 400
 
+    flags = body.get("flags", "")
+    if body.get("auto_accept", False):
+        skip_flag = "--dangerously-skip-permissions"
+        if skip_flag not in flags:
+            flags = f"{skip_flag} {flags}".strip()
+
     config = {
         "prompt": prompt,
         "repo_path": repo_path,
@@ -43,9 +49,11 @@ async def submit_task(body: dict):
         "create_worktree": body.get("create_worktree", True),
         "max_duration_s": body.get("max_duration_s", 3600),
         "cleanup_worktree": body.get("cleanup_worktree", True),
-        "flags": body.get("flags", ""),
+        "flags": flags,
         "display_name": body.get("display_name"),
         "webhook_url": body.get("webhook_url"),
+        "auto_accept": body.get("auto_accept", False),
+        "max_auto_accepts": body.get("max_auto_accepts", 10),
     }
 
     try:

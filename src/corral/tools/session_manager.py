@@ -277,13 +277,16 @@ def load_history_session_messages(session_id: str) -> list[dict[str, Any]]:
     return []
 
 
-async def resume_persistent_sessions(store) -> None:
+async def resume_persistent_sessions(store, schedule_store=None) -> None:
     """Resume live sessions that were running when Corral last stopped.
 
     Compares the ``live_sessions`` DB table against currently running tmux
     sessions.  Any registered session without a matching tmux session is
     relaunched (with ``--resume`` for Claude agents so they pick up context).
     Sessions whose working directory no longer exists are silently removed.
+
+    Sessions that belong to scheduled/oneshot job runs are skipped and
+    unregistered (they should not be auto-resumed).
 
     *store* is a :class:`~corral.store.CorralStore` instance.
     """
@@ -298,10 +301,24 @@ async def resume_persistent_sessions(store) -> None:
         live_agents = await discover_corral_agents()
         live_session_ids = {a["session_id"] for a in live_agents}
 
+        # Get session IDs belonging to job runs so we skip them
+        job_session_ids: set[str] = set()
+        if schedule_store:
+            try:
+                job_session_ids = await schedule_store.get_all_job_session_ids()
+            except Exception:
+                pass
+
         for rec in registered:
             sid = rec["session_id"]
             if sid in live_session_ids:
                 continue  # Already running — nothing to do
+
+            if rec.get("is_job") or sid in job_session_ids:
+                # Job run session — don't resume, just clean up the record
+                await store.unregister_live_session(sid)
+                log.info("Skipping job session %s (not resumable)", sid[:8])
+                continue
 
             working_dir = rec["working_dir"]
             if not os.path.isdir(working_dir):
@@ -530,7 +547,7 @@ async def restart_session(
         return {"error": str(e)}
 
 
-async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None) -> dict[str, str]:
+async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None, is_job: bool = False) -> dict[str, str]:
     """Launch a new tmux session with a Claude/Gemini agent.
 
     Returns dict with session_name, session_id, log_file, and any error.
@@ -604,6 +621,7 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
                 session_id, agent_type, folder_name, working_dir, display_name,
                 resume_from_id=resume_session_id,
                 flags=flags or None,
+                is_job=is_job,
             )
         except Exception:
             pass  # Non-critical

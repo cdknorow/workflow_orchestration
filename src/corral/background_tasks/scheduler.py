@@ -16,6 +16,15 @@ log = logging.getLogger(__name__)
 
 TICK_INTERVAL = 30  # seconds between scheduler polls
 
+# Session IDs with auto_accept enabled — checked by the events API
+# to auto-send acceptance when a notification event arrives.
+auto_accept_sessions: dict[str, str] = {}  # session_id -> tmux session_name
+
+# Per-session auto-accept tracking: counts and limits.
+DEFAULT_MAX_AUTO_ACCEPTS = 10
+auto_accept_counts: dict[str, int] = {}  # session_id -> count
+auto_accept_limits: dict[str, int] = {}  # session_id -> max allowed
+
 
 class ConcurrencyLimitError(Exception):
     """Raised when the max concurrent run limit is reached."""
@@ -143,6 +152,8 @@ class JobScheduler:
             "cleanup_worktree": config.get("cleanup_worktree", True),
             "create_worktree": config.get("create_worktree", True),
             "webhook_url": config.get("webhook_url"),
+            "auto_accept": config.get("auto_accept", False),
+            "max_auto_accepts": config.get("max_auto_accepts", DEFAULT_MAX_AUTO_ACCEPTS),
             "tag": "task",
         }
 
@@ -227,6 +238,7 @@ class JobScheduler:
                 agent_type=config.get("agent_type", "claude"),
                 display_name=config.get("display_name"),
                 flags=flags_list,
+                is_job=True,
             )
 
             if "error" in result:
@@ -245,10 +257,9 @@ class JobScheduler:
             session_name = result["session_name"]
             now = datetime.now(timezone.utc).isoformat()
 
-            # Tag the session
-            tag = config.get("tag", "task")
-            await self._tag_session(session_id, tag)
-
+            # Write session_id to scheduled_runs IMMEDIATELY so that
+            # resume_persistent_sessions can identify this as a job session
+            # even if the server restarts before the prompt is sent.
             await self._store.update_scheduled_run(
                 run_id,
                 session_id=session_id,
@@ -256,6 +267,15 @@ class JobScheduler:
                 status="running",
                 started_at=now,
             )
+
+            # Register for auto-accept if enabled
+            if config.get("auto_accept"):
+                auto_accept_sessions[session_id] = session_name
+                auto_accept_limits[session_id] = config.get("max_auto_accepts", DEFAULT_MAX_AUTO_ACCEPTS)
+
+            # Tag the session
+            tag = config.get("tag", "task")
+            await self._tag_session(session_id, tag)
 
             # Fire "running" webhook
             await self._fire_webhook_for_run(run_id, "running")
@@ -279,6 +299,7 @@ class JobScheduler:
                 "repo_path": repo_path,
                 "max_duration_s": config.get("max_duration_s", 3600),
                 "cleanup_worktree": config.get("cleanup_worktree", True) and worktree_dir is not None,
+                "auto_accept": config.get("auto_accept", False),
             }
             task = asyncio.create_task(
                 self._watchdog(run_id, watchdog_config, session_id, session_name, worktree_dir)
@@ -328,6 +349,11 @@ class JobScheduler:
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
             await self._fire_webhook_for_run(run_id, "killed")
+
+        # Unregister auto-accept and its tracking state
+        auto_accept_sessions.pop(session_id, None)
+        auto_accept_counts.pop(session_id, None)
+        auto_accept_limits.pop(session_id, None)
 
         # Cleanup worktree if configured
         if config.get("cleanup_worktree") and worktree_path:

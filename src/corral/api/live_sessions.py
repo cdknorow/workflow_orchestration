@@ -48,6 +48,17 @@ schedule_store: ScheduleStore = None  # type: ignore[assignment]
 _last_known: dict[str, dict[str, str | None]] = {}
 
 
+async def _send_auto_accept(tmux_session: str) -> None:
+    """Send 'y' + Enter to a tmux session to accept a permission prompt."""
+    from corral.tools.utils import run_cmd
+    try:
+        await asyncio.sleep(0.5)  # Brief delay to let the prompt render
+        await run_cmd("tmux", "send-keys", "-t", tmux_session, "y", timeout=5.0)
+        await run_cmd("tmux", "send-keys", "-t", tmux_session, "Enter", timeout=5.0)
+    except Exception:
+        log.warning("Failed to auto-accept in session %s", tmux_session)
+
+
 async def _track_status_summary_events(
     agent_name: str, status: str | None, summary: str | None, session_id: str | None = None,
 ):
@@ -403,6 +414,36 @@ async def create_agent_event(name: str, body: dict):
         name, event_type, summary,
         tool_name=tool_name, session_id=session_id, detail_json=detail_json,
     )
+
+    # Auto-accept: if this session has auto_accept enabled and the event
+    # is a notification (permission prompt), send "y" + Enter.
+    # We intentionally skip "stop" events — those fire on end_turn (agent
+    # finished) as well as permission prompts, and --dangerously-skip-permissions
+    # already handles the permission case.  Sending blind "y" on end_turn
+    # would type into the idle prompt.
+    if session_id and event_type == "notification":
+        from corral.background_tasks.scheduler import (
+            auto_accept_sessions, auto_accept_counts, auto_accept_limits,
+            DEFAULT_MAX_AUTO_ACCEPTS,
+        )
+        tmux_session = auto_accept_sessions.get(session_id)
+        if tmux_session:
+            count = auto_accept_counts.get(session_id, 0)
+            limit = auto_accept_limits.get(session_id, DEFAULT_MAX_AUTO_ACCEPTS)
+            if count >= limit:
+                log.warning(
+                    "Auto-accept limit reached for session %s (%d/%d), disabling",
+                    session_id, count, limit,
+                )
+                auto_accept_sessions.pop(session_id, None)
+            else:
+                auto_accept_counts[session_id] = count + 1
+                log.info(
+                    "Auto-accepting permission for session %s (%d/%d)",
+                    session_id, count + 1, limit,
+                )
+                asyncio.ensure_future(_send_auto_accept(tmux_session))
+
     return event
 
 
