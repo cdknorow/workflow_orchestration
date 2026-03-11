@@ -6,7 +6,7 @@ import { filterState, deserializeFromUrl, serializeToUrl,
          hasActiveFilters, countActiveFilters, resetFilters }
     from './search_filters.js';
 import { connectCorralWs } from './websocket.js';
-import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart } from './controls.js';
+import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
 import { syncPaneWidth } from './capture.js';
 import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag } from './modals.js';
@@ -44,6 +44,7 @@ window.killSession = killSession;
 window.restartSession = restartSession;
 window.hideRestartModal = hideRestartModal;
 window.confirmRestart = confirmRestart;
+window.removeAttachment = removeAttachment;
 window.showSettingsModal = showSettingsModal;
 window.hideSettingsModal = hideSettingsModal;
 window.applySettings = applySettings;
@@ -373,6 +374,9 @@ document.addEventListener("DOMContentLoaded", () => {
             loadHistoryFiltered();
         });
     }
+
+    // Image drag-and-drop on command pane
+    initImageDrop();
 
     // Markdown notes panel: click-to-edit, blur-to-save
     initNotesMd();

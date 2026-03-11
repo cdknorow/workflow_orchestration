@@ -5,6 +5,9 @@ import { escapeHtml, escapeAttr, showToast } from './utils.js';
 import { stopCaptureRefresh } from './capture.js';
 import { renderLiveSessions } from './render.js';
 
+// Attached image paths (cleared on send)
+const pendingAttachments = [];
+
 export async function sendCommand() {
     if (!state.currentSession || state.currentSession.type !== "live") {
         showToast("No live session selected", true);
@@ -12,7 +15,17 @@ export async function sendCommand() {
     }
 
     const input = document.getElementById("command-input");
-    const command = input.value.trim();
+    const textPart = input.value.trim();
+
+    // Build the full command: image paths + text, space-separated
+    const parts = [];
+    for (const att of pendingAttachments) {
+        parts.push(att.path);
+    }
+    if (textPart) parts.push(textPart);
+
+    const command = parts.join(" ");
+    console.log("sendCommand: attachments =", pendingAttachments.length, "paths =", pendingAttachments.map(a => a.path), "command =", command);
     if (!command) return;
 
     try {
@@ -33,6 +46,7 @@ export async function sendCommand() {
             console.error("Send error:", result.error);
         } else {
             input.value = "";
+            clearAttachments();
             const key = sessionKey(state.currentSession);
             if (key) delete state.sessionInputText[key];
             showToast(`Sent: ${command}`);
@@ -320,6 +334,177 @@ export function sendModeToggle(targetMode) {
 export function sendQuickCommand(command) {
     document.getElementById("command-input").value = command;
     sendCommand();
+}
+
+// ── Image Drag & Drop ──────────────────────────────────────────────────────
+
+export function initImageDrop() {
+    const commandPane = document.getElementById("command-pane");
+    if (!commandPane) return;
+
+    // Create drop overlay
+    const overlay = document.createElement("div");
+    overlay.id = "drop-overlay";
+    overlay.className = "drop-overlay";
+    overlay.innerHTML = `<div class="drop-overlay-content">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+        </svg>
+        <span>Drop image to attach</span>
+    </div>`;
+    overlay.style.display = "none";
+    commandPane.style.position = "relative";
+    commandPane.appendChild(overlay);
+
+    let dragCounter = 0;
+
+    commandPane.addEventListener("dragenter", (e) => {
+        e.preventDefault();
+        if (!hasImageFiles(e)) return;
+        dragCounter++;
+        overlay.style.display = "flex";
+    });
+
+    commandPane.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (hasImageFiles(e)) e.dataTransfer.dropEffect = "copy";
+    });
+
+    commandPane.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            overlay.style.display = "none";
+        }
+    });
+
+    commandPane.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.style.display = "none";
+
+        const files = [...(e.dataTransfer?.files || [])].filter(f =>
+            f.type.startsWith("image/")
+        );
+        if (files.length === 0) {
+            showToast("No image files found in drop", true);
+            return;
+        }
+
+        for (const file of files) {
+            await uploadAndInsertImage(file);
+        }
+    });
+
+    // Also support paste — listen on document so it works even when textarea isn't focused
+    const input = document.getElementById("command-input");
+    const pasteHandler = async (e) => {
+        // Only handle when a live session is selected
+        if (!state.currentSession || state.currentSession.type !== "live") return;
+        // Skip if pasting inside other inputs (not the command input)
+        const tag = e.target.tagName;
+        if ((tag === "INPUT" || tag === "TEXTAREA") && e.target.id !== "command-input") return;
+        if (e.target.isContentEditable) return;
+
+        const items = [...(e.clipboardData?.items || [])];
+        console.log("paste event: items =", items.length, items.map(i => `${i.kind}:${i.type}`));
+        const imageItems = items.filter(item => item.type.startsWith("image/"));
+        if (imageItems.length === 0) return;
+
+        // Extract all files synchronously before any async work,
+        // because clipboardData items become invalid after the event.
+        const files = imageItems.map(item => item.getAsFile()).filter(Boolean);
+        console.log("paste event: image files =", files.length);
+        if (files.length === 0) return;
+
+        e.preventDefault();
+        for (const file of files) {
+            await uploadAndInsertImage(file);
+        }
+    };
+    document.addEventListener("paste", pasteHandler);
+}
+
+function hasImageFiles(e) {
+    if (e.dataTransfer?.types?.includes("Files")) {
+        // Check items if available
+        const items = e.dataTransfer.items;
+        if (items) {
+            for (const item of items) {
+                if (item.kind === "file" && item.type.startsWith("image/")) return true;
+            }
+        }
+        return true; // Can't check types on dragenter in some browsers, assume images
+    }
+    return false;
+}
+
+async function uploadAndInsertImage(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        showToast(`Uploading ${file.name}...`);
+        const resp = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+        });
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, true);
+            return;
+        }
+
+        // Create a local object URL for the thumbnail preview
+        const previewUrl = URL.createObjectURL(file);
+        pendingAttachments.push({
+            path: result.path,
+            filename: result.filename,
+            previewUrl,
+        });
+        renderAttachments();
+
+        document.getElementById("command-input").focus();
+        showToast(`Attached: ${result.filename}`);
+    } catch (e) {
+        showToast("Failed to upload image", true);
+        console.error("Upload error:", e);
+    }
+}
+
+function renderAttachments() {
+    const container = document.getElementById("image-attachments");
+    if (!container) return;
+
+    if (pendingAttachments.length === 0) {
+        container.innerHTML = "";
+        container.style.display = "none";
+        return;
+    }
+
+    container.style.display = "flex";
+    container.innerHTML = pendingAttachments.map((att, i) => `
+        <div class="image-attachment" title="${escapeAttr(att.path)}">
+            <img src="${att.previewUrl}" alt="${escapeAttr(att.filename)}" />
+            <span class="image-attachment-name">${escapeHtml(att.filename)}</span>
+            <button class="image-attachment-remove" onclick="removeAttachment(${i})" title="Remove">&times;</button>
+        </div>
+    `).join("");
+}
+
+export function removeAttachment(index) {
+    const removed = pendingAttachments.splice(index, 1);
+    if (removed[0]?.previewUrl) URL.revokeObjectURL(removed[0].previewUrl);
+    renderAttachments();
+}
+
+function clearAttachments() {
+    for (const att of pendingAttachments) {
+        if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+    }
+    pendingAttachments.length = 0;
+    renderAttachments();
 }
 
 export function updateSidebarActive() {
