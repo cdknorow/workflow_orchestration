@@ -30,6 +30,7 @@ from corral.api import system as system_api
 from corral.api import schedule as schedule_api
 from corral.api import webhooks as webhooks_api
 from corral.api import tasks as tasks_api
+from corral.api import uploads as uploads_api
 
 log = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
@@ -130,6 +131,7 @@ app.include_router(system_api.router)
 app.include_router(schedule_api.router)
 app.include_router(webhooks_api.router)
 app.include_router(tasks_api.router)
+app.include_router(uploads_api.router)
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
