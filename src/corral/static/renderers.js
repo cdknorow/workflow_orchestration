@@ -329,7 +329,7 @@ const ENGINES = {
 
 /** Default renderer name per agent type. */
 const AGENT_DEFAULTS = {
-    claude: "block-group",
+    claude: "xterm",
     gemini: "plain",
 };
 
