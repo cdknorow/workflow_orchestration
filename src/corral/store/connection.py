@@ -100,7 +100,7 @@ class DatabaseManager:
                 session_id        TEXT,
                 remote_url        TEXT,
                 recorded_at       TEXT NOT NULL,
-                UNIQUE(agent_name, commit_hash)
+                UNIQUE(session_id, commit_hash)
             );
 
             CREATE TABLE IF NOT EXISTS agent_tasks (
@@ -276,6 +276,37 @@ class DatabaseManager:
             pass  # Column already exists
 
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)")
+
+        # Migrate git_snapshots UNIQUE constraint from (agent_name, commit_hash)
+        # to (session_id, commit_hash) to support multiple sessions in the same directory.
+        try:
+            cursor = await conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='git_snapshots'"
+            )
+            row = await cursor.fetchone()
+            if row and "UNIQUE(agent_name, commit_hash)" in (row[0] or ""):
+                await conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS git_snapshots_new (
+                        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                        agent_name        TEXT NOT NULL,
+                        agent_type        TEXT NOT NULL,
+                        working_directory TEXT NOT NULL,
+                        branch            TEXT NOT NULL,
+                        commit_hash       TEXT NOT NULL,
+                        commit_subject    TEXT DEFAULT '',
+                        commit_timestamp  TEXT,
+                        session_id        TEXT,
+                        remote_url        TEXT,
+                        recorded_at       TEXT NOT NULL,
+                        UNIQUE(session_id, commit_hash)
+                    );
+                    INSERT OR IGNORE INTO git_snapshots_new
+                        SELECT * FROM git_snapshots;
+                    DROP TABLE git_snapshots;
+                    ALTER TABLE git_snapshots_new RENAME TO git_snapshots;
+                """)
+        except Exception:
+            pass
 
         try:
             await conn.execute("ALTER TABLE scheduled_jobs ADD COLUMN flags TEXT DEFAULT ''")

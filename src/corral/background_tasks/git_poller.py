@@ -32,21 +32,29 @@ class GitPoller:
     async def poll_once(self) -> dict[str, int]:
         agents = await discover_corral_agents()
         polled = 0
-        seen_paths: set[str] = set()
+
+        # Group agents by working directory so we query git once per directory
+        # but store a snapshot for every session in that directory.
+        dir_to_agents: dict[str, list[dict[str, Any]]] = {}
         for agent in agents:
+            session_id = agent.get("session_id")
+            pane = await _find_pane(
+                agent["agent_name"], agent["agent_type"], session_id=session_id,
+            )
+            if not pane:
+                continue
+            workdir = pane.get("current_path", "")
+            if not workdir:
+                continue
+            dir_to_agents.setdefault(workdir, []).append(agent)
+
+        for workdir, dir_agents in dir_to_agents.items():
             try:
-                session_id = agent.get("session_id")
-                pane = await _find_pane(
-                    agent["agent_name"], agent["agent_type"], session_id=session_id,
-                )
-                if not pane:
-                    continue
-                workdir = pane.get("current_path", "")
-                if not workdir or workdir in seen_paths:
-                    continue
-                seen_paths.add(workdir)
                 git_info = await self._query_git(workdir)
-                if git_info:
+                if not git_info:
+                    continue
+                # Store a snapshot for each session in this directory
+                for agent in dir_agents:
                     await self._store.upsert_git_snapshot(
                         agent_name=agent["agent_name"],
                         agent_type=agent["agent_type"],
@@ -55,12 +63,12 @@ class GitPoller:
                         commit_hash=git_info["commit_hash"],
                         commit_subject=git_info["commit_subject"],
                         commit_timestamp=git_info["commit_timestamp"],
-                        session_id=session_id,
+                        session_id=agent.get("session_id"),
                         remote_url=git_info.get("remote_url"),
                     )
                     polled += 1
             except Exception:
-                log.exception("GitPoller error for agent %s", agent["agent_name"])
+                log.exception("GitPoller error for dir %s", workdir)
         return {"polled": polled}
 
     async def _query_git(self, workdir: str) -> dict[str, str] | None:

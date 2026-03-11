@@ -25,13 +25,14 @@ export async function addAgentTask() {
     if (!title) return;
 
     try {
+        const sid = state.currentSession.session_id;
         await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/tasks`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title }),
+            body: JSON.stringify({ title, session_id: sid }),
         });
         input.value = '';
-        await loadAgentTasks(state.currentSession.name);
+        await loadAgentTasks(state.currentSession.name, sid);
     } catch (e) {
         showToast('Failed to add task', true);
     }
@@ -45,7 +46,7 @@ export async function toggleAgentTask(taskId, completed) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ completed: completed ? 1 : 0 }),
         });
-        await loadAgentTasks(state.currentSession.name);
+        await loadAgentTasks(state.currentSession.name, state.currentSession.session_id);
     } catch (e) {
         showToast('Failed to update task', true);
     }
@@ -57,7 +58,7 @@ export async function deleteAgentTask(taskId) {
         await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/tasks/${taskId}`, {
             method: 'DELETE',
         });
-        await loadAgentTasks(state.currentSession.name);
+        await loadAgentTasks(state.currentSession.name, state.currentSession.session_id);
     } catch (e) {
         showToast('Failed to delete task', true);
     }
@@ -89,7 +90,7 @@ export function editAgentTaskTitle(taskId, spanEl) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: newTitle }),
             });
-            await loadAgentTasks(state.currentSession.name);
+            await loadAgentTasks(state.currentSession.name, state.currentSession.session_id);
         } catch (e) {
             spanEl.textContent = original;
             showToast('Failed to update task title', true);

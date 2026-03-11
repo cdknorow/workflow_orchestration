@@ -93,10 +93,11 @@ async function saveContent(content) {
                 body: JSON.stringify({ content }),
             });
         } else {
+            const sid = state.currentSession.session_id;
             const resp = await fetch(`/api/sessions/live/${agentName}/notes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({ content, session_id: sid }),
             });
             const created = await resp.json();
             _noteId = created.id;

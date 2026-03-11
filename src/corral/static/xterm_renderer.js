@@ -11,6 +11,11 @@ let _selectionDisposable = null;
 let _pendingContent = null;
 let _xtermSelecting = false;
 
+// Track which session_id the terminal WS is currently connected to,
+// and a generation counter to suppress stale onclose reconnects.
+let _connectedSessionId = null;
+let _wsGeneration = 0;
+
 function _setPauseBadge(visible) {
     const badge = document.getElementById("selection-pause-badge");
     if (badge) badge.style.display = visible ? "" : "none";
@@ -95,7 +100,16 @@ export function createTerminal(containerEl) {
 }
 
 export function connectTerminalWs(name, agentType, sessionId) {
+    // Skip if already connected to this exact session
+    if (_connectedSessionId === sessionId && terminalWs && terminalWs.readyState === WebSocket.OPEN) {
+        return;
+    }
+
     disconnectTerminalWs();
+
+    // Bump generation so any pending onclose from the old WS is suppressed
+    const myGeneration = ++_wsGeneration;
+    _connectedSessionId = sessionId;
 
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const params = new URLSearchParams();
@@ -125,10 +139,24 @@ export function connectTerminalWs(name, agentType, sessionId) {
     };
 
     terminalWs.onclose = () => {
-        if (state.currentSession && state.currentSession.type === "live") {
+        // Only reconnect if this WS is still the current generation.
+        // If disconnectTerminalWs() was called (intentional close) or
+        // connectTerminalWs() was called for a different session, the
+        // generation will have been bumped and we should NOT reconnect.
+        if (myGeneration !== _wsGeneration) return;
+
+        if (state.currentSession && state.currentSession.type === "live"
+            && state.currentSession.session_id === sessionId) {
             setTimeout(() => {
-                if (state.currentSession && state.currentSession.name === name) {
-                    connectTerminalWs(name, agentType, sessionId);
+                // Re-check: generation still current AND session still matches
+                if (myGeneration === _wsGeneration
+                    && state.currentSession
+                    && state.currentSession.session_id === sessionId) {
+                    connectTerminalWs(
+                        state.currentSession.name,
+                        state.currentSession.agent_type,
+                        state.currentSession.session_id,
+                    );
                 }
             }, 3000);
         }
@@ -136,6 +164,9 @@ export function connectTerminalWs(name, agentType, sessionId) {
 }
 
 export function disconnectTerminalWs() {
+    // Bump generation BEFORE closing so the old onclose handler is suppressed
+    _wsGeneration++;
+    _connectedSessionId = null;
     if (terminalWs) {
         terminalWs.close();
         terminalWs = null;

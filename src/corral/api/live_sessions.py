@@ -91,9 +91,12 @@ async def get_live_sessions():
     results = []
     for agent in agents:
         log_info = get_log_status(agent["log_path"])
-        git = git_state.get(agent["agent_name"])
         name = agent["agent_name"]
         sid = agent.get("session_id")
+        # Look up git state by session_id first, then fall back to agent_name
+        git = git_state.get(sid) if sid else None
+        if not git:
+            git = git_state.get(name)
         latest_ev = latest_events.get(sid) if sid else None
         waiting = latest_ev in ("stop", "notification")
         working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
@@ -181,7 +184,12 @@ async def get_live_session_info(name: str, agent_type: str | None = None, sessio
     info = await get_session_info(name, agent_type, session_id=session_id)
     if not info:
         return {"error": f"Agent '{name}' not found"}
-    git = await store.get_latest_git_state(name)
+    # Look up git state by session_id first for accurate per-session results
+    git = None
+    if session_id:
+        git = await store.get_latest_git_state_by_session(session_id)
+    if not git:
+        git = await store.get_latest_git_state(name)
     if git:
         info["git_branch"] = git["branch"]
         info["git_commit_hash"] = git["commit_hash"]
@@ -190,9 +198,12 @@ async def get_live_session_info(name: str, agent_type: str | None = None, sessio
 
 
 @router.get("/api/sessions/live/{name}/git")
-async def get_live_session_git(name: str, limit: int = Query(20, ge=1, le=100)):
+async def get_live_session_git(name: str, limit: int = Query(20, ge=1, le=100), session_id: str | None = None):
     """Return recent git snapshots (commit history) for a live agent."""
-    snapshots = await asyncio.to_thread(store.get_git_snapshots, name, limit)
+    if session_id:
+        snapshots = await store.get_git_snapshots_for_session(session_id, limit)
+    else:
+        snapshots = await asyncio.to_thread(store.get_git_snapshots, name, limit)
     return {"agent_name": name, "snapshots": snapshots}
 
 
@@ -505,9 +516,12 @@ async def ws_corral(websocket: WebSocket):
             results = []
             for agent in agents:
                 log_info = get_log_status(agent["log_path"])
-                git = git_state.get(agent["agent_name"])
                 name = agent["agent_name"]
                 sid = agent.get("session_id")
+                # Look up git state by session_id first, then fall back to agent_name
+                git = git_state.get(sid) if sid else None
+                if not git:
+                    git = git_state.get(name)
                 latest_ev = ws_latest_events.get(sid) if sid else None
                 waiting = latest_ev in ("stop", "notification")
                 working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120

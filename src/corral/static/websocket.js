@@ -33,12 +33,21 @@ export function connectCorralWs() {
                 }
                 if (s) {
                     // Keep state in sync with backend (handles restarts
-                    // where session_id or name may change)
-                    if (s.session_id && s.session_id !== state.currentSession.session_id) {
-                        state.currentSession.session_id = s.session_id;
-                    }
-                    if (s.name !== state.currentSession.name) {
+                    // where session_id or name may change).
+                    // Only update session_id if we matched by session_id (not
+                    // by name fallback), to avoid switching to the wrong
+                    // session when multiple sessions share the same directory.
+                    const matchedById = sid && s.session_id === sid;
+                    if (matchedById && s.name !== state.currentSession.name) {
                         state.currentSession.name = s.name;
+                    }
+                    if (!matchedById && s.session_id && s.session_id !== state.currentSession.session_id) {
+                        // Matched by name only — adopt new session_id
+                        // (only safe when there's a single session with this name)
+                        const sameNameCount = data.sessions.filter(x => x.name === state.currentSession.name).length;
+                        if (sameNameCount === 1) {
+                            state.currentSession.session_id = s.session_id;
+                        }
                     }
                     // Sync display_name and update header
                     const headerName = s.display_name || s.name;

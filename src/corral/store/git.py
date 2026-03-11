@@ -35,20 +35,17 @@ class GitStore(DatabaseManager):
              commit_hash, commit_subject, commit_timestamp,
              session_id, remote_url, now),
         )
-        # Always update branch/working_directory on the latest row for this agent
-        update_params = [branch, working_directory, now]
+        # Always update branch/working_directory on the latest row for this session
+        update_params: list = [branch, working_directory, now]
         update_set = "branch = ?, working_directory = ?, recorded_at = ?"
-        if session_id is not None:
-            update_set += ", session_id = ?"
-            update_params.append(session_id)
         if remote_url is not None:
             update_set += ", remote_url = ?"
             update_params.append(remote_url)
-        update_params.extend([agent_name, commit_hash])
+        update_params.extend([session_id, commit_hash])
         await conn.execute(
             f"""UPDATE git_snapshots
                SET {update_set}
-               WHERE agent_name = ? AND commit_hash = ?""",
+               WHERE session_id = ? AND commit_hash = ?""",
             update_params,
         )
         await conn.commit()
@@ -81,20 +78,46 @@ class GitStore(DatabaseManager):
         )).fetchone()
         return dict(row) if row else None
 
+    async def get_latest_git_state_by_session(self, session_id: str) -> dict[str, Any] | None:
+        """Return the latest git snapshot for a specific session_id."""
+        conn = await self._get_conn()
+        row = await (await conn.execute(
+            """SELECT agent_name, agent_type, working_directory, branch,
+                      commit_hash, commit_subject, commit_timestamp,
+                      session_id, remote_url, recorded_at
+               FROM git_snapshots
+               WHERE session_id = ?
+               ORDER BY recorded_at DESC
+               LIMIT 1""",
+            (session_id,),
+        )).fetchone()
+        return dict(row) if row else None
+
     async def get_all_latest_git_state(self) -> dict[str, dict[str, Any]]:
-        """Return {agent_name: {branch, commit_hash, ...}} for all agents."""
+        """Return {key: {branch, commit_hash, ...}} for all agents.
+
+        Keyed by session_id when available, falling back to agent_name.
+        """
         conn = await self._get_conn()
         rows = await (await conn.execute(
             """SELECT g.*
                FROM git_snapshots g
                INNER JOIN (
-                   SELECT agent_name, MAX(recorded_at) as max_ts
+                   SELECT COALESCE(session_id, agent_name) AS grp_key,
+                          MAX(recorded_at) as max_ts
                    FROM git_snapshots
-                   GROUP BY agent_name
-               ) latest ON g.agent_name = latest.agent_name
+                   GROUP BY grp_key
+               ) latest ON COALESCE(g.session_id, g.agent_name) = latest.grp_key
                           AND g.recorded_at = latest.max_ts"""
         )).fetchall()
-        return {r["agent_name"]: dict(r) for r in rows}
+        result: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            d = dict(r)
+            # Key by session_id (for live sessions) AND agent_name (for legacy lookups)
+            if r["session_id"]:
+                result[r["session_id"]] = d
+            result[r["agent_name"]] = d
+        return result
 
     async def get_git_snapshots_for_session(self, session_id: str, limit: int = 100) -> list[dict[str, Any]]:
         """Return git commits linked to a session by session_id or by time range."""

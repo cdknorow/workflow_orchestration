@@ -229,6 +229,10 @@ class CorralStore(DatabaseManager):
         await self._get_conn()
         return await self._git.get_latest_git_state(agent_name)
 
+    async def get_latest_git_state_by_session(self, session_id: str) -> dict[str, Any] | None:
+        await self._get_conn()
+        return await self._git.get_latest_git_state_by_session(session_id)
+
     async def get_all_latest_git_state(self) -> dict[str, dict[str, Any]]:
         await self._get_conn()
         return await self._git.get_all_latest_git_state()
