@@ -486,7 +486,7 @@ async def restart_session(
                 pass
 
         # 7. Re-launch the agent with the same system prompt
-        script_dir = Path(__file__).parent
+        script_dir = Path(__file__).parent.parent
         protocol_path = script_dir / "PROTOCOL.md"
 
         all_flags = list(stored_flags)
@@ -598,7 +598,7 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
         await asyncio.sleep(0.3)
 
         # Launch the agent
-        script_dir = Path(__file__).parent
+        script_dir = Path(__file__).parent.parent
         protocol_path = script_dir / "PROTOCOL.md"
 
         cmd = agent_impl.build_launch_command(
