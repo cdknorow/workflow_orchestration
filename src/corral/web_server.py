@@ -43,7 +43,8 @@ async def lifespan(app: FastAPI):
     from corral.tools.session_manager import discover_corral_agents, resume_persistent_sessions
 
     # Resume any persistent live sessions that are no longer running in tmux
-    await resume_persistent_sessions(store)
+    # (excludes sessions owned by scheduled/oneshot job runs)
+    await resume_persistent_sessions(store, schedule_store)
 
     # Install hooks into each live agent's worktree, and register any
     # tmux sessions not yet tracked in the live_sessions table.
