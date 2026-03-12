@@ -733,7 +733,7 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .session-title-actions {
@@ -819,6 +819,62 @@ body {
 .status-line, .summary-line {
     font-size: 13px;
     color: var(--text-secondary);
+}
+
+.summary-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.goal-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: #bc8cff;
+    flex-shrink: 0;
+}
+
+.summary-inline .summary-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.goal-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.goal-action-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.goal-edit-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-primary);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 2px 8px;
+    outline: none;
 }
 
 .branch-chip {
