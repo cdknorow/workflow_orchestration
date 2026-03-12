@@ -249,9 +249,7 @@ export function updateSessionStatus(status) {
     const el = document.getElementById("session-status");
     if (status) {
         el.querySelector(".status-text").textContent = status;
-        // Status line is hidden in the header — only Goal is shown
     }
-    updateCompactMeta();
 }
 
 export function updateSessionBranch(branch) {
@@ -290,16 +288,4 @@ export function updateSessionSummary(summary) {
     } else {
         el.style.display = "none";
     }
-    updateCompactMeta();
-}
-
-function updateCompactMeta() {
-    const statusEl = document.getElementById("session-status");
-    const summaryEl = document.getElementById("session-summary");
-    const sep = document.getElementById("session-meta-sep");
-    if (!sep) return;
-
-    const hasStatus = statusEl && statusEl.style.display !== "none";
-    const hasSummary = summaryEl && summaryEl.style.display !== "none";
-    sep.style.display = (hasStatus && hasSummary) ? "" : "none";
 }

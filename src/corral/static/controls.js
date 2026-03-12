@@ -132,9 +132,9 @@ export function renderQuickActions() {
     const macros = getMacros();
 
     const modeButtons = `
-        <button class="btn-nav btn-mode" onclick="sendModeToggle('plan')" title="Plan Mode"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><line x1="6" y1="5" x2="10" y2="5"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="11" x2="8" y2="11"/></svg><span class="btn-label">Plan Mode</span></button>
-        <button class="btn-nav btn-mode" onclick="sendModeToggle('auto')" title="Accept Edits"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.5 11.5 12.5 4.5"/></svg><span class="btn-label">Accept Edits</span></button>
-        <button class="btn-nav btn-mode" onclick="sendQuickCommand('!')" title="Bash Mode"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><polyline points="4 7 6 9 4 11"/><line x1="8" y1="11" x2="12" y2="11"/></svg><span class="btn-label">Bash Mode</span></button>
+        <button class="btn-nav btn-mode" onclick="sendModeToggle('plan')" title="Toggle plan-only mode — agent plans but won't edit files"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><line x1="6" y1="5" x2="10" y2="5"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="11" x2="8" y2="11"/></svg><span class="btn-label">Cycle Mode</span></button>
+        <button class="btn-nav btn-mode" onclick="sendQuickCommand('!')" title="Prefix command with ! to run it as a shell command"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><polyline points="4 7 6 9 4 11"/><line x1="8" y1="11" x2="12" y2="11"/></svg><span class="btn-label">Bash</span></button>
+        <button class="btn-nav btn-mode" onclick="sendRawKeys(['Escape','Escape'])" title="Send two Escape keys — undo or cancel the current action"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 8l8 5"/><line x1="4" y1="3" x2="4" y2="13"/></svg><span class="btn-label">Rewind</span></button>
     `;
 
     const macroButtons = macros.map((m, i) => {
@@ -161,11 +161,10 @@ export function renderQuickActions() {
             ${macroButtons}
             <button class="btn-nav btn-add-macro" onclick="showMacroModal()" title="Add macro" aria-label="Add macro">+</button>
         </div>
-        <span class="toolbar-divider"></span>
+        <span class="toolbar-spacer"></span>
         <div class="toolbar-group toolbar-group-nav">
             ${navButtons}
         </div>
-        <span class="toolbar-spacer"></span>
         <button class="btn-nav btn-send" onclick="sendCommand()" aria-label="Send command">Send</button>
     `;
 }

@@ -161,6 +161,10 @@ export function createTerminal(containerEl) {
 }
 
 export function connectTerminalWs(name, agentType, sessionId) {
+    // Always reset scroll-pause state when switching to a session so the
+    // terminal renders immediately instead of buffering into the void.
+    resumeScroll();
+
     // Skip if already connected to this exact session
     if (_connectedSessionId === sessionId && terminalWs && terminalWs.readyState === WebSocket.OPEN) {
         return;
