@@ -3095,6 +3095,35 @@ body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
+/* Instant toolbar tooltips */
+.btn-nav[data-tooltip],
+.macro-btn-wrap [data-tooltip] {
+    position: relative;
+}
+
+.btn-nav[data-tooltip]:hover::after,
+.macro-btn-wrap [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 100%;
+    margin-bottom: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    max-width: 280px;
+    word-break: break-word;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+
 .event-item[data-tooltip] {
     position: relative;
 }
