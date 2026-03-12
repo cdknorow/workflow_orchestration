@@ -11,7 +11,7 @@ import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent }
 import { syncPaneWidth } from './capture.js';
 import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
-import { initSidebarResize, initCommandPaneResize, initTaskBarResize } from './sidebar.js';
+import { initSidebarResize, initCommandPaneResize, initTaskBarResize, initSidebarCollapse, switchJobsSubtab, initAgenticPanelCollapse } from './sidebar.js';
 import { fitTerminal } from './xterm_renderer.js';
 import { loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab } from './notes.js';
 import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag, loadAllTags } from './tags.js';
@@ -115,6 +115,7 @@ window.deleteWebhook     = deleteWebhook;
 window.testWebhook       = testWebhook;
 window.showWebhookHistory = showWebhookHistory;
 window.selectLiveJobRun = selectLiveJobRun;
+window.switchJobsSubtab = switchJobsSubtab;
 
 // ── History search/filter/pagination state ───────────────────────────────
 let historyPage = 1;  // page number only; all other filter state lives in filterState
@@ -443,6 +444,30 @@ document.addEventListener("DOMContentLoaded", () => {
         const inCapture = hasSelection && captureWrapper && sel.anchorNode && captureWrapper.contains(sel.anchorNode);
         state.isSelecting = !!inCapture;
         if (pauseBadge) pauseBadge.style.display = state.isSelecting ? "" : "none";
+    });
+
+    // Sidebar collapsible sections
+    initSidebarCollapse();
+    initAgenticPanelCollapse();
+
+    // Overflow menu close on outside click
+    document.addEventListener('click', (e) => {
+        const openMenus = document.querySelectorAll('.overflow-menu[style*="block"]');
+        for (const menu of openMenus) {
+            if (!menu.parentElement.contains(e.target)) {
+                menu.style.display = 'none';
+            }
+        }
+    });
+    // Overflow menu toggle
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('.overflow-menu-trigger');
+        if (!trigger) return;
+        e.stopPropagation();
+        const menu = trigger.nextElementSibling;
+        if (menu && menu.classList.contains('overflow-menu')) {
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
     });
 
     // Resize handles

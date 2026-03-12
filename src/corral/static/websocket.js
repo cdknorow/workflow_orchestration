@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { renderLiveSessions, updateSessionStatus, updateSessionSummary, updateSessionBranch, updateWaitingIndicator } from './render.js';
 import { renderLiveJobs } from './live_jobs.js';
 import { updateChangedFileCount } from './changed_files.js';
+import { updateSectionVisibility } from './sidebar.js';
 
 export function connectCorralWs() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";

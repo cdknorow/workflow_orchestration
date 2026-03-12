@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Corral</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons&display=swap">
     <!-- xterm.js terminal emulator -->
@@ -49,8 +52,19 @@
         <!-- Main Content -->
         <main class="main-content">
             <div id="welcome-screen" class="welcome">
-                <h2>Select a session from the sidebar</h2>
-                <p>Click on a live session to view real-time output, or browse historical sessions.</p>
+                <img src="/static/corral.png" alt="Corral" class="welcome-logo">
+                <h2>Welcome to Corral</h2>
+                <p>Select a session from the sidebar, or get started:</p>
+                <div class="welcome-actions">
+                    <button class="welcome-action-card" onclick="showLaunchModal()" aria-label="Launch Agent">
+                        <span class="material-icons">add_circle</span>
+                        <span>Launch Agent</span>
+                    </button>
+                    <button class="welcome-action-card" onclick="showSettingsModal()" aria-label="Settings">
+                        <span class="material-icons">settings</span>
+                        <span>Settings</span>
+                    </button>
+                </div>
             </div>
 
             {% include "includes/views/live_session.html" %}

@@ -2,33 +2,48 @@
             <div id="live-session-view" class="session-view" style="display:none">
                 <div class="session-header">
                     <div class="session-title">
-                        <span id="session-status-dot" class="status-dot"></span>
+                        <span id="session-status-dot" class="status-dot" role="status" aria-label="Session status"></span>
                         <span id="session-type-badge" class="badge">claude</span>
                         <h2 id="session-name"></h2>
-                        <span id="session-branch" class="title-branch" style="display:none">
-                            <span class="branch-icon">&#x2387;</span> <span class="branch-text"></span>
-                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
+                        <span id="session-branch" class="branch-chip" style="display:none">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg>
+                            <span class="branch-text"></span>
+                            <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name" aria-label="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
                         </span>
                         <div class="session-title-actions">
-                            <button class="btn btn-icon-label" onclick="showInfoModal()" title="View session details: agent type, tmux session, working directory, and log path"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg><span>Info</span></button>
-                            <button class="btn btn-icon-label btn-primary" onclick="attachTerminal()" title="Open this session in a new terminal window via tmux attach"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg><span>Attach</span></button>
-                            <span class="actions-divider"></span>
-                            <button class="btn btn-icon-label btn-warning" onclick="restartSession()" title="Exit and relaunch the agent with the same system prompt and working directory"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg><span>Restart</span></button>
-                            <button class="btn btn-icon-label btn-danger" onclick="killSession()" title="Terminate the tmux session and stop the agent process"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg><span>Kill</span></button>
+                            <button class="btn btn-icon-label btn-primary" onclick="attachTerminal()" title="Open this session in a new terminal window via tmux attach" aria-label="Attach terminal"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg><span>Attach</span></button>
+                            <button class="btn btn-icon-label btn-warning" onclick="restartSession()" title="Exit and relaunch the agent with the same system prompt and working directory" aria-label="Restart session"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg><span>Restart</span></button>
+                            <div class="overflow-menu-wrapper">
+                                <button class="btn btn-icon overflow-menu-trigger" title="More actions" aria-label="More actions">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+                                </button>
+                                <div class="overflow-menu" style="display:none">
+                                    <button class="overflow-menu-item" onclick="showInfoModal()">
+                                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg>
+                                        Session Info
+                                    </button>
+                                    <hr class="overflow-menu-divider">
+                                    <button class="overflow-menu-item overflow-menu-danger" onclick="killSession()">
+                                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+                                        Kill Session
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="session-meta">
-                        <div id="session-summary" class="summary-line" style="display:none">
-                            <strong>Goal:</strong> <span class="summary-text"></span>
-                        </div>
+                    <div class="session-meta session-meta-compact">
                         <div id="session-status" class="status-line">
                             <strong>Status:</strong> <span class="status-text">Idle</span>
+                        </div>
+                        <span id="session-meta-sep" class="meta-separator" style="display:none">&middot;</span>
+                        <div id="session-summary" class="summary-line" style="display:none">
+                            <strong>Goal:</strong> <span class="summary-text"></span>
                         </div>
                     </div>
                 </div>
 
                 <div id="waiting-banner" class="waiting-banner" style="display:none">
-                    ⏳ Agent is waiting for input
+                    Agent is waiting for input
                 </div>
 
                 <div class="live-body">
@@ -49,18 +64,35 @@
                                 <div id="image-attachments" class="image-attachments"></div>
                                 <div class="command-editor">
                                     <textarea id="command-input" placeholder="Type a command..." rows="3" autocomplete="off"></textarea>
+                                    <div class="command-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="task-bar-resize-handle" id="task-bar-resize-handle"></div>
                     <div class="agentic-state" id="agentic-state">
+                        <button class="agentic-collapse-btn" id="agentic-collapse-btn" title="Toggle panel" aria-label="Toggle agentic state panel">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M10 4l-4 4 4 4z"/></svg>
+                        </button>
                         <div class="agentic-state-tabs">
-                            <button class="agentic-tab active" onclick="switchAgenticTab('activity')" id="agentic-tab-activity">Activity</button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('files')" id="agentic-tab-files">Files <span id="files-bar-count" class="task-bar-count"></span></button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('tasks')" id="agentic-tab-tasks">Tasks <span id="task-bar-count" class="task-bar-count"></span></button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('notes')" id="agentic-tab-notes">Notes <span id="note-bar-count" class="task-bar-count"></span></button>
-                            <button class="agentic-tab" onclick="switchAgenticTab('history')" id="agentic-tab-history">History</button>
+                            <button class="agentic-tab active" onclick="switchAgenticTab('activity')" id="agentic-tab-activity" title="Activity" aria-label="Activity">
+                                <span class="material-icons">timeline</span>
+                            </button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('files')" id="agentic-tab-files" title="Files" aria-label="Files">
+                                <span class="material-icons">description</span>
+                                <span class="agentic-tab-count" id="files-bar-count"></span>
+                            </button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('tasks')" id="agentic-tab-tasks" title="Tasks" aria-label="Tasks">
+                                <span class="material-icons">checklist</span>
+                                <span class="agentic-tab-count" id="task-bar-count"></span>
+                            </button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('notes')" id="agentic-tab-notes" title="Notes" aria-label="Notes">
+                                <span class="material-icons">edit_note</span>
+                                <span class="agentic-tab-count" id="note-bar-count"></span>
+                            </button>
+                            <button class="agentic-tab" onclick="switchAgenticTab('history')" id="agentic-tab-history" title="History" aria-label="History">
+                                <span class="material-icons">history</span>
+                            </button>
                         </div>
                         <!-- Activity tab -->
                         <div id="agentic-panel-activity" class="agentic-panel active">

@@ -1,10 +1,11 @@
 /* Corral Dashboard — Dark Theme */
 
 :root {
-    --bg-primary: #0d1117;
-    --bg-secondary: #161b22;
-    --bg-tertiary: #21262d;
-    --bg-hover: #30363d;
+    --bg-primary: #0a0e14;
+    --bg-secondary: #12171e;
+    --bg-tertiary: #1c2128;
+    --bg-hover: #2a313a;
+    --bg-elevated: #252b33;
     --border: #30363d;
     --border-light: #484f58;
     --text-primary: #e6edf3;
@@ -17,6 +18,8 @@
     --error: #f85149;
     --badge-claude: #7c3aed;
     --badge-gemini: #2563eb;
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -26,7 +29,7 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     height: 100vh;
@@ -39,8 +42,12 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 10px 20px 10px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
+    background: rgba(18, 23, 30, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+    position: relative;
+    z-index: 20;
 }
 
 .top-bar-brand {
@@ -133,15 +140,96 @@ body {
     overflow-y: auto;
 }
 
+.sidebar-section.collapsed .sidebar-section-body {
+    display: none;
+}
+
 .sidebar-section-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 12px 8px 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.sidebar-section-header:hover {
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .sidebar-section-header h2 {
     padding: 0;
+}
+
+.sidebar-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.collapse-chevron {
+    transition: transform 0.2s ease;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.sidebar-section.collapsed .collapse-chevron {
+    transform: rotate(-90deg);
+}
+
+.section-count-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 0 6px;
+    line-height: 16px;
+    min-width: 16px;
+    text-align: center;
+}
+
+/* Sidebar subtabs (Jobs: Active / Scheduled) */
+.sidebar-subtabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px 8px;
+}
+
+.sidebar-subtab {
+    flex: 1;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+}
+
+.sidebar-subtab.active {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-dim);
+    color: var(--text-primary);
+}
+
+.sidebar-subtab:hover:not(.active) {
+    background: var(--bg-hover);
+}
+
+.subtab-count:empty {
+    display: none;
+}
+
+.subtab-count {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 2px;
 }
 
 .sidebar-new-btn {
@@ -570,17 +658,62 @@ body {
     justify-content: center;
     height: 100%;
     color: var(--text-secondary);
+    gap: 8px;
+}
+
+.welcome-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    opacity: 0.85;
 }
 
 .welcome h2 {
-    font-size: 18px;
-    margin-bottom: 8px;
-    font-weight: 500;
+    font-size: 20px;
+    margin-bottom: 4px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .welcome p {
     font-size: 14px;
     color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.welcome-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.welcome-action-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 28px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.welcome-action-card .material-icons {
+    font-size: 28px;
+    color: var(--accent);
+}
+
+.welcome-action-card:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-dim);
+    color: var(--text-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
 }
 
 /* Session View */
@@ -672,20 +805,38 @@ body {
     gap: 4px;
 }
 
+.session-meta-compact {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.meta-separator {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
 .status-line, .summary-line {
     font-size: 13px;
     color: var(--text-secondary);
 }
 
-.title-branch {
-    font-size: 13px;
+.branch-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.2);
+    border-radius: 12px;
+    font-size: 12px;
     color: var(--accent);
-    font-weight: 500;
+    font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
-.branch-icon {
-    font-size: 14px;
-    vertical-align: middle;
+.branch-chip svg {
+    flex-shrink: 0;
+    color: var(--accent);
 }
 
 .copy-branch-btn {
@@ -1058,11 +1209,24 @@ body {
 }
 
 .btn-send {
-    padding: 6px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    border-radius: 6px;
+    background: var(--accent) !important;
+    color: #fff !important;
+    font-weight: 700;
+    padding: 6px 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(88, 166, 255, 0.25);
+    transition: all 0.15s;
+    border: none !important;
+    border-bottom: none !important;
     flex-shrink: 0;
+    font-size: 13px;
+}
+
+.btn-send:hover {
+    background: #70b8ff !important;
+    box-shadow: 0 4px 12px rgba(88, 166, 255, 0.35);
+    transform: translateY(-1px);
+    color: #fff !important;
 }
 
 /* Drop overlay for image drag-and-drop */
@@ -2555,17 +2719,19 @@ body {
 
 .agentic-tab {
     flex: 1;
-    padding: 8px 12px;
+    padding: 8px 4px;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
     cursor: pointer;
     transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
 }
 
 .agentic-tab:hover {
@@ -3776,4 +3942,226 @@ body {
     background: var(--success);
     animation: pulse-working 1.5s ease-in-out infinite;
     flex-shrink: 0;
+}
+
+/* ── Overflow Menu (Phase 2) ────────────────────────────────────────────── */
+
+.overflow-menu-wrapper {
+    position: relative;
+}
+
+.overflow-menu-trigger {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 5px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    height: 30px;
+}
+
+.overflow-menu-trigger:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.overflow-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 180px;
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+}
+
+.overflow-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.1s;
+}
+
+.overflow-menu-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.overflow-menu-item.overflow-menu-danger:hover {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--error);
+}
+
+.overflow-menu-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+}
+
+/* ── Agentic State Tabs — Icon Mode (Phase 3) ──────────────────────────── */
+
+.agentic-tab {
+    flex: 1;
+    padding: 8px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.agentic-tab .material-icons {
+    font-size: 18px;
+}
+
+.agentic-tab-count:empty {
+    display: none;
+}
+
+.agentic-tab-count {
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--bg-hover);
+    border-radius: 8px;
+    padding: 0 5px;
+    line-height: 16px;
+    min-width: 16px;
+    text-align: center;
+}
+
+/* ── Collapsible Agentic State Panel (Phase 3) ──────────────────────────── */
+
+.agentic-state {
+    position: relative;
+    transition: width 0.2s ease, min-width 0.2s ease;
+}
+
+.agentic-state.collapsed {
+    width: 36px !important;
+    min-width: 36px !important;
+}
+
+.agentic-state.collapsed .agentic-panel,
+.agentic-state.collapsed .agentic-state-tabs {
+    display: none;
+}
+
+.agentic-collapse-btn {
+    position: absolute;
+    top: 6px;
+    left: -12px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: all 0.15s;
+}
+
+.agentic-collapse-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.agentic-state.collapsed .agentic-collapse-btn svg {
+    transform: rotate(180deg);
+}
+
+/* ── Toolbar Groups (Phase 5) ───────────────────────────────────────────── */
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Command Hint (Phase 5) ─────────────────────────────────────────────── */
+
+.command-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 4px 0 0;
+    text-align: right;
+}
+
+.command-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    box-shadow: 0 1px 0 var(--border);
+}
+
+/* ── Micro-interactions (Phase 6) ───────────────────────────────────────── */
+
+.session-list li {
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.session-list li:hover:not(.empty-state):not(.session-group-header) {
+    box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.06);
+}
+
+/* Resize handle grip pattern */
+.task-bar-resize-handle::after,
+.sidebar-resize-handle::after {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 20px;
+    margin: auto;
+    background: radial-gradient(circle, var(--text-muted) 1px, transparent 1px);
+    background-size: 4px 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.task-bar-resize-handle:hover::after,
+.sidebar-resize-handle:hover::after {
+    opacity: 0.6;
+}
+
+/* Focus-visible outlines for accessibility (Phase 6) */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* All interactive elements get consistent transition */
+button,
+.btn,
+.btn-nav,
+.agentic-tab,
+.sidebar-subtab {
+    transition: all 0.15s ease;
 }

@@ -146,20 +146,27 @@ export function renderQuickActions() {
     }).join("");
 
     const navButtons = `
-        <button class="btn-nav" onclick="sendRawKeys(['Escape'])" title="Escape">Esc</button>
-        <button class="btn-nav" onclick="sendRawKeys(['Up'])" title="Arrow Up">&uarr;</button>
-        <button class="btn-nav" onclick="sendRawKeys(['Down'])" title="Arrow Down">&darr;</button>
-        <button class="btn-nav btn-enter" onclick="sendRawKeys(['Enter'])" title="Enter">&#9166;</button>
-        <button class="btn-nav btn-primary btn-send" onclick="sendCommand()">Send</button>
+        <button class="btn-nav" onclick="sendRawKeys(['Escape'])" title="Escape" aria-label="Escape">Esc</button>
+        <button class="btn-nav" onclick="sendRawKeys(['Up'])" title="Arrow Up" aria-label="Arrow Up">&uarr;</button>
+        <button class="btn-nav" onclick="sendRawKeys(['Down'])" title="Arrow Down" aria-label="Arrow Down">&darr;</button>
+        <button class="btn-nav btn-enter" onclick="sendRawKeys(['Enter'])" title="Enter" aria-label="Enter">&#9166;</button>
     `;
 
     toolbar.innerHTML = `
-        ${modeButtons}
+        <div class="toolbar-group toolbar-group-modes">
+            ${modeButtons}
+        </div>
         <span class="toolbar-divider"></span>
-        ${macroButtons}
-        <button class="btn-nav btn-add-macro" onclick="showMacroModal()" title="Add macro">+</button>
+        <div class="toolbar-group toolbar-group-macros">
+            ${macroButtons}
+            <button class="btn-nav btn-add-macro" onclick="showMacroModal()" title="Add macro" aria-label="Add macro">+</button>
+        </div>
+        <span class="toolbar-divider"></span>
+        <div class="toolbar-group toolbar-group-nav">
+            ${navButtons}
+        </div>
         <span class="toolbar-spacer"></span>
-        ${navButtons}
+        <button class="btn-nav btn-send" onclick="sendCommand()" aria-label="Send command">Send</button>
     `;
 }
 

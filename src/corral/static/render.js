@@ -3,6 +3,7 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { renderSidebarTagDots } from './tags.js';
+import { updateSectionVisibility } from './sidebar.js';
 
 function formatShortTime(isoStr) {
     const d = new Date(isoStr);
@@ -68,6 +69,8 @@ function getDotClass(staleness, waitingForInput, working, waitingReason) {
 
 export function renderLiveSessions(sessions) {
     const list = document.getElementById("live-sessions-list");
+
+    updateSectionVisibility('live-sessions', sessions.length);
 
     if (!sessions.length) {
         list.innerHTML = '<li class="empty-state">No live sessions</li>';
@@ -136,6 +139,8 @@ export function renderLiveSessions(sessions) {
 export function renderHistorySessions(sessions, total, page, pageSize) {
     const list = document.getElementById("history-sessions-list");
     state.historySessionsList = sessions || [];
+
+    updateSectionVisibility('history', total || (sessions ? sessions.length : 0));
 
     if (!sessions || !sessions.length) {
         list.innerHTML = '<li class="empty-state">No history found</li>';
@@ -246,6 +251,7 @@ export function updateSessionStatus(status) {
         el.querySelector(".status-text").textContent = status;
         // Status line is hidden in the header — only Goal is shown
     }
+    updateCompactMeta();
 }
 
 export function updateSessionBranch(branch) {
@@ -284,4 +290,16 @@ export function updateSessionSummary(summary) {
     } else {
         el.style.display = "none";
     }
+    updateCompactMeta();
+}
+
+function updateCompactMeta() {
+    const statusEl = document.getElementById("session-status");
+    const summaryEl = document.getElementById("session-summary");
+    const sep = document.getElementById("session-meta-sep");
+    if (!sep) return;
+
+    const hasStatus = statusEl && statusEl.style.display !== "none";
+    const hasSummary = summaryEl && summaryEl.style.display !== "none";
+    sep.style.display = (hasStatus && hasSummary) ? "" : "none";
 }

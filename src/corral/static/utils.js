@@ -19,7 +19,7 @@ export function showToast(message, isError = false) {
 }
 
 export function copyBranchName(btn) {
-    const branchText = btn.closest(".title-branch").querySelector(".branch-text").textContent;
+    const branchText = btn.closest(".branch-chip").querySelector(".branch-text").textContent;
     navigator.clipboard.writeText(branchText).then(() => {
         showToast("Copied branch name");
     }).catch(() => {
