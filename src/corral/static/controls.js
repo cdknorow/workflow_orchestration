@@ -315,6 +315,81 @@ export async function confirmRestart() {
     }
 }
 
+// ── Goal editing ───────────────────────────────────────────────────────────
+
+export function editGoal() {
+    const el = document.getElementById("session-summary");
+    if (!el) return;
+    const textEl = el.querySelector(".summary-text");
+    const actionBtns = el.querySelectorAll(".goal-action-btn");
+    const currentText = textEl.textContent || "";
+
+    // Replace text span and buttons with an input
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "goal-edit-input";
+    input.value = currentText;
+
+    textEl.style.display = "none";
+    actionBtns.forEach(b => b.style.display = "none");
+    el.appendChild(input);
+    input.focus();
+    input.select();
+
+    const commit = async () => {
+        const newGoal = input.value.trim();
+        input.remove();
+        textEl.style.display = "";
+        actionBtns.forEach(b => b.style.display = "");
+
+        if (!newGoal || newGoal === currentText) return;
+
+        textEl.textContent = newGoal;
+
+        // Post a goal event to persist the change
+        if (state.currentSession && state.currentSession.type === "live") {
+            try {
+                await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/events`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        event_type: "goal",
+                        summary: newGoal,
+                        session_id: state.currentSession.session_id,
+                    }),
+                });
+            } catch (e) {
+                console.error("Failed to save goal:", e);
+            }
+        }
+    };
+
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+        if (e.key === "Escape") { input.value = currentText; input.blur(); }
+    });
+}
+
+export function refreshGoal() {
+    if (!state.currentSession || state.currentSession.type !== "live") return;
+    const name = state.currentSession.name;
+    const msg = 'Emit a ||PULSE:SUMMARY <your current goal>|| line now to update the dashboard with your current goal.';
+    fetch(`/api/sessions/live/${encodeURIComponent(name)}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            command: msg,
+            agent_type: state.currentSession.agent_type,
+            session_id: state.currentSession.session_id,
+        }),
+    }).then(() => {
+        showToast("Asked agent to update goal");
+    }).catch(() => {
+        showToast("Failed to send refresh request", true);
+    });
+}
+
 // Claude Code modes cycle via Shift+Tab (BTab in tmux).
 // Order: default -> plan -> auto-accept -> default
 const MODE_CYCLE = ["default", "plan", "auto"];

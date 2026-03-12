@@ -2,14 +2,19 @@
             <div id="live-session-view" class="session-view" style="display:none">
                 <div class="session-header">
                     <div class="session-title">
-                        <span id="session-status-dot" class="status-dot" role="status" aria-label="Session status"></span>
-                        <span id="session-type-badge" class="badge">claude</span>
-                        <h2 id="session-name"></h2>
+                        <div id="session-summary" class="summary-line summary-inline" style="display:none">
+                            <span class="goal-label">Goal</span>
+                            <span class="summary-text"></span>
+                            <button class="goal-action-btn" onclick="refreshGoal()" title="Ask agent to update goal"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8a7 7 0 0 1 12.9-3.8"/><path d="M15 8a7 7 0 0 1-12.9 3.8"/><polyline points="13 1 14 4.2 10.5 4.2"/><polyline points="3 15 2 11.8 5.5 11.8"/></svg></button>
+                            <button class="goal-action-btn" onclick="editGoal()" title="Edit goal"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3z"/></svg></button>
+                        </div>
                         <span id="session-branch" class="branch-chip" style="display:none">
                             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg>
                             <span class="branch-text"></span>
                             <button class="copy-branch-btn" onclick="copyBranchName(this)" title="Copy branch name" aria-label="Copy branch name"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg></button>
                         </span>
+                        <span id="session-type-badge" class="badge" style="display:none">claude</span>
+                        <h2 id="session-name" style="display:none"></h2>
                         <div class="session-title-actions">
                             <button class="btn btn-icon-label btn-primary" onclick="attachTerminal()" title="Open this session in a new terminal window via tmux attach" aria-label="Attach terminal"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg><span>Attach</span></button>
                             <button class="btn btn-icon-label btn-warning" onclick="restartSession()" title="Exit and relaunch the agent with the same system prompt and working directory" aria-label="Restart session"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg><span>Restart</span></button>
@@ -34,9 +39,6 @@
                     <div class="session-meta session-meta-compact">
                         <div id="session-status" class="status-line" style="display:none">
                             <span class="status-text">Idle</span>
-                        </div>
-                        <div id="session-summary" class="summary-line" style="display:none">
-                            <strong>Goal:</strong> <span class="summary-text"></span>
                         </div>
                     </div>
                 </div>
