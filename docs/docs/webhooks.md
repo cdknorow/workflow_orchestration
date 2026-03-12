@@ -4,7 +4,7 @@ Webhook Notifications let you receive HTTP POST alerts when an agent needs atten
 
 Corral supports three platforms out of the box: **Slack**, **Discord**, and **Generic HTTP POST**. Webhooks are configured entirely through the dashboard UI, with built-in retry logic and a circuit breaker to keep things reliable without overwhelming a failing endpoint.
 
-<!-- TODO: Screenshot - Webhook modal overview showing the list of configured webhooks -->
+![Webhook Notifications modal showing configured webhooks](images/webhook-notifications-modal.png)
 
 ---
 
@@ -38,7 +38,7 @@ Each delivery attempt follows this reliability model:
 
 4. Click **Save**.
 
-<!-- TODO: Screenshot - Add Webhook form filled out with example values -->
+![Add Webhook form with Name, Platform, URL, Agent Filter, and Enabled fields](images/add-webhook-form.png)
 
 ### Slack
 
@@ -93,7 +93,7 @@ Click **History** on any webhook to see up to 50 recent deliveries. Each entry s
 
 Failed deliveries show the HTTP status code and error message for debugging.
 
-<!-- TODO: Screenshot - Delivery history table showing a mix of delivered and failed entries -->
+![Webhook notifications overview](images/webhook-notifications-modal.png)
 
 ---
 

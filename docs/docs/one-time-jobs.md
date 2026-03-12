@@ -72,7 +72,7 @@ curl -X POST http://localhost:8420/api/tasks/run \
 
 ## Monitoring jobs
 
-<!-- TODO: Screenshot - Jobs sidebar section showing a running job with green status dot, display name, "api" trigger badge, and elapsed time -->
+![Jobs section in the sidebar](images/sidebar-full.png)
 
 Active jobs appear in the **Jobs** section of the sidebar. Each entry shows:
 
@@ -168,7 +168,7 @@ CORRAL_MAX_CONCURRENT_JOBS=10 corral
 
 ## Completed jobs in history
 
-<!-- TODO: Screenshot - History sidebar showing a completed job with orange "task" tag -->
+![History sidebar showing completed sessions](images/history-search-sidebar.png)
 
 When a job finishes, it moves from the Jobs sidebar into the **History** section. Completed jobs are tagged with an orange **task** badge, making them easy to distinguish from interactive sessions.
 

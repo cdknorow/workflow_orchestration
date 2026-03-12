@@ -111,13 +111,13 @@ The PULSE protocol flows through a pipeline from agent output to the browser:
 7. **WebSocket** pushes the updated session state to all connected browsers every 3 seconds.
 8. **Dashboard renders** the status in the session header "Status:" line, the summary as the "Goal:" line, and confidence events in the Activity timeline.
 
-<!-- TODO: Screenshot - Data flow diagram showing the pipeline from agent stdout through tmux pipe-pane, log file, log streamer, WebSocket, to browser dashboard -->
+![Dashboard showing the full pipeline: agent output flows through tmux pipe-pane to the browser](images/dashboard-full-view.png)
 
 ---
 
 ## Dashboard display
 
-<!-- TODO: Screenshot - Session header showing Status and Goal lines with a live agent -->
+![Session header showing Status and Goal lines populated by PULSE protocol](images/session-header-pulse.png)
 
 | Element | Location | Source |
 |---------|----------|--------|
@@ -127,7 +127,7 @@ The PULSE protocol flows through a pipeline from agent output to the browser:
 
 All three event types appear in the Activity tab and are filterable using the **Filter** dropdown. See [Live Sessions — Activity](live-sessions.md#activity) for details on the timeline view.
 
-<!-- TODO: Screenshot - Activity timeline showing Status, Goal, and Confidence events with filter dropdown -->
+![Activity filter dropdown showing Status, Goal, Confidence, and other event categories](images/activity-filter-dropdown.png)
 
 ---
 

@@ -21,7 +21,7 @@ Every run is tracked with a status (pending, running, completed, killed, or fail
 
 ## Creating a scheduled job
 
-<!-- TODO: Screenshot - the "Create Scheduled Job" modal with all fields visible -->
+![Create Scheduled Job modal with cron expression, timezone, repo path, agent type, and prompt fields](images/create-scheduled-job-modal.png)
 
 1. Click the **+ New Job** button in the Scheduled Jobs sidebar header.
 2. Fill in the **Create Scheduled Job** modal:
@@ -98,7 +98,7 @@ All cron expressions are evaluated in the timezone specified on the job. The def
 
 ### Viewing job details
 
-<!-- TODO: Screenshot - the job detail view showing info grid, prompt, and run history -->
+![Scheduled job detail view with info grid and prompt](images/create-scheduled-job-modal.png)
 
 Click a job in the sidebar to open its detail view. The detail view shows:
 
@@ -129,7 +129,7 @@ Click **Delete** to permanently remove a job.
 
 ## Run history
 
-<!-- TODO: Screenshot - run history table showing various status badges -->
+![Scheduled jobs section in the sidebar](images/sidebar-full.png)
 
 Each job maintains a run history table with the following columns:
 

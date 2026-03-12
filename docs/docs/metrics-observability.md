@@ -30,7 +30,7 @@ Every live session in the sidebar has a color-coded status dot that updates auto
 | **Amber** | Waiting | Agent has stopped or sent a notification and needs input |
 | **Grey** | Idle / Stale | No recent output — agent may have finished or stalled |
 
-<!-- TODO: Screenshot - sidebar showing sessions with different status dot colors (green, blue, amber, grey) -->
+![Sidebar showing sessions with different status dot colors](images/sidebar-multi-agent.png)
 
 ### Hover tooltips
 
@@ -67,7 +67,7 @@ Every tool use and protocol event appears in a scrollable timeline with an icon,
 | Protocol | Status, Goal, Confidence |
 | Control | Stop, Notify |
 
-<!-- TODO: Screenshot - activity timeline showing a mix of event types with icons and timestamps -->
+![Activity timeline showing event types with icons and timestamps](images/activity-panel-timeline.png)
 
 ### Filter dropdown
 
@@ -77,7 +77,7 @@ The filter dropdown at the top of the Activity tab lets you toggle event categor
 
 Below the timeline, a horizontal bar chart shows tool use counts sorted by frequency. This gives you an immediate sense of the agent's work pattern — whether it's been mostly reading files, running shell commands, editing code, or something else.
 
-<!-- TODO: Screenshot - activity bar chart showing tool use distribution -->
+![Activity bar chart showing tool use frequency distribution](images/activity-bar-chart.png)
 
 ---
 

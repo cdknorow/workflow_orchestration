@@ -30,7 +30,7 @@ The **History** section of the sidebar lists all indexed sessions, sorted by mos
 
 Click any session to open it in the main panel. The list paginates at 50 sessions per page — use the pagination controls at the bottom of the sidebar to navigate older sessions.
 
-<!-- TODO: Screenshot - Sidebar showing the History section with several session entries displaying timestamps, badges, branch names, and tags -->
+![History sidebar showing session entries with timestamps, badges, and branch names](images/history-search-sidebar.png)
 
 ---
 
@@ -40,7 +40,7 @@ Type in the search box at the top of the History sidebar to search across all in
 
 The search indexes the **full body of all messages** — both your prompts and the agent's responses. This means you can search for specific code snippets, error messages, file paths, or any text that appeared in a conversation.
 
-<!-- TODO: Screenshot - Search box with a query entered and filtered results in the sidebar -->
+![Search box with query and filtered results in the sidebar](images/history-search-sidebar.png)
 
 !!! tip
     FTS5 uses Porter stemming by default, so searching for "testing" also matches "test", "tests", and "tested".
@@ -63,7 +63,7 @@ Click the **funnel icon** next to the search box to open the advanced filter pan
 
 Use the **Clear filters** button to reset all filters at once. Filter state is encoded in the URL, so you can bookmark or share a filtered view.
 
-<!-- TODO: Screenshot - Advanced filter panel expanded, showing FTS Mode, Source, Tags, Date Range, and Duration filters -->
+![Advanced filter panel with Source, Tags, Date Range, and Duration filters](images/history-advanced-filters.png)
 
 ---
 
@@ -91,7 +91,7 @@ Two buttons appear at the top of the tab:
 - **Edit** — Open a markdown editor to write or revise the summary
 - **Re-summarize** — Re-run the AI summarizer to generate a fresh summary
 
-<!-- TODO: Screenshot - Summary tab showing a rendered markdown summary with Edit and Re-summarize buttons -->
+![Summary tab with rendered markdown summary, Edit and Re-summarize buttons](images/history-session-detail.png)
 
 #### Chat
 
@@ -113,7 +113,7 @@ The Notes tab shows any agent-written notes from the session. These are the note
 
 The Commits tab lists all git commits that occurred during the session's time range. Each commit shows its hash, message, author, and timestamp.
 
-<!-- TODO: Screenshot - Session detail view showing the six tabs with the Summary tab selected -->
+![Session detail view showing Summary, Chat, Activity, Tasks, Notes, and Commits tabs](images/history-session-detail.png)
 
 ---
 
@@ -131,7 +131,7 @@ Tags help you organize sessions by project, feature, status, or any other catego
 
 Tags are available as a filter in the [advanced filter panel](#using-advanced-filters). You can select multiple tags and choose whether to match sessions with **all** selected tags (AND) or **any** of them (OR).
 
-<!-- TODO: Screenshot - Tag picker dropdown showing existing tags and the option to create a new tag -->
+![Session header with + Tag button for adding tags](images/history-session-detail.png)
 
 ---
 

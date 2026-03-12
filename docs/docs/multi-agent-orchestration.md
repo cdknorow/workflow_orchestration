@@ -6,7 +6,7 @@ Every agent runs in a dedicated tmux session named `{agent_type}-{uuid}`. Output
 
 Both **Claude** and **Gemini** agents are supported, and you can run them side by side.
 
-<!-- TODO: Screenshot - dashboard with multiple agents visible in the sidebar, showing different status dots and agent type badges -->
+![Dashboard with multiple agents in the sidebar showing different status dots and agent type badges](images/sidebar-multi-agent.png)
 
 ---
 
@@ -66,7 +66,7 @@ curl -X POST http://localhost:8420/api/sessions/launch \
   -d '{"working_dir": "/path/to/worktree", "agent_type": "claude", "display_name": "Auth Feature"}'
 ```
 
-<!-- TODO: Screenshot - the Launch New Session modal with fields filled in -->
+![Launch New Session modal with Agent Name, Working Directory, Agent Type, and Flags fields](images/launch-session-modal.png)
 
 !!! tip
     Dashboard-launched sessions are not limited by `MAX_AGENTS` — you can add as many as your machine can handle.
@@ -80,7 +80,7 @@ The dashboard keeps you connected to every agent in real time:
 - **Status dots** — Green (active), yellow (stale), amber (waiting for input)
 - **PULSE protocol** — Agents emit structured `||PULSE:STATUS||` and `||PULSE:SUMMARY||` markers that the dashboard parses into readable status and goal fields
 
-<!-- TODO: Screenshot - session header showing status dot, goal, and status fields populated from PULSE markers -->
+![Session header showing status dot, Goal, and Status fields populated from PULSE markers](images/session-header-pulse.png)
 
 ### Step 5: Interact with agents
 
@@ -194,7 +194,7 @@ Each session in the sidebar shows:
 | **NEEDS INPUT badge** | Appears when the agent is waiting for a response |
 | **Tooltip** | Hover for full session details |
 
-<!-- TODO: Screenshot - sidebar showing multiple sessions with different states: one active (green dot), one waiting for input (amber dot with NEEDS INPUT badge), one stale (gray dot) -->
+![Sidebar showing sessions with different states: active (green), waiting for input (amber with NEEDS INPUT badge), and stale (gray)](images/sidebar-multi-agent.png)
 
 ### Session switching
 

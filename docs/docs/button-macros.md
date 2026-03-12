@@ -2,7 +2,7 @@
 
 Button Macros are customizable one-click toolbar buttons in the [command pane](live-sessions.md#command-pane). Each macro has a label and a command — click it, and the command is sent directly to the selected agent.
 
-<!-- TODO: Screenshot - command toolbar showing default macros (/compact, /clear, Reset) between mode toggles and navigation buttons -->
+![Command toolbar showing mode toggles, macro buttons, and navigation buttons](images/command-pane-toolbar.png)
 
 Macros appear in the toolbar between the mode toggle buttons and the navigation buttons. Three defaults are included out of the box: `/compact`, `/clear`, and `Reset` (which chains both). You can add your own for any command you run frequently.
 
@@ -18,7 +18,7 @@ Macros are stored in the SQLite `user_settings` table and persist across session
     - **Command** — The command to send (e.g., `git add . && git commit -m "wip"`)
 3. Click **Add** (or press Enter).
 
-<!-- TODO: Screenshot - Add Macro modal with Label and Command fields filled in -->
+![Add Macro modal with Label and Command fields](images/add-macro-modal.png)
 
 The new macro button appears immediately in the toolbar. The change is persisted via `PUT /api/settings`.
 
@@ -34,7 +34,7 @@ The new macro button appears immediately in the toolbar. The change is persisted
 
 The command is sent to the agent. If the command contains `&&`, each part is sent sequentially with a 1-second delay. A toast notification confirms each send.
 
-<!-- TODO: Screenshot - toast notification after clicking a macro button -->
+![Command pane with macro buttons in the toolbar](images/command-pane-toolbar.png)
 
 ---
 
@@ -42,7 +42,7 @@ The command is sent to the agent. If the command contains `&&`, each part is sen
 
 Hover over a macro button to reveal an **x** button in the top-right corner. Click it to remove the macro. The deletion is persisted immediately.
 
-<!-- TODO: Screenshot - macro button with x delete button visible on hover -->
+![Macro buttons in the toolbar with delete button on hover](images/command-pane-toolbar.png)
 
 ---
 
