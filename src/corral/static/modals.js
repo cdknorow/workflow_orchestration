@@ -221,6 +221,10 @@ export async function loadSettings() {
         if (typeof s.fit_pane_width === "string") {
             s.fit_pane_width = s.fit_pane_width === "True";
         }
+        // Default fit_pane_width to true if not yet set
+        if (s.fit_pane_width === undefined) {
+            s.fit_pane_width = true;
+        }
         state.settings = s;
     } catch (e) {
         console.error("Failed to load settings:", e);

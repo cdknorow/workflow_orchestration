@@ -4,6 +4,7 @@ import { state, CAPTURE_REFRESH_MS } from './state.js';
 import { getRenderer } from './renderers.js';
 import { loadAgentTasks } from './tasks.js';
 import { loadAgentEvents } from './agentic_state.js';
+import { getTerminalCols } from './xterm_renderer.js';
 
 /* ── Tmux pane width sync ─────────────────────────────────────────────── */
 
@@ -34,7 +35,8 @@ let _lastSyncedCols = null;
 export async function syncPaneWidth() {
     if (!state.settings?.fit_pane_width) return;
     if (!state.currentSession || state.currentSession.type !== "live") return;
-    const cols = measureTerminalColumns();
+    // In xterm mode the semantic pane is hidden, so use xterm's own column count
+    const cols = getTerminalCols() || measureTerminalColumns();
     if (!cols || cols < 10) return;
     if (cols === _lastSyncedCols) return;
     _lastSyncedCols = cols;

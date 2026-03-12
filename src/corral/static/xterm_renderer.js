@@ -25,8 +25,8 @@ function _setPauseBadge(visible) {
 /** Write buffered content to the terminal (called when selection clears). */
 function _flushPending() {
     if (_pendingContent !== null && terminal) {
-        terminal.reset();
-        terminal.write(_pendingContent.replace(/\n/g, '\r\n'));
+        const converted = _pendingContent.replace(/\n/g, '\r\n');
+        terminal.write('\x1b[2J\x1b[H' + converted);
         if (state.autoScroll) {
             terminal.scrollToBottom();
         }
@@ -109,6 +109,15 @@ export function createTerminal(containerEl) {
         const keys = _xtermKeyMap[ev.key];
         if (keys && state.currentSession && state.currentSession.type === "live") {
             ev.preventDefault();
+            // Clear selection state so buffered updates flush immediately.
+            // The user is done selecting if they're pressing keys.
+            if (_xtermSelecting) {
+                terminal.clearSelection();
+                _xtermSelecting = false;
+                state.isSelecting = false;
+                _setPauseBadge(false);
+                _flushPending();
+            }
             sendRawKeys(keys);
             return false;  // prevent xterm from handling it
         }
@@ -151,9 +160,11 @@ export function connectTerminalWs(name, agentType, sessionId) {
                 _pendingContent = data.content;
                 return;
             }
-            terminal.reset();
-            // tmux outputs \n but xterm.js needs \r\n for proper line breaks
-            terminal.write(data.content.replace(/\n/g, '\r\n'));
+            // Overwrite in-place: cursor home + content + clear remainder.
+            // This avoids the flicker caused by reset() which visibly
+            // clears the screen before the new content is drawn.
+            const converted = data.content.replace(/\n/g, '\r\n');
+            terminal.write('\x1b[2J\x1b[H' + converted);
             if (state.autoScroll) {
                 terminal.scrollToBottom();
             }
@@ -214,6 +225,10 @@ export function fitTerminal() {
     if (fitAddon) {
         fitAddon.fit();
     }
+}
+
+export function getTerminalCols() {
+    return terminal ? terminal.cols : null;
 }
 
 export function getTerminal() {
