@@ -4,6 +4,7 @@ import { state, sessionKey } from './state.js';
 import { escapeHtml, escapeAttr, showToast } from './utils.js';
 import { stopCaptureRefresh } from './capture.js';
 import { renderLiveSessions } from './render.js';
+import { loadAgentEvents, renderEventTimeline } from './agentic_state.js';
 
 // Attached image paths (cleared on send)
 const pendingAttachments = [];
@@ -301,6 +302,11 @@ export async function confirmRestart() {
                 state.currentSession.name = result.agent_name;
                 document.getElementById("session-name").textContent = result.agent_name;
             }
+            // Clear activity data immediately so the UI shows zero for the new session
+            state.currentAgentEvents = [];
+            renderEventTimeline();
+            // Reload events for the new session_id
+            loadAgentEvents(state.currentSession.name, state.currentSession.session_id);
             showToast(`Restarted: ${state.currentSession.name}`);
         }
     } catch (e) {

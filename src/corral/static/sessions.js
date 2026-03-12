@@ -95,6 +95,8 @@ export async function selectLiveSession(name, agentType, sessionId) {
     // Reset live history and start capture/terminal
     resetLiveHistory();
     const mode = getRendererMode(agentType, sessionId);
+    // Always start capture refresh — it polls tasks and events for any mode
+    startCaptureRefresh();
     if (mode === "xterm" && typeof Terminal !== 'undefined') {
         document.getElementById("pane-capture").style.display = "none";
         const container = document.getElementById("xterm-container");
@@ -107,7 +109,6 @@ export async function selectLiveSession(name, agentType, sessionId) {
         document.getElementById("pane-capture").style.display = "";
         disposeTerminal();
         resetSyncedCols();
-        startCaptureRefresh();
     }
 
     // Sync tmux pane width to match browser display after layout settles
