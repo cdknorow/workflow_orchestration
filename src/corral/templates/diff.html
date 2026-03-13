@@ -86,6 +86,34 @@
             border-color: var(--accent);
         }
 
+        .diff-toolbar button:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+        .diff-toolbar button:disabled:hover {
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+        }
+
+        .diff-nav-group {
+            display: flex;
+            gap: 2px;
+        }
+
+        .diff-nav-group button {
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .diff-file-counter {
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 0 6px;
+            align-self: center;
+            white-space: nowrap;
+        }
+
         .diff-loading {
             display: flex;
             align-items: center;
@@ -281,6 +309,11 @@
         <img src="/static/corral.png" alt="Corral" class="diff-header-icon">
         <div class="diff-filepath" id="diff-filepath">Loading...</div>
         <div class="diff-toolbar">
+            <div class="diff-nav-group" id="diff-nav" style="display:none">
+                <button id="btn-prev" onclick="navigateDiff(-1)" title="Previous file (←)">&larr;</button>
+                <span class="diff-file-counter" id="diff-counter"></span>
+                <button id="btn-next" onclick="navigateDiff(1)" title="Next file (→)">&rarr;</button>
+            </div>
             <button id="btn-unified" onclick="setViewMode('line-by-line')">Unified</button>
             <button id="btn-split" class="active" onclick="setViewMode('side-by-side')">Split</button>
             <button id="btn-refresh" onclick="refreshDiff()" title="Refresh diff">&#x21bb;</button>
@@ -294,10 +327,42 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const agentName = params.get('agent');
-        const filepath = params.get('file');
+        let filepath = params.get('file');
         const sessionId = params.get('session_id');
+        const fileListRaw = params.get('files') || '';
+        const fileList = fileListRaw ? fileListRaw.split('\n').filter(Boolean) : [];
+        let currentIndex = fileList.indexOf(filepath);
         let viewMode = 'side-by-side';
         let lastDiff = '';
+
+        function initNav() {
+            if (fileList.length <= 1) return;
+            document.getElementById('diff-nav').style.display = 'flex';
+            updateNav();
+        }
+
+        function updateNav() {
+            const prev = document.getElementById('btn-prev');
+            const next = document.getElementById('btn-next');
+            const counter = document.getElementById('diff-counter');
+            prev.disabled = currentIndex <= 0;
+            next.disabled = currentIndex >= fileList.length - 1;
+            counter.textContent = (currentIndex + 1) + ' / ' + fileList.length;
+        }
+
+        function navigateDiff(delta) {
+            const newIndex = currentIndex + delta;
+            if (newIndex < 0 || newIndex >= fileList.length) return;
+            currentIndex = newIndex;
+            filepath = fileList[currentIndex];
+            // Update URL without reload
+            const newParams = new URLSearchParams(window.location.search);
+            newParams.set('file', filepath);
+            history.replaceState(null, '', '?' + newParams.toString());
+            updateTitle();
+            updateNav();
+            loadDiff();
+        }
 
         function splitPath(fp) {
             const i = fp.lastIndexOf('/');
@@ -426,7 +491,15 @@
         });
 
         updateTitle();
+        initNav();
         loadDiff();
+
+        // Keyboard shortcuts: left/right arrow for prev/next
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); navigateDiff(-1); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); navigateDiff(1); }
+        });
 
         // Auto-refresh every 10 seconds
         setInterval(loadDiff, 10000);

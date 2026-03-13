@@ -60,9 +60,13 @@ export function openFileDiff(filepath) {
     const agentName = state.currentSession.name;
     const sessionId = state.currentSession.session_id;
 
+    // Build the file list for prev/next navigation
+    const fileList = _currentFiles.map(f => f.filepath);
+
     const qs = new URLSearchParams({
         agent: agentName,
         file: filepath,
+        files: fileList.join('\n'),
     });
     if (sessionId) qs.set('session_id', sessionId);
 
@@ -73,7 +77,7 @@ export function openFileDiff(filepath) {
 
     window.open(
         `/diff?${qs}`,
-        `diff-${filepath}`,
+        'corral-diff',
         `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`,
     );
 }
