@@ -18,6 +18,7 @@ import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown
 import { loadSessionCommits } from './commits.js';
 import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle } from './tasks.js';
 import { loadChangedFiles, openFileDiff, refreshChangedFiles } from './changed_files.js';
+import { initFileMention } from './file_mention.js';
 import { loadAgentNotes, initNotesMd } from './agent_notes.js';
 import { switchAgenticTab, loadAgentEvents, toggleEventFilter, toggleAllEventFilters, toggleFilterDropdown, showFilterPopup, hideFilterPopup } from './agentic_state.js';
 import { toggleHistoryEventFilter, toggleAllHistoryEventFilters } from './history_tabs.js';
@@ -384,6 +385,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Image drag-and-drop on command pane
     initImageDrop();
+
+    // @file mention autocomplete
+    initFileMention();
 
     // Markdown notes panel: click-to-edit, blur-to-save
     initNotesMd();

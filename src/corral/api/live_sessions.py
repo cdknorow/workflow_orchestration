@@ -364,6 +364,60 @@ async def get_file_diff(name: str, filepath: str = Query(...), session_id: str |
     return {"filepath": filepath, "diff": diff_text, "working_directory": workdir}
 
 
+@router.get("/api/sessions/live/{name}/search-files")
+async def search_files(name: str, q: str = Query(""), session_id: str | None = None):
+    """Search for files in the agent's working directory by name fragment."""
+    from corral.tools.utils import run_cmd
+
+    # Resolve working directory
+    workdir = None
+    pane = await _find_pane(name, None, session_id=session_id)
+    if pane:
+        workdir = pane.get("current_path")
+    if not workdir:
+        git = None
+        if session_id:
+            git = await store.get_latest_git_state_by_session(session_id)
+        if not git:
+            git = await store.get_latest_git_state(name)
+        if git:
+            workdir = git.get("working_directory")
+    if not workdir:
+        return {"files": []}
+
+    # Use git ls-files for tracked files, falling back to find
+    query = q.strip().lower()
+    rc, stdout, _ = await run_cmd(
+        "git", "-C", workdir, "ls-files", "--cached", "--others", "--exclude-standard",
+        timeout=10.0,
+    )
+    if rc != 0 or stdout is None:
+        return {"files": []}
+
+    all_files = stdout.strip().split("\n") if stdout.strip() else []
+
+    if not query:
+        # Return first 50 files when no query
+        return {"files": all_files[:50]}
+
+    # Score matches: basename match is better than path-only match
+    import os
+    scored = []
+    for fp in all_files:
+        fp_lower = fp.lower()
+        basename = os.path.basename(fp_lower)
+        if query in fp_lower:
+            # Prioritize: exact basename match > basename contains > path contains
+            if basename == query:
+                scored.append((0, fp))
+            elif query in basename:
+                scored.append((1, fp))
+            else:
+                scored.append((2, fp))
+    scored.sort(key=lambda x: (x[0], x[1]))
+    return {"files": [s[1] for s in scored[:50]]}
+
+
 @router.get("/api/sessions/live/{name}/git")
 async def get_live_session_git(name: str, limit: int = Query(20, ge=1, le=100), session_id: str | None = None):
     """Return recent git snapshots (commit history) for a live agent."""
