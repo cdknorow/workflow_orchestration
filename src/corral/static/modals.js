@@ -229,7 +229,11 @@ export async function loadSettings() {
         state.settings = s;
 
         // Apply theme from settings
-        applyTheme(s.theme || "dark");
+        if (s.custom_theme) {
+            await applyCustomThemeByName(s.custom_theme);
+        } else {
+            applyTheme(s.theme || "dark");
+        }
     } catch (e) {
         console.error("Failed to load settings:", e);
     }
@@ -257,22 +261,79 @@ export function applyTheme(theme) {
     updateTerminalTheme();
 }
 
+/** Remove all custom CSS variables from inline styles (reset before switching themes) */
+function clearCustomThemeVars() {
+    const style = document.documentElement.style;
+    // Remove any --* properties that were set inline
+    const toRemove = [];
+    for (let i = 0; i < style.length; i++) {
+        const prop = style[i];
+        if (prop.startsWith("--")) toRemove.push(prop);
+    }
+    for (const prop of toRemove) style.removeProperty(prop);
+}
+
+/** Load a custom theme by name: apply its base theme + overlay its CSS variables */
+async function applyCustomThemeByName(name) {
+    try {
+        const resp = await fetch(`/api/themes/${encodeURIComponent(name)}`);
+        const data = await resp.json();
+        if (data.error || !data.theme?.variables) return;
+
+        // Apply the base theme (dark/light)
+        const base = data.theme.base || "dark";
+        applyTheme(base);
+
+        // Overlay custom variables
+        for (const [cssVar, value] of Object.entries(data.theme.variables)) {
+            if (value) document.documentElement.style.setProperty(cssVar, value);
+        }
+
+        // Refresh terminal colors
+        updateTerminalTheme();
+    } catch {
+        // Fall back to default
+    }
+}
+
 // Listen for OS theme changes when in "system" mode
 window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
     const pref = (state.settings && state.settings.theme) || "dark";
     if (pref === "system") applyTheme("system");
 });
 
-export function showSettingsModal() {
+export async function showSettingsModal() {
     const s = state.settings || {};
 
-    // Theme
+    // Theme — populate with built-in options + saved custom themes
     const themeSelect = document.getElementById("settings-theme");
-    if (themeSelect) themeSelect.value = s.theme || "dark";
+    if (themeSelect) {
+        // Fetch saved custom themes
+        let customThemes = [];
+        try {
+            const resp = await fetch("/api/themes");
+            const data = await resp.json();
+            customThemes = data.themes || [];
+        } catch (_) {}
 
-    // Terminal Theme
-    const termThemeSelect = document.getElementById("settings-terminal-theme");
-    if (termThemeSelect) termThemeSelect.value = s.terminal_theme || "dark";
+        // Build options: built-in first, then custom
+        let options = `<option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="system">System</option>`;
+        if (customThemes.length > 0) {
+            options += `<option disabled>──────────</option>`;
+            for (const t of customThemes) {
+                const name = escapeAttr(t.name);
+                const label = escapeHtml(t.name);
+                options += `<option value="custom:${name}">${label}</option>`;
+            }
+        }
+        themeSelect.innerHTML = options;
+
+        // Set current value
+        const currentTheme = s.custom_theme ? `custom:${s.custom_theme}` : (s.theme || "dark");
+        themeSelect.value = currentTheme;
+    }
 
     // Default Render Engine
     const currentEngine = s.default_renderer || "block-group";
@@ -305,16 +366,25 @@ export function hideSettingsModal() {
 }
 
 export async function applySettings() {
-    const theme = document.getElementById("settings-theme")?.value || "dark";
-    const terminalTheme = document.getElementById("settings-terminal-theme")?.value || "dark";
+    const themeValue = document.getElementById("settings-theme")?.value || "dark";
     const engineName = document.getElementById("settings-renderer-select").value;
     const agentType = document.getElementById("settings-agent-type")?.value || "claude";
     const workingDir = document.getElementById("settings-working-dir")?.value.trim() || "";
     const fitPaneWidth = document.getElementById("settings-fit-pane-width")?.checked || false;
 
+    // Parse theme selection — "custom:<name>" or built-in "dark"/"light"/"system"
+    let theme, customTheme;
+    if (themeValue.startsWith("custom:")) {
+        customTheme = themeValue.slice(7);
+        theme = "dark"; // will be overridden by the custom theme's base
+    } else {
+        theme = themeValue;
+        customTheme = "";
+    }
+
     const payload = {
         theme: theme,
-        terminal_theme: terminalTheme,
+        custom_theme: customTheme,
         default_renderer: engineName,
         default_agent_type: agentType,
         default_working_dir: workingDir,
@@ -329,8 +399,16 @@ export async function applySettings() {
         });
         state.settings = { ...state.settings, ...payload };
 
-        // Apply theme immediately
-        applyTheme(theme);
+        // Clear any previously applied custom CSS variables
+        clearCustomThemeVars();
+
+        if (customTheme) {
+            // Load and apply the custom theme (sets base + variables)
+            await applyCustomThemeByName(customTheme);
+        } else {
+            // Apply built-in theme
+            applyTheme(theme);
+        }
 
         // If a live session is selected, force re-render with new default
         if (state.currentSession?.session_id) {

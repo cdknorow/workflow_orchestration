@@ -30,7 +30,7 @@ import {
     testWebhook, showWebhookHistory,
 } from './webhooks.js';
 import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
-import { showThemeConfigurator, hideThemeConfigurator, loadCustomTheme } from './theme_config.js';
+import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -231,7 +231,7 @@ function syncFilterDomToState() {
 
 // ── Initialization ────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-    loadSettings().then(() => loadCustomTheme());
+    loadSettings();
 
     // Restore filter state from URL query params before first load
     const restored = deserializeFromUrl();
