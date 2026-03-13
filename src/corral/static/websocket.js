@@ -5,6 +5,7 @@ import { renderLiveSessions, updateSessionStatus, updateSessionSummary, updateSe
 import { renderLiveJobs } from './live_jobs.js';
 import { updateChangedFileCount } from './changed_files.js';
 import { updateSectionVisibility } from './sidebar.js';
+import { showNotificationToast, escapeHtml } from './utils.js';
 
 export function connectCorralWs() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -15,6 +16,24 @@ export function connectCorralWs() {
     state.corralWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "corral_update") {
+            // Detect sessions that just transitioned to "needs input"
+            for (const s of data.sessions) {
+                const id = s.session_id || s.name;
+                const wasWaiting = state.prevWaitingState[id];
+                const notifyEnabled = state.settings.notify_needs_input !== false;
+                if (notifyEnabled && s.waiting_for_input && s.waiting_reason !== "stop" && !wasWaiting) {
+                    const label = escapeHtml(s.display_name || s.name);
+                    const detail = s.waiting_summary ? escapeHtml(s.waiting_summary) : null;
+                    const sessionName = s.name;
+                    const agentType = s.agent_type;
+                    const sessionId = s.session_id;
+                    showNotificationToast(label, detail, () => {
+                        import('./sessions.js').then(m => m.selectLiveSession(sessionName, agentType, sessionId));
+                    });
+                }
+                state.prevWaitingState[id] = s.waiting_for_input && s.waiting_reason !== "stop";
+            }
+
             state.liveSessions = data.sessions;
             renderLiveSessions(data.sessions);
 

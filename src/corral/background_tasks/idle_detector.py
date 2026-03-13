@@ -46,7 +46,8 @@ class IdleDetector:
         for agent in agents:
             name = agent["agent_name"]
             sid = agent.get("session_id")
-            latest_ev = latest_events.get(sid) if sid else None
+            ev_tuple = latest_events.get(sid) if sid else None
+            latest_ev = ev_tuple[0] if ev_tuple else None
             waiting = latest_ev in ("stop", "notification")
 
             if not waiting:

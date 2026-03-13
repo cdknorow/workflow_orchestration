@@ -35,7 +35,7 @@ async def test_stop_event_detected(store):
     await store.insert_agent_event("agent1", "stop", "Agent stopped: end_turn", session_id="sess-1")
 
     result = await store.get_latest_event_types(["sess-1"])
-    assert result["sess-1"] == "stop"
+    assert result["sess-1"] == ("stop", "Agent stopped: end_turn")
 
 
 @pytest.mark.asyncio
@@ -45,7 +45,7 @@ async def test_tool_use_clears_waiting(store):
     await store.insert_agent_event("agent1", "tool_use", "Used Read", tool_name="Read", session_id="sess-1")
 
     result = await store.get_latest_event_types(["sess-1"])
-    assert result["sess-1"] == "tool_use"
+    assert result["sess-1"] == ("tool_use", "Used Read")
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,7 @@ async def test_status_goal_events_ignored(store):
     await store.insert_agent_event("agent1", "goal", "Some goal", session_id="sess-1")
 
     result = await store.get_latest_event_types(["sess-1"])
-    assert result["sess-1"] == "stop"
+    assert result["sess-1"] == ("stop", "Agent stopped: end_turn")
 
 
 @pytest.mark.asyncio
@@ -72,8 +72,8 @@ async def test_multiple_sessions(store):
     await store.insert_agent_event("agent2", "tool_use", "Used Bash", tool_name="Bash", session_id="sess-2")
 
     result = await store.get_latest_event_types(["sess-1", "sess-2"])
-    assert result["sess-1"] == "stop"
-    assert result["sess-2"] == "tool_use"
+    assert result["sess-1"] == ("stop", "Agent stopped: end_turn")
+    assert result["sess-2"] == ("tool_use", "Used Bash")
 
 
 @pytest.mark.asyncio
@@ -83,4 +83,4 @@ async def test_notification_event(store):
     await store.insert_agent_event("agent1", "notification", "Some notification", session_id="sess-1")
 
     result = await store.get_latest_event_types(["sess-1"])
-    assert result["sess-1"] == "notification"
+    assert result["sess-1"] == ("notification", "Some notification")

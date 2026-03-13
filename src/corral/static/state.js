@@ -15,6 +15,7 @@ export const state = {
     currentAgentEvents: [],     // events for the currently selected live agent
     eventFiltersHidden: null,   // Set of hidden filter keys (lazily initialized)
     settings: {},               // cached global user settings from /api/settings
+    prevWaitingState: {},       // tracks previous waiting_for_input per session_id for toast notifications
 };
 
 export function sessionKey(session) {

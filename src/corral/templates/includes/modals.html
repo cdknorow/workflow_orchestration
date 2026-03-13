@@ -138,13 +138,16 @@
                 <dd>
                     <input type="text" id="settings-working-dir" class="settings-input" data-corral-root="{{ corral_root }}" placeholder="{{ corral_root }}">
                 </dd>
-                <dt>Fit Pane Width</dt>
-                <dd>
-                    <label class="toggle-label">
-                        <input type="checkbox" id="settings-fit-pane-width">
-                        <span>Auto-resize tmux pane to match browser width</span>
-                    </label>
-                </dd>
+                <dt class="toggle-dt">
+                    <label for="settings-fit-pane-width">Fit Pane Width</label>
+                    <span class="toggle-desc">Auto-resize tmux pane to match browser width</span>
+                </dt>
+                <dd><input type="checkbox" id="settings-fit-pane-width"></dd>
+                <dt class="toggle-dt">
+                    <label for="settings-notify-needs-input">Notifications</label>
+                    <span class="toggle-desc">Show toast when an agent needs input</span>
+                </dt>
+                <dd><input type="checkbox" id="settings-notify-needs-input"></dd>
             </dl>
             <div class="modal-actions">
                 <button class="btn" onclick="hideSettingsModal()">Cancel</button>

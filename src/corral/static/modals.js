@@ -226,6 +226,12 @@ export async function loadSettings() {
         if (s.fit_pane_width === undefined) {
             s.fit_pane_width = true;
         }
+        if (typeof s.notify_needs_input === "string") {
+            s.notify_needs_input = s.notify_needs_input === "True";
+        }
+        if (s.notify_needs_input === undefined) {
+            s.notify_needs_input = true;
+        }
         state.settings = s;
 
         // Apply theme from settings
@@ -358,6 +364,10 @@ export async function showSettingsModal() {
     const fitPaneCheck = document.getElementById("settings-fit-pane-width");
     if (fitPaneCheck) fitPaneCheck.checked = !!s.fit_pane_width;
 
+    // Notify Needs Input
+    const notifyCheck = document.getElementById("settings-notify-needs-input");
+    if (notifyCheck) notifyCheck.checked = !!s.notify_needs_input;
+
     document.getElementById("settings-modal").style.display = "flex";
 }
 
@@ -371,6 +381,7 @@ export async function applySettings() {
     const agentType = document.getElementById("settings-agent-type")?.value || "claude";
     const workingDir = document.getElementById("settings-working-dir")?.value.trim() || "";
     const fitPaneWidth = document.getElementById("settings-fit-pane-width")?.checked || false;
+    const notifyNeedsInput = document.getElementById("settings-notify-needs-input")?.checked || false;
 
     // Parse theme selection — "custom:<name>" or built-in "dark"/"light"/"system"
     let theme, customTheme;
@@ -389,6 +400,7 @@ export async function applySettings() {
         default_agent_type: agentType,
         default_working_dir: workingDir,
         fit_pane_width: fitPaneWidth,
+        notify_needs_input: notifyNeedsInput,
     };
 
     try {

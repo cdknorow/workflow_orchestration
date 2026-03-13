@@ -103,7 +103,9 @@ async def get_live_sessions():
         fc = file_counts.get(sid) if sid else None
         if fc is None:
             fc = file_counts.get(name, 0)
-        latest_ev = latest_events.get(sid) if sid else None
+        latest_ev_tuple = latest_events.get(sid) if sid else None
+        latest_ev = latest_ev_tuple[0] if latest_ev_tuple else None
+        latest_ev_summary = latest_ev_tuple[1] if latest_ev_tuple else None
         waiting = latest_ev in ("stop", "notification")
         working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
         # Use log summary, fall back to latest goal event from DB
@@ -125,6 +127,7 @@ async def get_live_sessions():
             "working_directory": agent.get("working_directory", ""),
             "waiting_for_input": waiting,
             "waiting_reason": latest_ev if waiting else None,
+            "waiting_summary": latest_ev_summary if waiting else None,
             "working": working,
             "changed_file_count": fc,
         }
@@ -768,7 +771,9 @@ async def ws_corral(websocket: WebSocket):
                 ws_fc = ws_file_counts.get(sid) if sid else None
                 if ws_fc is None:
                     ws_fc = ws_file_counts.get(name, 0)
-                latest_ev = ws_latest_events.get(sid) if sid else None
+                ws_ev_tuple = ws_latest_events.get(sid) if sid else None
+                latest_ev = ws_ev_tuple[0] if ws_ev_tuple else None
+                ws_ev_summary = ws_ev_tuple[1] if ws_ev_tuple else None
                 waiting = latest_ev in ("stop", "notification")
                 working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
                 ws_summary = log_info["summary"]
@@ -787,6 +792,7 @@ async def ws_corral(websocket: WebSocket):
                     "working_directory": agent.get("working_directory", ""),
                     "waiting_for_input": waiting,
                     "waiting_reason": latest_ev if waiting else None,
+                    "waiting_summary": ws_ev_summary if waiting else None,
                     "working": working,
                     "changed_file_count": ws_fc,
                 })

@@ -235,24 +235,24 @@ class TaskStore(DatabaseManager):
             )).fetchall()
         return [{"tool_name": r["tool_name"], "count": r["count"]} for r in rows]
 
-    async def get_latest_event_types(self, session_ids: list[str]) -> dict[str, str]:
-        """Return the latest event_type for each session_id (excluding status/goal/confidence)."""
+    async def get_latest_event_types(self, session_ids: list[str]) -> dict[str, tuple[str, str]]:
+        """Return the latest (event_type, summary) for each session_id (excluding status/goal/confidence)."""
         if not session_ids:
             return {}
         conn = await self._get_conn()
         placeholders = ",".join("?" for _ in session_ids)
         rows = await (await conn.execute(
-            f"SELECT session_id, event_type FROM agent_events "
+            f"SELECT session_id, event_type, summary FROM agent_events "
             f"WHERE session_id IN ({placeholders}) "
             f"AND event_type NOT IN ('status', 'goal', 'confidence') "
             f"ORDER BY created_at DESC",
             session_ids,
         )).fetchall()
-        result: dict[str, str] = {}
+        result: dict[str, tuple[str, str]] = {}
         for r in rows:
             sid = r["session_id"]
             if sid not in result:
-                result[sid] = r["event_type"]
+                result[sid] = (r["event_type"], r["summary"] or "")
         return result
 
     async def get_latest_goals(self, session_ids: list[str]) -> dict[str, str]:

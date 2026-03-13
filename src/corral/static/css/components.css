@@ -267,6 +267,28 @@
     gap: 8px;
 }
 
+.info-grid dt.toggle-dt {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    white-space: normal;
+    align-self: start;
+}
+
+.info-grid dt.toggle-dt + dd {
+    justify-content: flex-end;
+    align-self: start;
+    padding-top: 1px;
+}
+
+.info-grid dt.toggle-dt .toggle-desc {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-weight: 400;
+    line-height: 1.3;
+    margin-top: -2px;
+}
+
 .info-grid dd code {
     background: var(--bg-tertiary);
     padding: 2px 8px;
@@ -312,6 +334,84 @@
 .toast.error {
     border-color: var(--error);
     color: var(--error);
+}
+
+/* ── Notification Toast (top-right, larger) ───────────────── */
+
+.notification-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--warning, #f0ad4e);
+    border-left: 4px solid var(--warning, #f0ad4e);
+    border-radius: 10px;
+    padding: 0;
+    font-size: 14px;
+    color: var(--text-primary);
+    z-index: 300;
+    min-width: 300px;
+    max-width: 420px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    animation: slideInFromTop 0.3s ease, fadeOut 0.3s ease 9.7s;
+    overflow: hidden;
+}
+
+.notification-toast-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+}
+
+.notification-toast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notification-toast-title {
+    font-size: 14px;
+}
+
+.notification-toast-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+}
+
+.notification-toast-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.notification-toast-link:hover {
+    text-decoration: underline;
+}
+
+.notification-toast-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 0 0 8px;
+    line-height: 1;
+}
+
+.notification-toast-close:hover {
+    color: var(--text-primary);
+}
+
+@keyframes slideInFromTop {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 /* ── Tooltips ──────────────────────────────────────────────── */
