@@ -137,88 +137,122 @@
 
         .d2h-code-line,
         .d2h-code-side-line {
-            background: var(--bg-primary) !important;
+            background: #0d1117 !important;
             color: var(--text-primary) !important;
             font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace !important;
             font-size: 12px !important;
             padding: 0 10px !important;
         }
 
+
         .d2h-code-line-prefix {
-            color: var(--text-muted) !important;
-            user-select: none;
+            display: none !important;
         }
 
-        /* Addition lines */
-        .d2h-ins, .d2h-ins .d2h-code-side-line, .d2h-ins .d2h-code-line {
-            background: rgba(63, 185, 80, 0.1) !important;
-        }
-
-        .d2h-ins .d2h-code-line-prefix {
-            color: var(--success) !important;
-        }
-
-        ins {
-            background: rgba(63, 185, 80, 0.25) !important;
-            text-decoration: none !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* Deletion lines */
-        .d2h-del, .d2h-del .d2h-code-side-line, .d2h-del .d2h-code-line {
-            background: rgba(248, 81, 73, 0.1) !important;
-        }
-
-        .d2h-del .d2h-code-line-prefix {
-            color: var(--error) !important;
-        }
-
-        del {
-            background: rgba(248, 81, 73, 0.25) !important;
-            text-decoration: none !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* Line numbers */
+        /* Line numbers — default (context lines) */
         .d2h-code-linenumber, .d2h-code-side-linenumber {
-            background: var(--bg-secondary) !important;
+            background: #161b22 !important;
             color: var(--text-muted) !important;
             border-right: 1px solid var(--border) !important;
+            border-left: none !important;
             font-size: 11px !important;
             user-select: none;
         }
 
+        /* Addition lines — opaque colors to prevent dark bleed-through */
+        .d2h-ins,
+        .d2h-ins td,
+        .d2h-ins .d2h-code-side-line,
+        .d2h-ins .d2h-code-line,
+        .d2h-ins .d2h-code-linenumber,
+        .d2h-ins .d2h-code-side-linenumber,
+        .d2h-ins .d2h-emptyplaceholder {
+            background: #1a3326 !important;
+        }
+
         .d2h-ins .d2h-code-linenumber,
         .d2h-ins .d2h-code-side-linenumber {
-            background: rgba(63, 185, 80, 0.12) !important;
+            background: #1c3828 !important;
             color: var(--success) !important;
+        }
+
+        ins {
+            background: #264d35 !important;
+            text-decoration: none !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Deletion lines — opaque colors */
+        .d2h-del,
+        .d2h-del td,
+        .d2h-del .d2h-code-side-line,
+        .d2h-del .d2h-code-line,
+        .d2h-del .d2h-code-linenumber,
+        .d2h-del .d2h-code-side-linenumber,
+        .d2h-del .d2h-emptyplaceholder {
+            background: #331a1f !important;
         }
 
         .d2h-del .d2h-code-linenumber,
         .d2h-del .d2h-code-side-linenumber {
-            background: rgba(248, 81, 73, 0.12) !important;
+            background: #381c22 !important;
             color: var(--error) !important;
+        }
+
+        del {
+            background: #4d262d !important;
+            text-decoration: none !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Empty placeholder rows (opposite side of side-by-side additions/deletions) */
+        .d2h-emptyplaceholder,
+        .d2h-code-side-emptyplaceholder,
+        tr.d2h-ins .d2h-emptyplaceholder,
+        tr.d2h-del .d2h-emptyplaceholder {
+            background: #151b22 !important;
         }
 
         /* Hunk headers */
         .d2h-info {
-            background: rgba(88, 166, 255, 0.08) !important;
+            background: #111a24 !important;
             color: var(--accent) !important;
             border: none !important;
+            padding: 6px 12px !important;
         }
 
         .d2h-code-line-ctn {
             color: var(--text-primary) !important;
+            padding-left: 8px !important;
         }
 
-        /* Table layout */
+        /* Line number columns — ensure they don't overlap code */
+        .d2h-code-linenumber, .d2h-code-side-linenumber {
+            min-width: 40px !important;
+            padding: 0 8px !important;
+            text-align: right !important;
+        }
+
+        /* Table layout — nuke every possible line between rows */
         .d2h-diff-table {
             font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace !important;
             border-collapse: collapse !important;
+            border-spacing: 0 !important;
+            background: #0d1117 !important;
         }
 
-        .d2h-diff-tbody tr {
+        .d2h-diff-table *,
+        .d2h-diff-table *::before,
+        .d2h-diff-table *::after {
             border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Only the line-number gutter gets a right border */
+        .d2h-code-linenumber,
+        .d2h-code-side-linenumber {
+            border-right: 1px solid var(--border) !important;
         }
 
         .d2h-file-diff {
