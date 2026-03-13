@@ -344,6 +344,21 @@
         async function refreshDiff() {
             const btn = document.getElementById('btn-refresh');
             btn.classList.add('refreshing');
+
+            // Also trigger backend file refresh so the main file list stays in sync
+            try {
+                const body = {};
+                if (sessionId) body.session_id = sessionId;
+                fetch(
+                    '/api/sessions/live/' + encodeURIComponent(agentName) + '/files/refresh',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    }
+                );
+            } catch (e) { /* best-effort */ }
+
             await loadDiff();
             setTimeout(() => btn.classList.remove('refreshing'), 300);
         }

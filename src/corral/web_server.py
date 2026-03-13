@@ -84,8 +84,9 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     tasks_api.scheduler = scheduler
 
-    # Store indexer on app state so endpoints can trigger refresh
+    # Store indexer and git poller on app state so endpoints can trigger refresh
     app.state.indexer = indexer
+    app.state.git_poller = git_poller
 
     app.state.webhook_dispatcher = dispatcher
 

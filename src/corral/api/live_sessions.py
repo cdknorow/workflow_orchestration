@@ -216,6 +216,92 @@ async def get_live_session_files(name: str, session_id: str | None = None):
     return {"agent_name": name, "files": files}
 
 
+@router.post("/api/sessions/live/{name}/files/refresh")
+async def refresh_live_session_files(name: str, body: dict | None = None):
+    """Run fresh git queries and merge agent Write/Edit events for immediate file visibility."""
+    from corral.tools.utils import run_cmd
+    import os
+
+    session_id = (body or {}).get("session_id")
+
+    # Resolve working directory from tmux pane or DB
+    workdir = None
+    pane = await _find_pane(name, None, session_id=session_id)
+    if pane:
+        workdir = pane.get("current_path")
+    if not workdir:
+        git = None
+        if session_id:
+            git = await store.get_latest_git_state_by_session(session_id)
+        if not git:
+            git = await store.get_latest_git_state(name)
+        if git:
+            workdir = git.get("working_directory")
+    if not workdir:
+        return {"error": "Could not determine working directory", "files": []}
+
+    # Run git queries directly
+    from corral.background_tasks.git_poller import GitPoller
+    poller = GitPoller(store)
+    changed_files = await poller._query_changed_files(workdir)
+
+    # Build a map for merging
+    file_map = {f["filepath"]: f for f in changed_files}
+
+    # Merge in files from agent events (Write/Edit tool uses) that git may
+    # not know about yet (e.g. new files in new directories)
+    events = await store.list_agent_events(name, limit=200, session_id=session_id)
+    for ev in events:
+        if ev.get("tool_name") not in ("Write", "Edit"):
+            continue
+        detail = ev.get("detail_json")
+        if not detail:
+            continue
+        try:
+            d = json.loads(detail) if isinstance(detail, str) else detail
+            fp = d.get("file_path", "")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not fp:
+            continue
+
+        # Convert absolute path to relative path from workdir
+        try:
+            rel = os.path.relpath(fp, workdir)
+        except ValueError:
+            continue
+        # Skip paths outside the workdir
+        if rel.startswith(".."):
+            continue
+
+        if rel not in file_map:
+            # Count lines for new files
+            additions = 0
+            if os.path.isfile(fp):
+                try:
+                    with open(fp, "r", errors="replace") as f:
+                        additions = sum(1 for _ in f)
+                except Exception:
+                    pass
+            file_map[rel] = {
+                "filepath": rel,
+                "additions": additions,
+                "deletions": 0,
+                "status": "??",
+            }
+
+    # Also update the DB cache so the sidebar count stays in sync
+    files_list = list(file_map.values())
+    await store.replace_changed_files(
+        agent_name=name,
+        working_directory=workdir,
+        files=files_list,
+        session_id=session_id,
+    )
+
+    return {"agent_name": name, "files": files_list}
+
+
 @router.get("/api/sessions/live/{name}/diff")
 async def get_file_diff(name: str, filepath: str = Query(...), session_id: str | None = None):
     """Return the unified diff for a single file in the agent's working tree."""

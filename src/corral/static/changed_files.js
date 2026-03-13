@@ -82,7 +82,34 @@ export async function refreshChangedFiles() {
     if (!state.currentSession || state.currentSession.type !== 'live') return;
     const btn = document.querySelector('.refresh-files-btn');
     if (btn) btn.classList.add('refreshing');
-    await loadChangedFiles(state.currentSession.name, state.currentSession.session_id);
+
+    const agentName = state.currentSession.name;
+    const sessionId = state.currentSession.session_id;
+
+    try {
+        const body = {};
+        if (sessionId) body.session_id = sessionId;
+        const resp = await fetch(
+            `/api/sessions/live/${encodeURIComponent(agentName)}/files/refresh`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }
+        );
+
+        if (resp.ok) {
+            const data = await resp.json();
+            _currentFiles = data.files || [];
+            renderChangedFiles();
+        } else {
+            // Fall back to cached data
+            await loadChangedFiles(agentName, sessionId);
+        }
+    } catch (e) {
+        await loadChangedFiles(agentName, sessionId);
+    }
+
     if (btn) setTimeout(() => btn.classList.remove('refreshing'), 300);
 }
 

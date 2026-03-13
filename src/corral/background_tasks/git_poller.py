@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -120,15 +121,64 @@ class GitPoller:
         except (asyncio.TimeoutError, OSError, FileNotFoundError):
             return None
 
+    async def _get_diff_base(self, workdir: str) -> str:
+        """Return the base ref to diff against.
+
+        On a feature branch: merge-base with main/master (shows all branch work).
+        On the default branch (or merge-base fails): HEAD (shows changes since last commit).
+        """
+        # Detect current branch
+        rc, branch, _ = await run_cmd(
+            "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD", timeout=5.0,
+        )
+        current_branch = branch.strip() if rc == 0 else ""
+
+        # If we're not on a default branch, try to find the merge-base
+        if current_branch not in ("main", "master", "HEAD", ""):
+            for base_branch in ("main", "master"):
+                rc, stdout, _ = await run_cmd(
+                    "git", "-C", workdir, "merge-base", base_branch, "HEAD", timeout=5.0,
+                )
+                if rc == 0 and stdout:
+                    return stdout.strip()
+
+        # On the default branch or merge-base unavailable — diff against HEAD
+        # (shows only uncommitted changes since the last commit)
+        return "HEAD"
+
+    async def _get_base_timestamp(self, workdir: str, base_ref: str) -> float:
+        """Get the unix timestamp of the base ref commit.
+
+        Used to filter out untracked files that existed before the base point.
+        """
+        rc, stdout, _ = await run_cmd(
+            "git", "-C", workdir, "log", "-1", "--format=%ct", base_ref, timeout=5.0,
+        )
+        if rc == 0 and stdout:
+            try:
+                return float(stdout.strip())
+            except ValueError:
+                pass
+        return 0.0
+
     async def _query_changed_files(self, workdir: str) -> list[dict[str, Any]]:
-        """Query git for changed files in the working tree (staged + unstaged)."""
-        files: list[dict[str, Any]] = {}  # type: ignore[assignment]
+        """Query git for files changed relative to a smart base ref.
+
+        On a feature branch: shows all changes since the branch diverged from main.
+        On main/master: shows only changes since the last commit.
+        Untracked files are only included if they were created after the base
+        commit timestamp, so pre-existing untracked files don't pollute the list.
+        """
         file_map: dict[str, dict[str, Any]] = {}
 
         try:
-            # git diff --numstat for unstaged changes (additions/deletions)
+            base = await self._get_diff_base(workdir)
+            base_ts = await self._get_base_timestamp(workdir, base)
+
+            # Diff from base to working tree — captures committed (on branch) +
+            # staged + unstaged changes in one shot.
             rc, stdout, _ = await run_cmd(
-                "git", "-C", workdir, "diff", "--numstat", timeout=5.0,
+                "git", "-C", workdir, "diff", base, "--numstat", timeout=5.0,
             )
             if rc == 0 and stdout:
                 for line in stdout.strip().split("\n"):
@@ -138,34 +188,14 @@ class GitPoller:
                     if len(parts) < 3:
                         continue
                     added, removed, filepath = parts
-                    # Binary files show "-" for counts
                     a = int(added) if added != "-" else 0
                     d = int(removed) if removed != "-" else 0
                     file_map[filepath] = {"filepath": filepath, "additions": a, "deletions": d, "status": "M"}
 
-            # git diff --cached --numstat for staged changes
+            # Untracked files don't appear in git diff, so pick up '??' entries
+            # from git status — but only if they were created after the base commit.
             rc, stdout, _ = await run_cmd(
-                "git", "-C", workdir, "diff", "--cached", "--numstat", timeout=5.0,
-            )
-            if rc == 0 and stdout:
-                for line in stdout.strip().split("\n"):
-                    if not line.strip():
-                        continue
-                    parts = line.split("\t", 2)
-                    if len(parts) < 3:
-                        continue
-                    added, removed, filepath = parts
-                    a = int(added) if added != "-" else 0
-                    d = int(removed) if removed != "-" else 0
-                    if filepath in file_map:
-                        file_map[filepath]["additions"] += a
-                        file_map[filepath]["deletions"] += d
-                    else:
-                        file_map[filepath] = {"filepath": filepath, "additions": a, "deletions": d, "status": "M"}
-
-            # git status --porcelain for status codes and untracked files
-            rc, stdout, _ = await run_cmd(
-                "git", "-C", workdir, "status", "--porcelain", timeout=5.0,
+                "git", "-C", workdir, "status", "--porcelain", "--untracked-files=all", timeout=5.0,
             )
             if rc == 0 and stdout:
                 for line in stdout.strip().split("\n"):
@@ -173,12 +203,20 @@ class GitPoller:
                         continue
                     status_code = line[:2].strip()
                     filepath = line[3:]
-                    # Handle renames: "R  old -> new"
                     if " -> " in filepath:
                         filepath = filepath.split(" -> ", 1)[1]
-                    if filepath not in file_map:
-                        file_map[filepath] = {"filepath": filepath, "additions": 0, "deletions": 0, "status": status_code}
-                    else:
+                    if status_code == "??":
+                        if filepath not in file_map:
+                            # Only include untracked files created after the base commit
+                            full_path = os.path.join(workdir, filepath)
+                            try:
+                                mtime = os.path.getmtime(full_path)
+                            except OSError:
+                                continue
+                            if mtime < base_ts:
+                                continue
+                            file_map[filepath] = {"filepath": filepath, "additions": 0, "deletions": 0, "status": "??"}
+                    elif filepath in file_map:
                         file_map[filepath]["status"] = status_code
 
         except (asyncio.TimeoutError, OSError, FileNotFoundError):
