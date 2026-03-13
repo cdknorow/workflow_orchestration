@@ -30,6 +30,7 @@ import {
     testWebhook, showWebhookHistory,
 } from './webhooks.js';
 import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
+import { showThemeConfigurator, hideThemeConfigurator, loadCustomTheme } from './theme_config.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -120,6 +121,8 @@ window.testWebhook       = testWebhook;
 window.showWebhookHistory = showWebhookHistory;
 window.selectLiveJobRun = selectLiveJobRun;
 window.switchJobsSubtab = switchJobsSubtab;
+window.showThemeConfigurator = showThemeConfigurator;
+window.hideThemeConfigurator = hideThemeConfigurator;
 
 // ── History search/filter/pagination state ───────────────────────────────
 let historyPage = 1;  // page number only; all other filter state lives in filterState
@@ -228,7 +231,7 @@ function syncFilterDomToState() {
 
 // ── Initialization ────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-    loadSettings();
+    loadSettings().then(() => loadCustomTheme());
 
     // Restore filter state from URL query params before first load
     const restored = deserializeFromUrl();

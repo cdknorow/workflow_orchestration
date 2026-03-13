@@ -151,10 +151,14 @@
             </dl>
             <div class="modal-actions">
                 <button class="btn" onclick="hideSettingsModal()">Cancel</button>
+                <button class="btn" onclick="hideSettingsModal(); showThemeConfigurator()">Customize Theme</button>
                 <button class="btn btn-primary" onclick="applySettings()">Apply</button>
             </div>
         </div>
     </div>
+
+    <!-- Theme Configurator Modal (content rendered dynamically) -->
+    <div id="theme-configurator-modal" class="modal" style="display:none"></div>
 
     <!-- Scheduled Job Modal -->
     <div id="job-modal" class="modal" style="display:none">

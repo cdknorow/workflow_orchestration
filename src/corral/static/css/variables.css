@@ -101,6 +101,28 @@
     --topbar-bg: rgba(18, 23, 30, 0.85);
     --topbar-border: rgba(48, 54, 61, 0.6);
 
+    /* Terminal (xterm) */
+    --xterm-background:          #0d1117;
+    --xterm-foreground:          #e6edf3;
+    --xterm-cursor:              #e6edf3;
+    --xterm-selection-background:#264f78;
+    --xterm-black:               #484f58;
+    --xterm-red:                 #f85149;
+    --xterm-green:               #3fb950;
+    --xterm-yellow:              #d29922;
+    --xterm-blue:                #58a6ff;
+    --xterm-magenta:             #bc8cff;
+    --xterm-cyan:                #39d2c0;
+    --xterm-white:               #e6edf3;
+    --xterm-bright-black:        #6e7681;
+    --xterm-bright-red:          #ffa198;
+    --xterm-bright-green:        #56d364;
+    --xterm-bright-yellow:       #e3b341;
+    --xterm-bright-blue:         #79c0ff;
+    --xterm-bright-magenta:      #d2a8ff;
+    --xterm-bright-cyan:         #56d4dd;
+    --xterm-bright-white:        #f0f6fc;
+
     /* Diff2html overrides */
     --d2h-code-bg:        #0d1117;
     --d2h-gutter-bg:      #161b22;
@@ -203,6 +225,28 @@
     /* Top bar */
     --topbar-bg: rgba(236, 237, 240, 0.92);
     --topbar-border: rgba(201, 205, 211, 0.8);
+
+    /* Terminal (xterm) */
+    --xterm-background:          #c8ccd2;
+    --xterm-foreground:          #1f2328;
+    --xterm-cursor:              #1f2328;
+    --xterm-selection-background:#a8c8f0;
+    --xterm-black:               #1f2328;
+    --xterm-red:                 #cf222e;
+    --xterm-green:               #1a7f37;
+    --xterm-yellow:              #9a6700;
+    --xterm-blue:                #0969da;
+    --xterm-magenta:             #8250df;
+    --xterm-cyan:                #1b7c83;
+    --xterm-white:               #59636e;
+    --xterm-bright-black:        #59636e;
+    --xterm-bright-red:          #a40e26;
+    --xterm-bright-green:        #116329;
+    --xterm-bright-yellow:       #7c5600;
+    --xterm-bright-blue:         #0550ae;
+    --xterm-bright-magenta:      #6639ba;
+    --xterm-bright-cyan:         #1b7c83;
+    --xterm-bright-white:        #1f2328;
 
     /* Diff2html overrides */
     --d2h-code-bg:        #f4f5f7;

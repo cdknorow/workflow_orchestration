@@ -8,56 +8,32 @@ let fitAddon = null;
 let terminalWs = null;
 let _selectionDisposable = null;
 
-const XTERM_THEMES = {
-    dark: {
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#e6edf3',
-        selectionBackground: '#264f78',
-        black: '#484f58',
-        red: '#f85149',
-        green: '#3fb950',
-        yellow: '#d29922',
-        blue: '#58a6ff',
-        magenta: '#bc8cff',
-        cyan: '#39d2c0',
-        white: '#e6edf3',
-        brightBlack: '#6e7681',
-        brightRed: '#ffa198',
-        brightGreen: '#56d364',
-        brightYellow: '#e3b341',
-        brightBlue: '#79c0ff',
-        brightMagenta: '#d2a8ff',
-        brightCyan: '#56d4dd',
-        brightWhite: '#f0f6fc',
-    },
-    light: {
-        background: '#c8ccd2',
-        foreground: '#1f2328',
-        cursor: '#1f2328',
-        selectionBackground: '#a8c8f0',
-        black: '#1f2328',
-        red: '#cf222e',
-        green: '#1a7f37',
-        yellow: '#9a6700',
-        blue: '#0969da',
-        magenta: '#8250df',
-        cyan: '#1b7c83',
-        white: '#59636e',
-        brightBlack: '#59636e',
-        brightRed: '#a40e26',
-        brightGreen: '#116329',
-        brightYellow: '#7c5600',
-        brightBlue: '#0550ae',
-        brightMagenta: '#6639ba',
-        brightCyan: '#1b7c83',
-        brightWhite: '#1f2328',
-    },
-};
-
 function _getXtermTheme() {
-    const t = (state.settings && state.settings.terminal_theme) || 'dark';
-    return XTERM_THEMES[t] || XTERM_THEMES.dark;
+    // Read xterm colors from CSS custom properties (set by theme configurator or variables.css)
+    const s = getComputedStyle(document.documentElement);
+    const v = (name) => s.getPropertyValue(name).trim();
+    return {
+        background:          v('--xterm-background')           || '#0d1117',
+        foreground:          v('--xterm-foreground')           || '#e6edf3',
+        cursor:              v('--xterm-cursor')               || '#e6edf3',
+        selectionBackground: v('--xterm-selection-background') || '#264f78',
+        black:               v('--xterm-black')                || '#484f58',
+        red:                 v('--xterm-red')                  || '#f85149',
+        green:               v('--xterm-green')                || '#3fb950',
+        yellow:              v('--xterm-yellow')               || '#d29922',
+        blue:                v('--xterm-blue')                 || '#58a6ff',
+        magenta:             v('--xterm-magenta')              || '#bc8cff',
+        cyan:                v('--xterm-cyan')                 || '#39d2c0',
+        white:               v('--xterm-white')                || '#e6edf3',
+        brightBlack:         v('--xterm-bright-black')         || '#6e7681',
+        brightRed:           v('--xterm-bright-red')           || '#ffa198',
+        brightGreen:         v('--xterm-bright-green')         || '#56d364',
+        brightYellow:        v('--xterm-bright-yellow')        || '#e3b341',
+        brightBlue:          v('--xterm-bright-blue')          || '#79c0ff',
+        brightMagenta:       v('--xterm-bright-magenta')       || '#d2a8ff',
+        brightCyan:          v('--xterm-bright-cyan')          || '#56d4dd',
+        brightWhite:         v('--xterm-bright-white')         || '#f0f6fc',
+    };
 }
 
 /** Update the live terminal theme (called when user switches theme). */
