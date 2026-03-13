@@ -461,7 +461,7 @@
 .session-id-label {
     font-size: 11px;
     color: var(--text-muted);
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 /* ── Jobs Sidebar ──────────────────────────────────────────── */
