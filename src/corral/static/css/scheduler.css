@@ -264,7 +264,7 @@
 .delivery-fail .delivery-status { color: var(--error); }
 .delivery-pending .delivery-status { color: var(--warning); }
 
-.delivery-agent { color: var(--accent); font-family: monospace; font-size: 11px; }
+.delivery-agent { color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
 .delivery-event { color: var(--text-secondary); }
 
 .delivery-summary {
@@ -285,5 +285,5 @@
     color: var(--error);
     font-size: 11px;
     padding-left: 4px;
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
