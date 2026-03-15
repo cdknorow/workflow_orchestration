@@ -90,7 +90,20 @@ def _run_foreground(host: str, port: int) -> None:
     _write_pid()
     atexit.register(_remove_pid)
 
+    # Ensure PATH includes common macOS binary locations (for tmux)
+    import coral.tools.utils  # noqa: F401 — triggers PATH setup
+
     url = f"http://localhost:{port}"
+
+    # Check if tmux is installed
+    import shutil
+    _tmux_available = shutil.which("tmux") is not None
+    if not _tmux_available:
+        rumps.notification(
+            "Coral",
+            "tmux not found",
+            "Agent management requires tmux. Install with: brew install tmux",
+        )
 
     # Start uvicorn in a daemon thread
     started = threading.Event()
@@ -111,15 +124,32 @@ def _run_foreground(host: str, port: int) -> None:
                 quit_button=None,  # We provide our own quit
             )
             self._server_running = True
-            self.menu = [
+            menu_items = [
                 rumps.MenuItem("Open Dashboard", callback=self.open_dashboard),
                 None,  # separator
+            ]
+            if not _tmux_available:
+                menu_items.append(
+                    rumps.MenuItem("Install tmux...", callback=self.install_tmux)
+                )
+            menu_items.extend([
                 rumps.MenuItem("Shutdown", callback=self.shutdown),
                 rumps.MenuItem("Quit", callback=self.quit_app),
-            ]
+            ])
+            self.menu = menu_items
 
         def open_dashboard(self, _sender: rumps.MenuItem) -> None:
             webbrowser.open(url)
+
+        def install_tmux(self, _sender: rumps.MenuItem) -> None:
+            """Open a terminal and run brew install tmux."""
+            try:
+                subprocess.Popen([
+                    "osascript", "-e",
+                    'tell application "Terminal" to do script "brew install tmux"',
+                ])
+            except Exception:
+                webbrowser.open("https://github.com/tmux/tmux/wiki/Installing")
 
         def _kill_agents(self) -> int:
             """Kill all running coral agent tmux sessions via the REST API."""
