@@ -121,8 +121,8 @@ class TestRunForeground:
             assert kwargs.get("daemon") is True, "Server thread must be a daemon"
             mock_thread_instance.start.assert_called_once()
 
-    def test_no_browser_auto_open_on_startup(self):
-        """The tray app should NOT auto-open a browser on startup."""
+    def test_opens_browser_on_startup(self):
+        """The tray app should open the dashboard in the browser on startup."""
         from coral.tray import _run_foreground
 
         mock_rumps = MagicMock()
@@ -145,7 +145,7 @@ class TestRunForeground:
             MockThread.return_value = MagicMock()
             _run_foreground("0.0.0.0", 8420)
 
-        mock_open.assert_not_called()
+        mock_open.assert_called_once_with("http://localhost:8420")
 
     def test_fallback_without_rumps(self):
         """When rumps is not installed, _run_foreground falls back to web_server.main."""
