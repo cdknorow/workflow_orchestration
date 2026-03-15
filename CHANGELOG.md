@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2.1.1 — 2026-03-15
+
+### Added
+- Update notification toast on dashboard load when a new PyPI version is available
+- `/api/system/update-check` endpoint for version checking
+- "Check for Updates" toggle in Settings modal
+- `/release` skill and automated PyPI publish via GitHub Actions
+- `CHANGELOG.md` with Keep a Changelog format
+
+### Fixed
+- Browse button in terminal launch modal
+
 ## 2.1.0 — 2026-03-10
 
 ### Added
