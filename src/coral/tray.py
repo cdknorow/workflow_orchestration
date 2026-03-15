@@ -114,6 +114,9 @@ def _run_foreground(host: str, port: int) -> None:
     server_thread.start()
     started.wait(timeout=10)
 
+    # Open the dashboard in the browser on launch
+    webbrowser.open(url)
+
     icon_path = _find_icon()
 
     class CoralTray(rumps.App):
@@ -133,7 +136,7 @@ def _run_foreground(host: str, port: int) -> None:
                     rumps.MenuItem("Install tmux...", callback=self.install_tmux)
                 )
             menu_items.extend([
-                rumps.MenuItem("Shutdown", callback=self.shutdown),
+                rumps.MenuItem("Shutdown — Kill Agents & Stop Server", callback=self.shutdown),
                 rumps.MenuItem("Quit", callback=self.quit_app),
             ])
             self.menu = menu_items
