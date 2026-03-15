@@ -125,21 +125,6 @@ async def test_list_projects(store):
 
 
 @pytest.mark.asyncio
-async def test_auto_prune(store):
-    await store.subscribe("proj1", "agent-1", "Dev")
-    # Post 510 messages
-    for i in range(510):
-        await store.post_message("proj1", "agent-1", f"msg {i}")
-
-    # Check only 500 remain
-    conn = await store._get_conn()
-    rows = await conn.execute_fetchall(
-        "SELECT COUNT(*) as cnt FROM board_messages WHERE project = 'proj1'"
-    )
-    assert rows[0]["cnt"] == 500
-
-
-@pytest.mark.asyncio
 async def test_get_webhook_targets(store):
     await store.subscribe("proj1", "agent-1", "Dev", webhook_url="http://example.com/hook")
     await store.subscribe("proj1", "agent-2", "Dev")

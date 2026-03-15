@@ -15,8 +15,6 @@ import aiosqlite
 DB_DIR = Path.home() / ".coral"
 DB_PATH = DB_DIR / "messageboard.db"
 
-MAX_MESSAGES_PER_PROJECT = 500
-
 
 class MessageBoardStore:
     """Self-contained store for the message board feature."""
@@ -141,25 +139,7 @@ class MessageBoardStore:
         msg_id = cursor.lastrowid
         await conn.commit()
 
-        # Auto-prune: keep only the latest MAX_MESSAGES_PER_PROJECT messages
-        await self._prune_messages(conn, project)
-
         return {"id": msg_id, "project": project, "session_id": session_id, "content": content, "created_at": now}
-
-    async def _prune_messages(self, conn: aiosqlite.Connection, project: str) -> None:
-        rows = await conn.execute_fetchall(
-            "SELECT COUNT(*) as cnt FROM board_messages WHERE project = ?",
-            (project,),
-        )
-        count = rows[0]["cnt"]
-        if count > MAX_MESSAGES_PER_PROJECT:
-            await conn.execute(
-                """DELETE FROM board_messages WHERE project = ? AND id NOT IN (
-                    SELECT id FROM board_messages WHERE project = ? ORDER BY id DESC LIMIT ?
-                )""",
-                (project, project, MAX_MESSAGES_PER_PROJECT),
-            )
-            await conn.commit()
 
     async def read_messages(
         self, project: str, session_id: str, limit: int = 50

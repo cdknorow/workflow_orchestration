@@ -146,6 +146,8 @@ def cmd_join(args: argparse.Namespace) -> None:
     result = _api("POST", f"/{args.project}/subscribe", body)
     _save_state(args.project, args.job_title)
     print(f"Joined '{args.project}' as '{args.job_title}' (session: {result['session_id']})")
+    print("Note: Do NOT run 'coral-board read' to catch up on old messages — it will fill your context.")
+    print("You will be notified of new messages that @mention you or use @notify-all.")
 
 
 def cmd_leave(args: argparse.Namespace) -> None:
