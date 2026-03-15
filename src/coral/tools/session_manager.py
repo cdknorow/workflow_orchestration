@@ -558,8 +558,11 @@ async def restart_session(
                         full += (
                             f"\n\nYou are subscribed to message board \"{board}\". "
                             f"Your role is: {dname or atype}. "
-                            f"To read messages: GET /api/board/{board}/messages?session_id={sid}&limit=50 "
-                            f"To post messages: POST /api/board/{board}/messages with {{\"session_id\": \"{sid}\", \"content\": \"your message\"}} "
+                            f"Use the coral-board CLI to communicate with your teammates:\n"
+                            f"  coral-board read          — read new messages from teammates\n"
+                            f"  coral-board post \"msg\"    — post a message to the board\n"
+                            f"  coral-board read --last 5 — see the 5 most recent messages\n"
+                            f"  coral-board subscribers   — see who is on the board\n"
                             f"Check the board periodically for updates from your teammates."
                         )
                     from coral.tools.tmux_manager import send_to_tmux
