@@ -198,6 +198,22 @@ async def test_check_unread_not_subscribed(store):
 
 
 @pytest.mark.asyncio
+async def test_get_subscription_returns_active(store):
+    await store.subscribe("proj1", "agent-1", "Backend Dev")
+    sub = await store.get_subscription("agent-1")
+    assert sub is not None
+    assert sub["project"] == "proj1"
+    assert sub["job_title"] == "Backend Dev"
+    assert sub["session_id"] == "agent-1"
+
+
+@pytest.mark.asyncio
+async def test_get_subscription_returns_none_for_unknown(store):
+    sub = await store.get_subscription("nonexistent")
+    assert sub is None
+
+
+@pytest.mark.asyncio
 async def test_delete_project(store):
     await store.subscribe("proj1", "agent-1", "Dev")
     await store.post_message("proj1", "agent-1", "hello")

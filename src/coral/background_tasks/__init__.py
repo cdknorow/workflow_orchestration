@@ -11,6 +11,7 @@ from coral.background_tasks.auto_summarizer import AutoSummarizer
 from coral.background_tasks.scheduler import JobScheduler
 from coral.background_tasks.webhook_dispatcher import WebhookDispatcher
 from coral.background_tasks.idle_detector import IdleDetector
+from coral.background_tasks.board_notifier import MessageBoardNotifier
 
 __all__ = ["SessionIndexer", "BatchSummarizer", "GitPoller", "AutoSummarizer",
-           "JobScheduler", "WebhookDispatcher", "IdleDetector"]
+           "JobScheduler", "WebhookDispatcher", "IdleDetector", "MessageBoardNotifier"]

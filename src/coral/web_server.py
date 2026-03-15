@@ -40,7 +40,7 @@ BASE_DIR = Path(__file__).parent
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start background indexer, batch summarizer, git poller, and webhook dispatcher on server startup."""
-    from coral.background_tasks import SessionIndexer, BatchSummarizer, GitPoller, WebhookDispatcher, IdleDetector
+    from coral.background_tasks import SessionIndexer, BatchSummarizer, GitPoller, WebhookDispatcher, IdleDetector, MessageBoardNotifier
     from coral.agents import get_agent
     from coral.tools.session_manager import discover_coral_agents, resume_persistent_sessions
     from coral.api.themes import seed_bundled_themes
@@ -76,11 +76,16 @@ async def lifespan(app: FastAPI):
     dispatcher = WebhookDispatcher(store)
     idle_detector = IdleDetector(store)
 
+    from coral.messageboard.store import MessageBoardStore
+    board_store = MessageBoardStore()
+    board_notifier = MessageBoardNotifier(board_store)
+
     indexer_task = asyncio.create_task(indexer.run_forever(interval=120))
     summarizer_task = asyncio.create_task(summarizer.run_forever())
     git_task = asyncio.create_task(git_poller.run_forever(interval=120))
     webhook_task = asyncio.create_task(dispatcher.run_forever(interval=15))
     idle_task = asyncio.create_task(idle_detector.run_forever(interval=60))
+    board_notifier_task = asyncio.create_task(board_notifier.run_forever(interval=30))
 
     # Start job scheduler
     from coral.background_tasks.scheduler import JobScheduler
@@ -103,6 +108,7 @@ async def lifespan(app: FastAPI):
     scheduler_task.cancel()
     webhook_task.cancel()
     idle_task.cancel()
+    board_notifier_task.cancel()
     try:
         await asyncio.wait_for(dispatcher.close(), timeout=5)
     except asyncio.TimeoutError:

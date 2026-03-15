@@ -112,6 +112,15 @@ class MessageBoardStore:
         )
         return [dict(r) for r in rows]
 
+    async def get_subscription(self, session_id: str) -> dict[str, Any] | None:
+        """Return the active subscription for a session, or None."""
+        conn = await self._get_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT * FROM board_subscribers WHERE session_id = ? LIMIT 1",
+            (session_id,),
+        )
+        return dict(rows[0]) if rows else None
+
     # ── Messages ─────────────────────────────────────────────────────────
 
     async def post_message(
