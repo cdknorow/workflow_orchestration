@@ -71,8 +71,8 @@ OPTIONS = {
         "CFBundleName": "Coral",
         "CFBundleDisplayName": "Coral",
         "CFBundleIdentifier": "com.coral.dashboard",
-        "CFBundleVersion": "2.2.0",
-        "CFBundleShortVersionString": "2.2.0",
+        "CFBundleVersion": "2.2.1",
+        "CFBundleShortVersionString": "2.2.1",
         "LSUIElement": True,  # Menu bar only — no Dock icon
         "NSHighResolutionCapable": True,
     },

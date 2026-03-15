@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2.2.1 — 2026-03-15
+
+### Added
+- Detect missing tmux on startup with macOS notification and "Install tmux..." menu item
+- Auto-open dashboard in browser when the tray app launches
+- Homebrew formula (`Formula/coral.rb`) with tmux as a dependency
+
+### Fixed
+- Agent discovery in macOS .app bundle — use `tempfile.gettempdir()` for correct TMPDIR
+- Add `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin` (MacPorts) to PATH in .app bundle
+- Clarify tray menu labels: "Shutdown — Kill Agents & Stop Server", "Quit — Exit Coral"
+
 ## 2.2.0 — 2026-03-15
 
 ### Added
