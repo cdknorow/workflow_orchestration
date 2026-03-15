@@ -629,8 +629,11 @@ async def launch_session(body: dict):
                 full += (
                     f"\n\nYou are subscribed to message board \"{bname}\". "
                     f"Your role is: {dname or atype}. "
-                    f"To read messages: GET /api/board/{bname}/messages?session_id={sid}&limit=50 "
-                    f"To post messages: POST /api/board/{bname}/messages with {{\"session_id\": \"{sid}\", \"content\": \"your message\"}} "
+                    f"Use the coral-board CLI to communicate with your teammates:\n"
+                    f"  coral-board read          — read new messages from teammates\n"
+                    f"  coral-board post \"msg\"    — post a message to the board\n"
+                    f"  coral-board read --last 5 — see the 5 most recent messages\n"
+                    f"  coral-board subscribers   — see who is on the board\n"
                     f"Check the board periodically for updates from your teammates."
                 )
             err = await send_to_tmux(atype, full, session_id=sid)
@@ -700,9 +703,11 @@ async def launch_team(body: dict):
                 board_instruction = (
                     f"\n\nYou are part of an agent team on message board \"{bname}\". "
                     f"Your role is: {aname}. "
-                    f"Use the message board to coordinate with your teammates. "
-                    f"To read messages: GET /api/board/{bname}/messages?session_id={sid}&limit=50 "
-                    f"To post messages: POST /api/board/{bname}/messages with {{\"session_id\": \"{sid}\", \"content\": \"your message\"}} "
+                    f"Use the coral-board CLI to communicate with your teammates:\n"
+                    f"  coral-board read          — read new messages from teammates\n"
+                    f"  coral-board post \"msg\"    — post a message to the board\n"
+                    f"  coral-board read --last 5 — see the 5 most recent messages\n"
+                    f"  coral-board subscribers   — see who is on the board\n"
                     f"Check the board periodically for updates from your teammates."
                 )
                 full_prompt = prompt + board_instruction
