@@ -133,10 +133,14 @@ export function createTerminal(containerEl) {
                 state.autoScroll = false;
                 _setPauseBadge(true);
             }
-        } else if (e.deltaY > 0 && _userScrolledUp) {
-            // Scrolling down — resume updates
+        } else if (e.deltaY > 0 && _userScrolledUp && terminal) {
+            // Scrolling down — only resume when user reaches the bottom of the buffer
             _scrollUpCount = 0;
-            resumeScroll();
+            const viewport = terminal.buffer.active;
+            const atBottom = viewport.baseY <= terminal.buffer.active.viewportY;
+            if (atBottom) {
+                resumeScroll();
+            }
         }
     }, { passive: true });
 
