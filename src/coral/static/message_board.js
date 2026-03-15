@@ -152,6 +152,10 @@ function renderMessages(messages) {
         container.innerHTML = '<div class="empty-state">No messages yet</div>';
         return;
     }
+    // Save scroll position before replacing content
+    const prevScrollTop = container.scrollTop;
+    const wasAtBottom = (container.scrollHeight - prevScrollTop - container.clientHeight) < 50;
+
     container.innerHTML = messages.map(m => `
         <div style="padding:8px 0;border-bottom:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
@@ -162,7 +166,11 @@ function renderMessages(messages) {
             <div style="font-size:10px;color:var(--text-muted);margin-top:4px">${formatTime(m.created_at)}</div>
         </div>
     `).join('');
-    container.scrollTop = container.scrollHeight;
+    if (wasAtBottom) {
+        container.scrollTop = container.scrollHeight;
+    } else {
+        container.scrollTop = prevScrollTop;
+    }
 }
 
 function formatTime(iso) {

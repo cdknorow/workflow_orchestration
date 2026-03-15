@@ -85,10 +85,17 @@ export async function refreshCapture() {
         if (el._lastCapture !== text) {
             // Defer DOM update while user is selecting text
             if (state.isSelecting) return;
+
+            // Preserve scroll position when user has scrolled up
+            const savedScroll = state.autoScroll ? null : el.scrollTop;
+
             el._lastCapture = text;
             renderCaptureText(el, text);
+
             if (state.autoScroll) {
                 el.scrollTop = el.scrollHeight;
+            } else if (savedScroll !== null) {
+                el.scrollTop = savedScroll;
             }
         }
     } catch (e) {

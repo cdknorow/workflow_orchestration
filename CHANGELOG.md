@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2.2.0 — 2026-03-15
+
+### Added
+- **Inter-agent message board** — Agents communicate via shared project boards with per-subscriber read cursors, @mentions (`@notify-all`, `@<session_id>`, `@<job_title>`), and auto-pruning
+- **Agent Teams** — Launch multiple agents on a shared board with per-agent roles and behavior prompts from the `+New` modal
+- **coral-board CLI** — Terminal interface for agents to join boards, post messages, read updates, and list subscribers
+- **Message board background notifier** — Nudges idle agents with unread messages every 30 seconds via tmux
+- **Board hover cards** — Live session tooltips show board subscription and unread message count
+- **macOS system tray app** (`coral-tray`) — Runs Coral as a menu bar icon with Open Dashboard, Shutdown, and Quit actions. Launches as a background process so the terminal is freed immediately
+- **macOS .app installer** — py2app build pipeline produces `Coral.app` and `Coral.dmg` for drag-to-Applications install
+- **GitHub Actions macOS build** — Automatically builds and attaches `Coral.dmg` to GitHub Releases
+- **Session prompt persistence** — Prompt and board_name stored in live_sessions DB; restored on session restart
+
+### Fixed
+- Terminal scroll-pause no longer breaks when scrolling down — only resumes when user reaches the bottom
+- Message board refresh no longer jumps to bottom when user is scrolled up reading older messages
+- Duplicate board_store instantiation in launch_session()
+- Raw SQL replaced with proper store method in session info endpoint
+
 ## 2.1.1 — 2026-03-15
 
 ### Added
