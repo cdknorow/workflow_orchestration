@@ -22,11 +22,13 @@ PID_FILE = Path.home() / ".coral" / "tray.pid"
 
 
 def _find_icon() -> str | None:
-    """Locate coral.png in the package's static directory."""
+    """Locate the menu bar template icon in the package's static directory."""
     from coral.tools.utils import get_package_dir
-    icon_path = get_package_dir() / "static" / "coral.png"
-    if icon_path.is_file():
-        return str(icon_path)
+    # Prefer the template icon (monochrome silhouette for menu bar)
+    for name in ("coral_tray.png", "coral.png"):
+        icon_path = get_package_dir() / "static" / name
+        if icon_path.is_file():
+            return str(icon_path)
     return None
 
 
@@ -124,6 +126,7 @@ def _run_foreground(host: str, port: int) -> None:
             super().__init__(
                 "Coral",
                 icon=icon_path,
+                template=True,  # macOS renders as white on dark bar, black on light
                 quit_button=None,  # We provide our own quit
             )
             self._server_running = True

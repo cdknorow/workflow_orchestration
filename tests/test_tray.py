@@ -37,7 +37,8 @@ class TestTrayIconPath:
         from coral.tray import _find_icon
         result = _find_icon()
         assert result is not None
-        assert result.endswith("coral.png")
+        assert result.endswith(".png")
+        assert "coral" in os.path.basename(result)
         assert os.path.isfile(result)
 
     def test_find_icon_returns_none_if_missing(self):
