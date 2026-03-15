@@ -149,14 +149,10 @@ async function loadBoardMessages(project) {
 
 function renderMessages(messages) {
     const container = document.getElementById('mb-messages');
-    const empty = document.getElementById('mb-messages-empty');
     if (!messages.length) {
-        container.innerHTML = '';
-        container.appendChild(empty);
-        empty.style.display = '';
+        container.innerHTML = '<div class="empty-state" id="mb-messages-empty">No messages yet</div>';
         return;
     }
-    empty.style.display = 'none';
     container.innerHTML = messages.map(m => `
         <div style="padding:8px 0;border-bottom:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
@@ -230,6 +226,7 @@ export async function postBoardMessage() {
         });
         input.value = '';
         loadBoardMessages(currentProject);
+        loadBoardProjects();
     } catch (e) {
         console.error('Failed to post message:', e);
     }
@@ -257,6 +254,7 @@ function startBoardPoll() {
         if (currentProject) {
             loadBoardMessages(currentProject);
             loadBoardSubscribers(currentProject);
+            loadBoardProjects();
         }
     }, 5000);
 }
