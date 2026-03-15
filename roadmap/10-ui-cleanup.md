@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-Clean up the Corral dashboard to reduce visual clutter, improve information hierarchy,
+Clean up the Coral dashboard to reduce visual clutter, improve information hierarchy,
 and make the interface more intuitive for operators managing multiple agents. The
 current UI is feature-complete but has accumulated density — empty sections waste
 space, action buttons compete for attention, and panels feel cramped at default widths.
@@ -49,9 +49,9 @@ Each `<section class="sidebar-section">` header becomes a click target that
 toggles the section body. Collapsed state persists in `localStorage`.
 
 **Files to modify:**
-- `src/corral/templates/includes/sidebar.html` — Add collapse toggle markup
-- `src/corral/static/sidebar.js` — Add collapse/expand logic with localStorage persistence
-- `src/corral/static/style.css` — Add `.sidebar-section.collapsed` styles with rotation animation on chevron
+- `src/coral/templates/includes/sidebar.html` — Add collapse toggle markup
+- `src/coral/static/sidebar.js` — Add collapse/expand logic with localStorage persistence
+- `src/coral/static/style.css` — Add `.sidebar-section.collapsed` styles with rotation animation on chevron
 
 **Markup pattern:**
 ```html
@@ -132,11 +132,11 @@ Jobs                           [+ Job]
 ```
 
 **Files to modify:**
-- `src/corral/templates/includes/sidebar.html` — Merge two `<section>` blocks
-- `src/corral/static/style.css` — Add `.sidebar-subtab` toggle styles
-- `src/corral/static/sidebar.js` — Add subtab switching logic
-- `src/corral/static/live_jobs.js` — Update render target
-- `src/corral/static/scheduler.js` — Update render target
+- `src/coral/templates/includes/sidebar.html` — Merge two `<section>` blocks
+- `src/coral/static/style.css` — Add `.sidebar-subtab` toggle styles
+- `src/coral/static/sidebar.js` — Add subtab switching logic
+- `src/coral/static/live_jobs.js` — Update render target
+- `src/coral/static/scheduler.js` — Update render target
 
 ---
 
@@ -238,9 +238,9 @@ Status: Writing tests  ·  Goal: Implementing user auth end-to-end
 When no goal is set, show only the status line (no empty "Goal:" label).
 
 **Files to modify:**
-- `src/corral/templates/includes/views/live_session.html` — Merge `.summary-line` and `.status-line`
-- `src/corral/static/style.css` — Single-line `.session-meta-compact` style
-- `src/corral/static/render.js` / `websocket.js` — Update status/summary rendering
+- `src/coral/templates/includes/views/live_session.html` — Merge `.summary-line` and `.status-line`
+- `src/coral/static/style.css` — Single-line `.session-meta-compact` style
+- `src/coral/static/render.js` / `websocket.js` — Update status/summary rendering
 
 #### 3.6 Branch as Chip
 
@@ -314,9 +314,9 @@ Add a toggle button at the top-left of the agentic state panel to collapse it
 entirely, giving full width to the main output.
 
 **Files to modify:**
-- `src/corral/templates/includes/views/live_session.html` — Add collapse toggle
-- `src/corral/static/sidebar.js` — Reuse resize handle logic pattern
-- `src/corral/static/style.css` — Add `.agentic-state.collapsed` with width transition
+- `src/coral/templates/includes/views/live_session.html` — Add collapse toggle
+- `src/coral/static/sidebar.js` — Reuse resize handle logic pattern
+- `src/coral/static/style.css` — Add `.agentic-state.collapsed` with width transition
 
 ```css
 .agentic-state.collapsed {
@@ -364,8 +364,8 @@ typeface and refine the color palette for better contrast.
 purpose-built for developer UIs.
 
 **Files to modify:**
-- `src/corral/templates/index.html` — Add Google Fonts `<link>` tag
-- `src/corral/static/style.css` — Update `body` font-family
+- `src/coral/templates/index.html` — Add Google Fonts `<link>` tag
+- `src/coral/static/style.css` — Update `body` font-family
 
 ```css
 body {
@@ -462,13 +462,13 @@ Add a subtle hint below the textarea:
 
 #### 3.15 Enhanced Welcome Screen
 
-Replace the plain text with a centered layout featuring the Corral logo, quick
+Replace the plain text with a centered layout featuring the Coral logo, quick
 action buttons, and recent activity.
 
 ```html
 <div class="welcome">
-    <img src="/static/corral.png" alt="Corral" class="welcome-logo">
-    <h2>Welcome to Corral</h2>
+    <img src="/static/coral.png" alt="Coral" class="welcome-logo">
+    <h2>Welcome to Coral</h2>
     <p>Select a session from the sidebar, or get started:</p>
     <div class="welcome-actions">
         <button class="welcome-action-card" onclick="showLaunchModal()">
@@ -525,18 +525,18 @@ Phase 6 should come last as it involves final polish across all changed areas.
 
 | File | Phases |
 |---|---|
-| `src/corral/templates/includes/sidebar.html` | 1 |
-| `src/corral/templates/includes/views/live_session.html` | 2, 3, 5 |
-| `src/corral/templates/index.html` | 4, 6 |
-| `src/corral/static/style.css` | 1, 2, 3, 4, 5, 6 |
-| `src/corral/static/sidebar.js` | 1, 3 |
-| `src/corral/static/render.js` | 1, 2 |
-| `src/corral/static/controls.js` | 2 |
-| `src/corral/static/modals.js` | 2 |
-| `src/corral/static/live_jobs.js` | 1 |
-| `src/corral/static/scheduler.js` | 1 |
-| `src/corral/static/websocket.js` | 2 |
-| `src/corral/static/agentic_state.js` | 3 |
+| `src/coral/templates/includes/sidebar.html` | 1 |
+| `src/coral/templates/includes/views/live_session.html` | 2, 3, 5 |
+| `src/coral/templates/index.html` | 4, 6 |
+| `src/coral/static/style.css` | 1, 2, 3, 4, 5, 6 |
+| `src/coral/static/sidebar.js` | 1, 3 |
+| `src/coral/static/render.js` | 1, 2 |
+| `src/coral/static/controls.js` | 2 |
+| `src/coral/static/modals.js` | 2 |
+| `src/coral/static/live_jobs.js` | 1 |
+| `src/coral/static/scheduler.js` | 1 |
+| `src/coral/static/websocket.js` | 2 |
+| `src/coral/static/agentic_state.js` | 3 |
 
 ---
 

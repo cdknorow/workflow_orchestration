@@ -5,6 +5,18 @@
             <div id="launch-step-chooser">
                 <h3>Launch New Session</h3>
                 <div class="launch-type-cards">
+                    <button class="launch-type-card" onclick="window._selectLaunchType('team')">
+                        <div class="launch-type-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="9" cy="7" r="3"/>
+                                <circle cx="17" cy="7" r="3"/>
+                                <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+                                <path d="M17 11a4 4 0 0 1 4 4v2"/>
+                            </svg>
+                        </div>
+                        <div class="launch-type-label">Agent Team</div>
+                        <div class="launch-type-desc">Launch multiple agents collaborating on a shared message board</div>
+                    </button>
                     <button class="launch-type-card" onclick="window._selectLaunchType('agent')">
                         <div class="launch-type-icon">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -71,6 +83,20 @@
                     <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--chrome')">--chrome</button>
                     <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
                 </div>
+                <label>Initial Prompt <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                    <textarea id="launch-agent-prompt" rows="3" placeholder="e.g. You are a QA engineer. Review the codebase and create a test plan..." style="width:100%;resize:vertical"></textarea>
+                </label>
+                <label>Message Board <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                    <select id="launch-board-select" onchange="window._onAgentBoardChange()">
+                        <option value="">None</option>
+                        <option value="__new__">Create new board...</option>
+                    </select>
+                </label>
+                <div id="launch-new-board-row" style="display:none">
+                    <label>Board Name:
+                        <input type="text" id="launch-board-name" placeholder="e.g. Auth Feature, Sprint 42">
+                    </label>
+                </div>
                 <div class="modal-actions">
                     <button class="btn" onclick="hideLaunchModal()">Cancel</button>
                     <button class="btn btn-primary" onclick="launchSession()">Launch</button>
@@ -104,6 +130,67 @@
                 <div class="modal-actions">
                     <button class="btn" onclick="hideLaunchModal()">Cancel</button>
                     <button class="btn btn-primary" onclick="launchSession()">Launch</button>
+                </div>
+            </div>
+
+            <!-- Step 2c: Agent Team form -->
+            <div id="launch-step-team" style="display:none">
+                <h3>
+                    <button class="launch-back-btn" onclick="window._selectLaunchType('back')" title="Back">&larr;</button>
+                    Launch Agent Team
+                </h3>
+                <div class="team-columns">
+                    <div class="team-col-left">
+                        <label>Message Board:
+                            <select id="team-board-select" onchange="window._onTeamBoardChange()">
+                                <option value="__new__">Create new board...</option>
+                            </select>
+                        </label>
+                        <div id="team-new-board-row">
+                            <label>Board Name:
+                                <input type="text" id="team-board-name" placeholder="e.g. Auth Feature, Sprint 42">
+                            </label>
+                        </div>
+                        <label>Working Directory:
+                            <div class="dir-input-row">
+                                <input type="text" id="launch-team-dir" placeholder="/path/to/project" data-coral-root="{{ coral_root }}" value="{{ coral_root }}">
+                                <button class="btn" id="btn-browse-team" onclick="toggleBrowser('launch-team-dir','dir-browser-team','browser-list-team','browser-current-path-team')">Browse</button>
+                            </div>
+                        </label>
+                        <div id="dir-browser-team" class="dir-browser" style="display:none">
+                            <div class="dir-browser-header">
+                                <button class="btn btn-small dir-browser-up" onclick="browserNavigateUp()" title="Go up">..</button>
+                                <span class="dir-browser-path" id="browser-current-path-team">~</span>
+                            </div>
+                            <ul class="dir-browser-list" id="browser-list-team">
+                                <li class="empty-state">Loading...</li>
+                            </ul>
+                        </div>
+                        <label>Agent Type:
+                            <select id="team-agent-type">
+                                <option value="claude">Claude</option>
+                                <option value="gemini">Gemini</option>
+                            </select>
+                        </label>
+                        <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional, applied to all agents)</span>:
+                            <input type="text" id="team-flags" placeholder="e.g. --verbose">
+                        </label>
+                        <div class="flag-shortcuts">
+                            <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('team-flags','--chrome')">--chrome</button>
+                            <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('team-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+                        </div>
+                    </div>
+                    <div class="team-col-right">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                            <strong style="font-size:14px">Agents</strong>
+                            <button class="btn btn-small btn-primary" onclick="window._addTeamAgent()">+ Add Agent</button>
+                        </div>
+                        <div id="team-agents-list" class="team-agents-scroll"></div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn" onclick="hideLaunchModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="window.launchTeam()">Launch Team</button>
                 </div>
             </div>
         </div>

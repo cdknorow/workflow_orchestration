@@ -4,7 +4,7 @@
 
 ### Improvements
 - **Smoother startup** — Yield to event loop between file indexing to prevent CPU spike during dashboard startup.
-- **Simplified launch-corral** — Skip agent launching by default; hooks are now installed automatically on session create/resume.
+- **Simplified launch-coral** — Skip agent launching by default; hooks are now installed automatically on session create/resume.
 
 ### Docs
 - Updated README and marketing materials.
@@ -33,7 +33,7 @@
 - Scope text-selection pause to the terminal pane only (no longer pauses the whole dashboard).
 - Pause capture updates while user is selecting text.
 - Improved summary generation prompt.
-- `+new` defaults to corral root directory.
+- `+new` defaults to coral root directory.
 
 ### Docs
 - Added dashboard testing instructions to `DEVELOP.md`.

@@ -1,4 +1,4 @@
-src/corral.egg-info/
+src/coral.egg-info/
 *pycache*
 dist/
 build/

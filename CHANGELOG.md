@@ -55,8 +55,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Documentation
 
-- Added MkDocs Material documentation site at https://cdknorow.github.io/corral/.
-- Feature documentation for all major Corral features with screenshots.
+- Added MkDocs Material documentation site at https://cdknorow.github.io/coral/.
+- Feature documentation for all major Coral features with screenshots.
 - API reference pages for Jobs, Webhooks, and more.
 
 ## 0.6.2
@@ -64,7 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Bug Fixes
 
 - **Fix session cycling when multiple agents share the same directory** — Terminal WebSocket connections no longer cycle between sessions that share a working directory (e.g. two agents both in `worktree_2`). Added a generation counter to suppress stale `onclose` reconnect handlers, and a guard to skip reconnecting if already connected to the same session.
-- **Fix WebSocket corral handler overwriting session_id on name match** — When a session restarts and multiple sessions share the same directory name, the dashboard no longer accidentally switches to the wrong session via the name-based fallback.
+- **Fix WebSocket coral handler overwriting session_id on name match** — When a session restarts and multiple sessions share the same directory name, the dashboard no longer accidentally switches to the wrong session via the name-based fallback.
 - **Fix git snapshots collision for same-directory sessions** — Changed the `git_snapshots` UNIQUE constraint from `(agent_name, commit_hash)` to `(session_id, commit_hash)` so each session tracks its own git history. Includes an automatic DB migration for existing databases.
 - **Fix git poller skipping second session in shared directory** — The git poller now stores snapshots for all sessions in a directory, not just the first one discovered.
 - **Fix git state lookups to use session_id** — Live session API and WebSocket now look up git state by `session_id` first, falling back to `agent_name` for backwards compatibility.

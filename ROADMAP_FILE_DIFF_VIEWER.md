@@ -1,6 +1,6 @@
 # Roadmap: File Diff Viewer
 
-This document tracks the current state and planned improvements for Corral's **Changed Files** panel and **Diff Viewer** feature.
+This document tracks the current state and planned improvements for Coral's **Changed Files** panel and **Diff Viewer** feature.
 
 ---
 
@@ -15,14 +15,14 @@ This document tracks the current state and planned improvements for Corral's **C
   - Addition/deletion count badges (`+N` / `-N`)
 - File count badge on the "Files" tab header.
 - Data collected by the **GitPoller** every 30 seconds via `git diff --numstat`, `git diff --cached --numstat`, and `git status --porcelain`.
-- File counts included in the WebSocket `corral_update` payload for real-time sidebar updates.
+- File counts included in the WebSocket `coral_update` payload for real-time sidebar updates.
 
 ### Diff Viewer Window
 
 - Clicking a file in the Files tab opens a standalone `/diff` page in a new browser window.
 - Uses **diff2html** library for syntax-highlighted diff rendering.
 - Supports **Unified** and **Split** (side-by-side) view modes.
-- Dark theme matching the Corral dashboard.
+- Dark theme matching the Coral dashboard.
 - Auto-refreshes every 10 seconds to stay current as the agent works.
 - Manual refresh button in the toolbar.
 - Handles staged changes, unstaged changes, and untracked files (synthesized as "new file" diffs).
@@ -89,7 +89,7 @@ This document tracks the current state and planned improvements for Corral's **C
 
 ### Collaborative Review
 
-- [ ] **PR-style review interface** — Full pull request review experience within Corral: file list, diff viewer, inline comments, approval/request-changes workflow.
+- [ ] **PR-style review interface** — Full pull request review experience within Coral: file list, diff viewer, inline comments, approval/request-changes workflow.
 - [ ] **Cross-agent diff comparison** — Compare the changes made by two agents working on related tasks.
 - [ ] **Conflict detection** — Warn when two agents are modifying the same file in different worktrees.
 
@@ -107,14 +107,14 @@ This document tracks the current state and planned improvements for Corral's **C
 
 | Component | File |
 |-----------|------|
-| Git Poller (file collection) | `src/corral/background_tasks/git_poller.py` |
-| Database schema | `src/corral/store/connection.py` (`git_changed_files` table) |
-| Store methods | `src/corral/store/git.py` |
-| Files API endpoint | `src/corral/api/live_sessions.py` (`/files`, `/diff`) |
-| Diff viewer page | `src/corral/templates/diff.html` |
-| Changed files JS module | `src/corral/static/changed_files.js` |
-| Changed files CSS | `src/corral/static/style.css` (`.file-*` and `.changed-files-*` classes) |
-| Files tab HTML | `src/corral/templates/includes/views/live_session.html` |
+| Git Poller (file collection) | `src/coral/background_tasks/git_poller.py` |
+| Database schema | `src/coral/store/connection.py` (`git_changed_files` table) |
+| Store methods | `src/coral/store/git.py` |
+| Files API endpoint | `src/coral/api/live_sessions.py` (`/files`, `/diff`) |
+| Diff viewer page | `src/coral/templates/diff.html` |
+| Changed files JS module | `src/coral/static/changed_files.js` |
+| Changed files CSS | `src/coral/static/style.css` (`.file-*` and `.changed-files-*` classes) |
+| Files tab HTML | `src/coral/templates/includes/views/live_session.html` |
 
 ### Dependencies
 

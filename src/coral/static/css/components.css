@@ -206,6 +206,10 @@
     width: 520px;
 }
 
+.modal-content-extra-wide {
+    width: 820px;
+}
+
 .modal-content h3 {
     margin-bottom: 16px;
     font-size: 16px;
@@ -967,7 +971,7 @@
 
 .launch-type-cards {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 12px;
     margin-bottom: 8px;
 }
@@ -1013,6 +1017,76 @@
     color: var(--text-secondary);
     text-align: center;
     line-height: 1.4;
+}
+
+.team-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 12px;
+}
+
+.team-col-left,
+.team-col-right {
+    min-width: 0;
+}
+
+.team-agents-scroll {
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.team-agent-row {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.team-agent-row label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.team-agent-row input,
+.team-agent-row textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.team-agent-row textarea {
+    resize: vertical;
+    min-height: 48px;
+}
+
+.team-agent-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.team-agent-header strong {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.team-agent-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.team-agent-remove:hover {
+    color: var(--danger);
 }
 
 .launch-back-btn {

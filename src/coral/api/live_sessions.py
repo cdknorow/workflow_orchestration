@@ -557,14 +557,138 @@ async def set_display_name(name: str, body: dict):
 @router.post("/api/sessions/launch")
 async def launch_session(body: dict):
     """Launch a new Claude/Gemini session."""
+    import asyncio as _asyncio
+    from coral.tools.session_manager import run_cmd
+
     working_dir = body.get("working_dir", "").strip()
     agent_type = body.get("agent_type", "claude").strip()
     display_name = body.get("display_name", "").strip() or None
     flags = body.get("flags", [])
+    prompt = body.get("prompt", "").strip()
+    board_name = body.get("board_name", "").strip()
+
     if not working_dir:
         return {"error": "working_dir is required"}
-    result = await launch_claude_session(working_dir, agent_type, display_name=display_name, flags=flags)
+    result = await launch_claude_session(
+        working_dir, agent_type, display_name=display_name, flags=flags,
+        prompt=prompt or None, board_name=board_name or None,
+    )
+
+    if result.get("error"):
+        return result
+
+    session_id = result["session_id"]
+    session_name = result["session_name"]
+
+    # Subscribe to message board if requested
+    if board_name:
+        from coral.messageboard.store import MessageBoardStore
+        board_store = MessageBoardStore()
+        job_title = display_name or agent_type
+        await board_store.subscribe(board_name, session_id, job_title)
+
+    # Send initial prompt after agent initializes
+    if prompt:
+        async def _send_initial(sname, sid, atype, p, bname, dname):
+            await _asyncio.sleep(3)
+            full = p
+            if bname:
+                full += (
+                    f"\n\nYou are subscribed to message board \"{bname}\". "
+                    f"Your role is: {dname or atype}. "
+                    f"To read messages: GET /api/board/{bname}/messages?session_id={sid}&limit=50 "
+                    f"To post messages: POST /api/board/{bname}/messages with {{\"session_id\": \"{sid}\", \"content\": \"your message\"}} "
+                    f"Check the board periodically for updates from your teammates."
+                )
+            err = await send_to_tmux(atype, full, session_id=sid)
+            if err:
+                await run_cmd("tmux", "send-keys", "-t", sname, "-l", full)
+            await run_cmd("tmux", "send-keys", "-t", sname, "Enter")
+
+        _asyncio.create_task(_send_initial(
+            session_name, session_id, agent_type, prompt, board_name, display_name
+        ))
+
     return result
+
+
+@router.post("/api/sessions/launch-team")
+async def launch_team(body: dict):
+    """Launch multiple agents and subscribe them to a shared message board."""
+    import asyncio as _asyncio
+    from coral.messageboard.store import MessageBoardStore
+    from coral.tools.tmux_manager import send_to_tmux
+
+    board_name = body.get("board_name", "").strip()
+    working_dir = body.get("working_dir", "").strip()
+    agent_type = body.get("agent_type", "claude").strip()
+    flags = body.get("flags", [])
+    agents = body.get("agents", [])
+
+    if not board_name:
+        return {"error": "board_name is required"}
+    if not working_dir:
+        return {"error": "working_dir is required"}
+    if not agents:
+        return {"error": "At least one agent is required"}
+
+    board_store = MessageBoardStore()
+    launched = []
+
+    for agent_def in agents:
+        agent_name = agent_def.get("name", "").strip()
+        agent_prompt = agent_def.get("prompt", "").strip()
+        if not agent_name:
+            continue
+
+        # Launch the agent session
+        result = await launch_claude_session(
+            working_dir, agent_type,
+            display_name=agent_name,
+            flags=flags or None,
+            prompt=agent_prompt or None,
+            board_name=board_name or None,
+        )
+        if result.get("error"):
+            launched.append({"name": agent_name, "error": result["error"]})
+            continue
+
+        session_id = result["session_id"]
+        session_name = result["session_name"]
+
+        # Subscribe this agent to the message board
+        await board_store.subscribe(board_name, session_id, agent_name)
+
+        # Send the agent's behavior prompt after it initializes
+        if agent_prompt:
+            async def _send_prompt(sname, sid, atype, prompt, bname, aname):
+                from coral.tools.session_manager import run_cmd
+                await _asyncio.sleep(3)
+                board_instruction = (
+                    f"\n\nYou are part of an agent team on message board \"{bname}\". "
+                    f"Your role is: {aname}. "
+                    f"Use the message board to coordinate with your teammates. "
+                    f"To read messages: GET /api/board/{bname}/messages?session_id={sid}&limit=50 "
+                    f"To post messages: POST /api/board/{bname}/messages with {{\"session_id\": \"{sid}\", \"content\": \"your message\"}} "
+                    f"Check the board periodically for updates from your teammates."
+                )
+                full_prompt = prompt + board_instruction
+                err = await send_to_tmux(atype, full_prompt, session_id=sid)
+                if err:
+                    await run_cmd("tmux", "send-keys", "-t", sname, "-l", full_prompt)
+                await run_cmd("tmux", "send-keys", "-t", sname, "Enter")
+
+            _asyncio.create_task(_send_prompt(
+                session_name, session_id, agent_type, agent_prompt, board_name, agent_name
+            ))
+
+        launched.append({
+            "name": agent_name,
+            "session_id": session_id,
+            "session_name": session_name,
+        })
+
+    return {"ok": True, "board": board_name, "agents": launched}
 
 
 # ── Agent Tasks Endpoints ──────────────────────────────────────────────────
@@ -805,7 +929,6 @@ async def ws_terminal(websocket: WebSocket, name: str):
 
 
 @router.websocket("/ws/coral")
-@router.websocket("/ws/corral")
 async def ws_coral(websocket: WebSocket):
     """Stream coral-wide session list updates (polls every 3s)."""
     await websocket.accept()

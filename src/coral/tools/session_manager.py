@@ -469,8 +469,10 @@ async def restart_session(
         )
         await asyncio.sleep(0.3)
 
-        # 6. Load persisted flags from the live session record
+        # 6. Load persisted flags, prompt, and board_name from the live session record
         stored_flags = []
+        stored_prompt = None
+        stored_board = None
         if session_id:
             try:
                 import json as _json
@@ -478,10 +480,13 @@ async def restart_session(
                 _flag_store = CoralStore()
                 _flag_conn = await _flag_store._get_conn()
                 _flag_row = await (await _flag_conn.execute(
-                    "SELECT flags FROM live_sessions WHERE session_id = ?", (session_id,)
+                    "SELECT flags, prompt, board_name FROM live_sessions WHERE session_id = ?", (session_id,)
                 )).fetchone()
-                if _flag_row and _flag_row["flags"]:
-                    stored_flags = _json.loads(_flag_row["flags"])
+                if _flag_row:
+                    if _flag_row["flags"]:
+                        stored_flags = _json.loads(_flag_row["flags"])
+                    stored_prompt = _flag_row["prompt"]
+                    stored_board = _flag_row["board_name"]
             except Exception:
                 pass
 
@@ -536,6 +541,45 @@ async def restart_session(
             except Exception:
                 pass
 
+        # Re-subscribe to message board and re-send prompt on restart
+        if stored_board or stored_prompt:
+            async def _resend(sid, sname, atype, prompt, board, dname):
+                await asyncio.sleep(3)
+                if board:
+                    try:
+                        from coral.messageboard.store import MessageBoardStore
+                        board_store = MessageBoardStore()
+                        await board_store.subscribe(board, sid, dname or atype)
+                    except Exception:
+                        pass
+                if prompt:
+                    full = prompt
+                    if board:
+                        full += (
+                            f"\n\nYou are subscribed to message board \"{board}\". "
+                            f"Your role is: {dname or atype}. "
+                            f"To read messages: GET /api/board/{board}/messages?session_id={sid}&limit=50 "
+                            f"To post messages: POST /api/board/{board}/messages with {{\"session_id\": \"{sid}\", \"content\": \"your message\"}} "
+                            f"Check the board periodically for updates from your teammates."
+                        )
+                    from coral.tools.tmux_manager import send_to_tmux
+                    err = await send_to_tmux(atype, full, session_id=sid)
+                    if err:
+                        await run_cmd("tmux", "send-keys", "-t", sname, "-l", full)
+                    await run_cmd("tmux", "send-keys", "-t", sname, "Enter")
+
+            old_display_name_for_prompt = None
+            try:
+                from coral.store import CoralStore
+                _dn_store = CoralStore()
+                old_display_name_for_prompt = await _dn_store.get_display_name(new_session_id)
+            except Exception:
+                pass
+            asyncio.create_task(_resend(
+                new_session_id, new_session_name, effective_type,
+                stored_prompt, stored_board, old_display_name_for_prompt,
+            ))
+
         return {
             "ok": True,
             "agent_name": agent_name,
@@ -547,7 +591,7 @@ async def restart_session(
         return {"error": str(e)}
 
 
-async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None, is_job: bool = False) -> dict[str, str]:
+async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None, is_job: bool = False, prompt: str | None = None, board_name: str | None = None) -> dict[str, str]:
     """Launch a new tmux session with a Claude/Gemini agent.
 
     Returns dict with session_name, session_id, log_file, and any error.
@@ -627,6 +671,8 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
                 resume_from_id=resume_session_id,
                 flags=flags or None,
                 is_job=is_job,
+                prompt=prompt,
+                board_name=board_name,
             )
         except Exception:
             pass  # Non-critical

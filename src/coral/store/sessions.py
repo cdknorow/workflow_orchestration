@@ -545,6 +545,8 @@ class SessionStore(DatabaseManager):
         resume_from_id: str | None = None,
         flags: list[str] | None = None,
         is_job: bool = False,
+        prompt: str | None = None,
+        board_name: str | None = None,
     ) -> None:
         import json as _json
         conn = await self._get_conn()
@@ -552,9 +554,9 @@ class SessionStore(DatabaseManager):
         flags_json = _json.dumps(flags) if flags else None
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), prompt, board_name, now),
         )
         await conn.commit()
 
@@ -575,22 +577,22 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         now = datetime.now(timezone.utc).isoformat()
+        # Carry forward flags, prompt, and board_name from old session
+        old_row = await (await conn.execute(
+            "SELECT flags, prompt, board_name FROM live_sessions WHERE session_id = ?", (old_session_id,)
+        )).fetchone()
         if flags is None:
-            row = await (await conn.execute(
-                "SELECT flags FROM live_sessions WHERE session_id = ?", (old_session_id,)
-            )).fetchone()
-            if row and row["flags"]:
-                flags_json = row["flags"]
-            else:
-                flags_json = None
+            flags_json = old_row["flags"] if old_row and old_row["flags"] else None
         else:
             flags_json = _json.dumps(flags) if flags else None
+        old_prompt = old_row["prompt"] if old_row else None
+        old_board = old_row["board_name"] if old_row else None
         await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (old_session_id,))
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, now),
         )
         await conn.commit()
 
@@ -606,7 +608,7 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         rows = await (await conn.execute(
-            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, created_at "
+            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, created_at "
             "FROM live_sessions ORDER BY created_at"
         )).fetchall()
         results = []

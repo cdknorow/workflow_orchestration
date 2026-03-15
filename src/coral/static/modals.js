@@ -30,6 +30,13 @@ function _showLaunchStep(step) {
     document.getElementById("launch-step-chooser").style.display = step === "chooser" ? "" : "none";
     document.getElementById("launch-step-agent").style.display = step === "agent" ? "" : "none";
     document.getElementById("launch-step-terminal").style.display = step === "terminal" ? "" : "none";
+    document.getElementById("launch-step-team").style.display = step === "team" ? "" : "none";
+    // Widen the modal for the team form's two-column layout
+    const content = document.querySelector("#launch-modal .modal-content");
+    if (content) {
+        content.classList.toggle("modal-content-extra-wide", step === "team");
+        content.classList.toggle("modal-content-wide", step !== "team");
+    }
 }
 
 function _selectLaunchType(type) {
@@ -41,7 +48,10 @@ function _selectLaunchType(type) {
     _launchMode = type;
     _showLaunchStep(type);
     if (type === "agent") {
+        _loadAgentBoardProjects();
         document.getElementById("launch-agent-name").focus();
+    } else if (type === "team") {
+        _initTeamForm();
     } else {
         document.getElementById("launch-terminal-name").focus();
     }
@@ -56,10 +66,21 @@ export function showLaunchModal() {
     // Reset agent form
     document.getElementById("launch-agent-name").value = "";
     document.getElementById("launch-flags").value = "";
+    document.getElementById("launch-agent-prompt").value = "";
+    document.getElementById("launch-board-name").value = "";
+    const agentBoardSelect = document.getElementById("launch-board-select");
+    if (agentBoardSelect) agentBoardSelect.value = "";
+    document.getElementById("launch-new-board-row").style.display = "none";
     _syncFlagButtons("launch-flags");
 
     // Reset terminal form
     document.getElementById("launch-terminal-name").value = "";
+
+    // Reset team form
+    document.getElementById("team-agents-list").innerHTML = "";
+    document.getElementById("team-board-name").value = "";
+    document.getElementById("team-flags").value = "";
+    _syncFlagButtons("team-flags");
 
     // Pre-fill from global settings
     const s = state.settings || {};
@@ -106,6 +127,22 @@ export async function launchSession() {
         payload.flags = flagsStr.split(/\s+/);
     }
 
+    // Agent prompt and message board (only for agent mode)
+    if (_launchMode !== "terminal") {
+        const prompt = document.getElementById("launch-agent-prompt").value.trim();
+        if (prompt) payload.prompt = prompt;
+
+        const boardSelect = document.getElementById("launch-board-select");
+        if (boardSelect && boardSelect.value) {
+            if (boardSelect.value === "__new__") {
+                const boardName = document.getElementById("launch-board-name").value.trim();
+                if (boardName) payload.board_name = boardName;
+            } else {
+                payload.board_name = boardSelect.value;
+            }
+        }
+    }
+
     try {
         const resp = await fetch("/api/sessions/launch", {
             method: "POST",
@@ -124,6 +161,175 @@ export async function launchSession() {
         showToast("Failed to launch session", true);
     }
 }
+
+// ── Agent Board Select ────────────────────────────────────────────────────
+
+async function _loadAgentBoardProjects() {
+    const select = document.getElementById("launch-board-select");
+    if (!select) return;
+    select.innerHTML = '<option value="">None</option><option value="__new__">Create new board...</option>';
+    try {
+        const resp = await fetch("/api/board/projects");
+        const projects = await resp.json();
+        for (const p of projects) {
+            const opt = document.createElement("option");
+            opt.value = p.project;
+            opt.textContent = p.project;
+            select.appendChild(opt);
+        }
+    } catch (_) {}
+}
+
+function _onAgentBoardChange() {
+    const select = document.getElementById("launch-board-select");
+    const newRow = document.getElementById("launch-new-board-row");
+    newRow.style.display = select.value === "__new__" ? "" : "none";
+}
+window._onAgentBoardChange = _onAgentBoardChange;
+
+// ── Agent Team ────────────────────────────────────────────────────────────
+
+let _teamAgentCounter = 0;
+
+async function _initTeamForm() {
+    // Reset form
+    document.getElementById("team-board-name").value = "";
+    document.getElementById("team-flags").value = "";
+    _syncFlagButtons("team-flags");
+    _teamAgentCounter = 0;
+    const list = document.getElementById("team-agents-list");
+    list.innerHTML = "";
+
+    // Pre-fill working dir from settings
+    const s = state.settings || {};
+    const dirInput = document.getElementById("launch-team-dir");
+    if (s.default_working_dir && dirInput) dirInput.value = s.default_working_dir;
+    const typeSelect = document.getElementById("team-agent-type");
+    if (s.default_agent_type && typeSelect) typeSelect.value = s.default_agent_type;
+
+    // Fetch existing message board projects for the dropdown
+    const select = document.getElementById("team-board-select");
+    select.innerHTML = '<option value="__new__">Create new board...</option>';
+    try {
+        const resp = await fetch("/api/board/projects");
+        const projects = await resp.json();
+        for (const p of projects) {
+            const opt = document.createElement("option");
+            opt.value = p.project;
+            opt.textContent = p.project;
+            select.appendChild(opt);
+        }
+    } catch (_) {}
+
+    // Show new board name input
+    document.getElementById("team-new-board-row").style.display = "";
+
+    // Add two default agents
+    _addTeamAgent("Lead Developer", "You are the lead developer. Implement features, write code, and coordinate with the team via the message board.");
+    _addTeamAgent("QA Engineer", "You are an expert QA engineer. Review the work of other agents, create test plans, write tests, and ask probing questions about complex areas.");
+
+    document.getElementById("team-board-name").focus();
+}
+
+function _addTeamAgent(defaultName, defaultPrompt) {
+    _teamAgentCounter++;
+    const idx = _teamAgentCounter;
+    const list = document.getElementById("team-agents-list");
+    const row = document.createElement("div");
+    row.className = "team-agent-row";
+    row.dataset.idx = idx;
+    row.innerHTML = `
+        <div class="team-agent-header">
+            <strong>Agent #${idx}</strong>
+            <button class="team-agent-remove" onclick="this.closest('.team-agent-row').remove()" title="Remove">&times;</button>
+        </div>
+        <label>Name / Role:
+            <input type="text" class="team-agent-name" placeholder="e.g. QA Engineer, Frontend Dev" value="${escapeAttr(defaultName || '')}">
+        </label>
+        <label>Behavior Prompt:
+            <textarea class="team-agent-prompt" rows="3" placeholder="Describe this agent's role and behavior...">${escapeHtml(defaultPrompt || '')}</textarea>
+        </label>
+    `;
+    list.appendChild(row);
+}
+window._addTeamAgent = () => _addTeamAgent("", "");
+
+function _onTeamBoardChange() {
+    const select = document.getElementById("team-board-select");
+    const newRow = document.getElementById("team-new-board-row");
+    newRow.style.display = select.value === "__new__" ? "" : "none";
+}
+window._onTeamBoardChange = _onTeamBoardChange;
+
+async function launchTeam() {
+    // Collect board name
+    const boardSelect = document.getElementById("team-board-select");
+    let boardName;
+    if (boardSelect.value === "__new__") {
+        boardName = document.getElementById("team-board-name").value.trim();
+        if (!boardName) {
+            showToast("Board name is required", true);
+            return;
+        }
+    } else {
+        boardName = boardSelect.value;
+    }
+
+    const workingDir = document.getElementById("launch-team-dir").value.trim();
+    if (!workingDir) {
+        showToast("Working directory is required", true);
+        return;
+    }
+
+    const agentType = document.getElementById("team-agent-type").value;
+    const flagsStr = document.getElementById("team-flags").value.trim();
+    const flags = flagsStr ? flagsStr.split(/\s+/) : [];
+
+    // Collect agent definitions
+    const rows = document.querySelectorAll("#team-agents-list .team-agent-row");
+    if (rows.length === 0) {
+        showToast("Add at least one agent", true);
+        return;
+    }
+
+    const agents = [];
+    for (const row of rows) {
+        const name = row.querySelector(".team-agent-name").value.trim();
+        const prompt = row.querySelector(".team-agent-prompt").value.trim();
+        if (!name) {
+            showToast("Each agent needs a name", true);
+            return;
+        }
+        agents.push({ name, prompt });
+    }
+
+    const payload = {
+        board_name: boardName,
+        working_dir: workingDir,
+        agent_type: agentType,
+        flags,
+        agents,
+    };
+
+    try {
+        const resp = await fetch("/api/sessions/launch-team", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, true);
+        } else {
+            showToast(`Launched team: ${agents.length} agents on "${boardName}"`);
+            hideLaunchModal();
+            setTimeout(loadLiveSessions, 2000);
+        }
+    } catch (e) {
+        showToast("Failed to launch team", true);
+    }
+}
+window.launchTeam = launchTeam;
 
 export async function showInfoModal() {
     if (!state.currentSession || state.currentSession.type !== "live") {
@@ -505,7 +711,7 @@ function _syncFlagButtons(inputId) {
 
 // Attach input listeners for flag sync (after DOM is ready)
 document.addEventListener("DOMContentLoaded", () => {
-    for (const id of ["launch-flags", "restart-flags", "job-modal-flags"]) {
+    for (const id of ["launch-flags", "restart-flags", "job-modal-flags", "team-flags"]) {
         const el = document.getElementById(id);
         if (el) el.addEventListener("input", () => _syncFlagButtons(id));
     }

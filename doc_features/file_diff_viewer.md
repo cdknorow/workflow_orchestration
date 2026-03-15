@@ -1,6 +1,6 @@
 # Instructions: Writing MkDocs Documentation for the File Diff Viewer
 
-This file contains instructions for writing the MkDocs documentation page for the Changed Files and Diff Viewer feature. Follow these steps to create a doc that matches the existing Corral documentation style.
+This file contains instructions for writing the MkDocs documentation page for the Changed Files and Diff Viewer feature. Follow these steps to create a doc that matches the existing Coral documentation style.
 
 ---
 
@@ -27,7 +27,7 @@ Create `docs/docs/changed-files-diff-viewer.md`.
 ```markdown
 # Changed Files & Diff Viewer
 
-Opening paragraph: Explain that Corral tracks git working tree changes for each
+Opening paragraph: Explain that Coral tracks git working tree changes for each
 agent and provides a real-time Files panel and standalone diff viewer window.
 
 ---
@@ -89,7 +89,7 @@ Include query parameters and example responses.
 - GitPoller runs `git diff --numstat`, `git diff --cached --numstat`,
   `git status --porcelain` every 30 seconds
 - Results stored in `git_changed_files` SQLite table
-- File counts included in WebSocket corral_update payload
+- File counts included in WebSocket coral_update payload
 - Diff viewer uses diff2html library (loaded from CDN)
 
 ---
@@ -150,4 +150,4 @@ cd docs
 mkdocs gh-deploy
 ```
 
-This publishes to the `gh-pages` branch at https://cdknorow.github.io/corral/.
+This publishes to the `gh-pages` branch at https://cdknorow.github.io/coral/.

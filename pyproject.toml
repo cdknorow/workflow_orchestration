@@ -66,9 +66,6 @@ coral-dashboard = "coral.web_server:main"
 launch-coral = "coral.launch:main"
 coral-hook-task-sync = "coral.hooks.task_state:main"
 coral-hook-agentic-state = "coral.hooks.agentic_state:main"
-# Legacy aliases (migration from corral -> coral)
-corral = "coral.web_server:main"
-launch-corral = "coral.launch:main"
 
 [tool.setuptools.package-data]
 coral = ["PROTOCOL.md", "launch_agents.sh", "templates/*.html", "templates/includes/*.html", "templates/includes/views/*.html", "static/*.css", "static/css/*.css", "static/*.js", "static/*.png", "static/*.ico", "bundled_themes/*.json"]
