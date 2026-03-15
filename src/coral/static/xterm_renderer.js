@@ -7,6 +7,8 @@ let terminal = null;
 let fitAddon = null;
 let terminalWs = null;
 let _selectionDisposable = null;
+let _onDataDisposable = null;
+let _terminalFocused = false;
 
 function _getXtermTheme() {
     // Read xterm colors from CSS custom properties (set by theme configurator or variables.css)
@@ -91,9 +93,9 @@ export function createTerminal(containerEl) {
     }
 
     terminal = new Terminal({
-        cursorBlink: false,
+        cursorBlink: true,
         cursorStyle: 'block',
-        disableStdin: true,
+        disableStdin: false,
         scrollback: 1000,
         fontSize: 13,
         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
@@ -138,38 +140,99 @@ export function createTerminal(containerEl) {
         }
     }, { passive: true });
 
-    // Forward special keys to the live tmux session when xterm has focus.
-    // disableStdin prevents xterm from processing input, but it still
-    // captures keyboard events — use attachCustomKeyEventHandler to
-    // intercept and relay them.
-    const _xtermKeyMap = {
-        "Escape": ["Escape"],
-        "ArrowUp": ["Up"],
-        "ArrowDown": ["Down"],
-        "Enter": ["Enter"],
-    };
-    terminal.attachCustomKeyEventHandler((ev) => {
-        if (ev.type !== "keydown") return true;
-        const keys = _xtermKeyMap[ev.key];
-        if (keys && state.currentSession && state.currentSession.type === "live") {
-            ev.preventDefault();
-            // Clear selection state so buffered updates flush immediately.
-            // The user is done selecting if they're pressing keys.
-            if (_xtermSelecting) {
-                terminal.clearSelection();
-                _xtermSelecting = false;
-                state.isSelecting = false;
-                _setPauseBadge(false);
-                _flushPending();
+    // Forward all keyboard input via xterm.js onData → WebSocket → tmux.
+    // Keystrokes are batched over a short window (12ms) so rapid typing
+    // produces fewer WebSocket messages and tmux subprocess calls.
+    let _inputBuf = "";
+    let _inputTimer = null;
+    const INPUT_BATCH_MS = 12;
+
+    function _flushInput() {
+        _inputTimer = null;
+        const batch = _inputBuf;
+        _inputBuf = "";
+        if (!batch) return;
+
+        if (terminalWs && terminalWs.readyState === WebSocket.OPEN) {
+            terminalWs.send(JSON.stringify({
+                type: "terminal_input",
+                data: batch,
+            }));
+        } else {
+            // Fallback: map common sequences to raw key names for POST
+            const _fallbackMap = {
+                "\r": ["Enter"],
+                "\x1b": ["Escape"],
+                "\x1b[A": ["Up"],
+                "\x1b[B": ["Down"],
+                "\x1b[C": ["Right"],
+                "\x1b[D": ["Left"],
+            };
+            const mapped = _fallbackMap[batch];
+            if (mapped) {
+                sendRawKeys(mapped);
             }
-            sendRawKeys(keys);
-            return false;  // prevent xterm from handling it
+        }
+    }
+
+    _onDataDisposable = terminal.onData((data) => {
+        if (!state.currentSession || state.currentSession.type !== "live") return;
+
+        // Clear selection state on any keypress
+        if (_xtermSelecting) {
+            terminal.clearSelection();
+            _xtermSelecting = false;
+            state.isSelecting = false;
+            _setPauseBadge(false);
+            _flushPending();
+        }
+
+        // Control chars / escape sequences flush immediately (no batching delay)
+        const isControl = data.length === 1 && data.charCodeAt(0) < 32;
+        const isEscSeq = data.startsWith("\x1b");
+        if (isControl || isEscSeq) {
+            // Flush any pending literal text first, then send the control
+            if (_inputBuf) {
+                clearTimeout(_inputTimer);
+                _flushInput();
+            }
+            _inputBuf = data;
+            _flushInput();
+            return;
+        }
+
+        // Literal text: accumulate and debounce
+        _inputBuf += data;
+        if (!_inputTimer) {
+            _inputTimer = setTimeout(_flushInput, INPUT_BATCH_MS);
+        }
+    });
+
+    // Escape hatch: Ctrl+Shift+Escape unfocuses terminal
+    // (attachCustomKeyEventHandler can be called before open)
+    terminal.attachCustomKeyEventHandler((ev) => {
+        if (ev.type === 'keydown' && ev.key === 'Escape' && ev.ctrlKey && ev.shiftKey) {
+            terminal.blur();
+            return false;
         }
         return true;
     });
 
     terminal.open(containerEl);
     fitAddon.fit();
+
+    // Focus management: track terminal focus state
+    // (terminal.textarea is only available after open())
+    if (terminal.textarea) {
+        terminal.textarea.addEventListener('focus', () => {
+            _terminalFocused = true;
+            containerEl.classList.add('xterm-focused');
+        });
+        terminal.textarea.addEventListener('blur', () => {
+            _terminalFocused = false;
+            containerEl.classList.remove('xterm-focused');
+        });
+    }
 
     return terminal;
 }
@@ -258,7 +321,12 @@ export function disposeTerminal() {
         _selectionDisposable.dispose();
         _selectionDisposable = null;
     }
+    if (_onDataDisposable) {
+        _onDataDisposable.dispose();
+        _onDataDisposable = null;
+    }
     _xtermSelecting = false;
+    _terminalFocused = false;
     _pendingContent = null;
     if (terminal) {
         terminal.dispose();
@@ -279,4 +347,26 @@ export function getTerminalCols() {
 
 export function getTerminal() {
     return terminal;
+}
+
+export function isTerminalFocused() {
+    return _terminalFocused;
+}
+
+export function focusTerminal() {
+    if (terminal) {
+        terminal.focus();
+    }
+}
+
+/** Send raw terminal input data over the WebSocket (used by textarea integration). */
+export function sendTerminalInputWs(data) {
+    if (terminalWs && terminalWs.readyState === WebSocket.OPEN) {
+        terminalWs.send(JSON.stringify({
+            type: "terminal_input",
+            data: data,
+        }));
+        return true;
+    }
+    return false;
 }

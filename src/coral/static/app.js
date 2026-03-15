@@ -408,30 +408,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Global keyboard shortcuts: arrow keys, Esc, Enter → send to live session
-    document.addEventListener("keydown", (e) => {
-        // Skip if typing in an input, textarea, or contenteditable
-        const tag = e.target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
-        // Skip if a modal is open
-        if (document.querySelector(".modal[style*='display: flex']")) return;
-        // Only act when a live session is selected
-        if (!state.currentSession || state.currentSession.type !== "live") return;
-
-        const keyMap = {
-            "Escape": ["Escape"],
-            "ArrowLeft": ["Left"],
-            "ArrowRight": ["Right"],
-            "ArrowUp": ["Up"],
-            "ArrowDown": ["Down"],
-            "Enter": ["Enter"],
-        };
-        const keys = keyMap[e.key];
-        if (keys) {
-            e.preventDefault();
-            sendRawKeys(keys);
-        }
-    });
+    // Global keyboard shortcuts removed — terminal input now handled by
+    // xterm.js onData when the terminal is focused.
 
     // Auto-scroll detection for capture pane and live history
     const capture = document.getElementById("pane-capture");

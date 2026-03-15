@@ -20,11 +20,15 @@ from coral.tools.tmux_manager import (
     get_session_info,
     send_to_tmux,
     send_raw_keys,
+    send_terminal_input,
+    send_terminal_input_to_target,
     capture_pane,
     capture_pane_raw,
+    capture_pane_raw_target,
     kill_session,
     open_terminal_attached,
     resize_pane,
+    find_pane_target,
     _find_pane,
 )
 from coral.agents import get_agent
@@ -719,29 +723,85 @@ async def clear_agent_events(name: str, session_id: str | None = None):
 
 @router.websocket("/ws/terminal/{name}")
 async def ws_terminal(websocket: WebSocket, name: str):
-    """Stream raw terminal content (with ANSI escapes) for a single agent."""
+    """Bidirectional terminal WebSocket.
+
+    Server → Client: polls tmux pane content and pushes ``terminal_update`` messages.
+    Client → Server: receives ``terminal_input`` messages and forwards data to tmux.
+    """
     await websocket.accept()
 
     agent_type = websocket.query_params.get("agent_type")
     session_id = websocket.query_params.get("session_id")
     last_content = ""
+    closed = False
 
-    try:
-        while True:
-            content = await capture_pane_raw(
-                name, agent_type=agent_type, session_id=session_id
-            )
-            if content is not None and content != last_content:
-                await websocket.send_json({
-                    "type": "terminal_update",
-                    "content": content,
-                })
-                last_content = content
-            await asyncio.sleep(0.5)
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
+    # Resolve pane target once to avoid repeated tmux list-panes lookups
+    target = await find_pane_target(name, agent_type, session_id=session_id)
+
+    # Event to wake the writer immediately after input (for fast echo)
+    input_event = asyncio.Event()
+
+    async def _reader():
+        """Read incoming messages from the client (terminal input)."""
+        nonlocal closed, target
+        try:
+            while not closed:
+                raw = await websocket.receive_text()
+                try:
+                    msg = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if msg.get("type") == "terminal_input":
+                    data = msg.get("data", "")
+                    if data and target:
+                        await send_terminal_input_to_target(target, data)
+                    # Wake the writer to capture output immediately
+                    input_event.set()
+        except WebSocketDisconnect:
+            closed = True
+        except Exception:
+            closed = True
+
+    async def _writer():
+        """Poll tmux pane and push content to the client.
+
+        Uses adaptive polling: 50ms after recent input, 300ms when idle.
+        """
+        nonlocal last_content, closed, target
+        idle_interval = 0.30
+        active_interval = 0.05
+        interval = idle_interval
+        try:
+            while not closed:
+                # Re-resolve target if it was initially unavailable
+                if not target:
+                    target = await find_pane_target(
+                        name, agent_type, session_id=session_id,
+                    )
+                content = await capture_pane_raw_target(target) if target else None
+                if content is not None and content != last_content:
+                    await websocket.send_json({
+                        "type": "terminal_update",
+                        "content": content,
+                    })
+                    last_content = content
+
+                # Wait for either the interval or an input event
+                input_event.clear()
+                try:
+                    await asyncio.wait_for(input_event.wait(), timeout=interval)
+                    # Input happened — use fast poll for the next few cycles
+                    interval = active_interval
+                except asyncio.TimeoutError:
+                    # No input — drift back toward idle rate
+                    interval = min(interval + 0.05, idle_interval)
+        except WebSocketDisconnect:
+            closed = True
+        except Exception:
+            closed = True
+
+    # Run reader and writer concurrently
+    await asyncio.gather(_reader(), _writer())
 
 
 @router.websocket("/ws/coral")

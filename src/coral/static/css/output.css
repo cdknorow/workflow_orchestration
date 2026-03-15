@@ -73,6 +73,28 @@
     border-radius: 3px;
 }
 
+.xterm-container.xterm-focused {
+    outline: 1px solid var(--accent-primary, #58a6ff);
+    outline-offset: -1px;
+    border-radius: 4px;
+}
+
+.xterm-focus-hint {
+    position: absolute;
+    bottom: 6px;
+    right: 10px;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 5;
+    transition: opacity 0.2s;
+}
+
+.xterm-container.xterm-focused .xterm-focus-hint {
+    opacity: 0;
+}
+
 .selection-pause-badge {
     position: absolute;
     top: 8px;

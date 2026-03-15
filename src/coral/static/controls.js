@@ -6,6 +6,13 @@ import { stopCaptureRefresh } from './capture.js';
 import { renderLiveSessions } from './render.js';
 import { loadAgentEvents, renderEventTimeline } from './agentic_state.js';
 
+// Lazy imports to avoid circular dependency (xterm_renderer imports controls)
+let _xtermModule = null;
+async function _getXtermModule() {
+    if (!_xtermModule) _xtermModule = await import('./xterm_renderer.js');
+    return _xtermModule;
+}
+
 // Attached image paths (cleared on send)
 const pendingAttachments = [];
 
@@ -29,6 +36,20 @@ export async function sendCommand() {
     console.log("sendCommand: attachments =", pendingAttachments.length, "paths =", pendingAttachments.map(a => a.path), "command =", command);
     if (!command) return;
 
+    // Try WebSocket path first (sends text + Enter as terminal input)
+    if (pendingAttachments.length === 0) {
+        const xterm = await _getXtermModule();
+        if (xterm.sendTerminalInputWs(command + "\r")) {
+            input.value = "";
+            const key = sessionKey(state.currentSession);
+            if (key) delete state.sessionInputText[key];
+            showToast(`Sent: ${command}`);
+            xterm.focusTerminal();
+            return;
+        }
+    }
+
+    // Fall back to POST endpoint
     try {
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/send`, {
             method: "POST",
@@ -51,6 +72,7 @@ export async function sendCommand() {
             const key = sessionKey(state.currentSession);
             if (key) delete state.sessionInputText[key];
             showToast(`Sent: ${command}`);
+            _getXtermModule().then(m => m.focusTerminal());
         }
     } catch (e) {
         showToast("Failed to send command", true);

@@ -173,6 +173,74 @@ async def send_raw_keys(
         return str(e)
 
 
+async def send_terminal_input(
+    agent_name: str, data: str, agent_type: str | None = None, session_id: str | None = None,
+) -> str | None:
+    """Send raw terminal input data to a tmux pane (resolves target automatically)."""
+    target = await find_pane_target(agent_name, agent_type, session_id=session_id)
+    if not target:
+        return f"Pane '{agent_name}' not found in any tmux session"
+    return await send_terminal_input_to_target(target, data)
+
+
+async def send_terminal_input_to_target(target: str, data: str) -> str | None:
+    """Send raw terminal input data to a resolved tmux pane target.
+
+    Handles both literal text and control sequences from xterm.js onData.
+    Returns error string or None.
+    """
+    try:
+        # Map common control characters to tmux key names
+        _CTRL_MAP = {
+            "\r": "Enter",
+            "\x7f": "BSpace",
+            "\x1b": "Escape",
+            "\t": "Tab",
+        }
+
+        # Check for single control character
+        if len(data) == 1 and data in _CTRL_MAP:
+            rc, _, stderr = await run_cmd(
+                "tmux", "send-keys", "-t", target, _CTRL_MAP[data],
+            )
+            if rc != 0:
+                return f"send-keys failed (rc={rc}): {stderr}"
+            return None
+
+        # Check for Ctrl+<letter> (0x01-0x1a)
+        if len(data) == 1 and 1 <= ord(data) <= 26:
+            key_name = f"C-{chr(ord(data) + 96)}"  # 0x01 -> C-a, etc.
+            rc, _, stderr = await run_cmd(
+                "tmux", "send-keys", "-t", target, key_name,
+            )
+            if rc != 0:
+                return f"send-keys failed (rc={rc}): {stderr}"
+            return None
+
+        # Escape sequences (arrow keys, function keys, etc.)
+        if data.startswith("\x1b"):
+            # Send as hex bytes so tmux passes them through verbatim
+            hex_args = []
+            for byte in data.encode("utf-8"):
+                hex_args.extend(["-H", f"{byte:02x}"])
+            rc, _, stderr = await run_cmd(
+                "tmux", "send-keys", "-t", target, *hex_args,
+            )
+            if rc != 0:
+                return f"send-keys hex failed (rc={rc}): {stderr}"
+            return None
+
+        # Literal text — use send-keys -l for safe literal sending
+        rc, _, stderr = await run_cmd(
+            "tmux", "send-keys", "-t", target, "-l", data,
+        )
+        if rc != 0:
+            return f"send-keys -l failed (rc={rc}): {stderr}"
+        return None
+    except Exception as e:
+        return str(e)
+
+
 async def capture_pane(
     agent_name: str, lines: int = 200, agent_type: str | None = None, session_id: str | None = None,
 ) -> str | None:
@@ -199,7 +267,11 @@ async def capture_pane_raw(
     target = await find_pane_target(agent_name, agent_type, session_id=session_id)
     if not target:
         return None
+    return await capture_pane_raw_target(target, lines)
 
+
+async def capture_pane_raw_target(target: str, lines: int = 200) -> str | None:
+    """Capture pane content by target address (skips pane lookup)."""
     try:
         rc, stdout, _ = await run_cmd(
             "tmux", "capture-pane", "-t", target, "-p", "-e", f"-S-{lines}"
