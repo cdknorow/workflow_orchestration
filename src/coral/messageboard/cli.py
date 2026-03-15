@@ -4,7 +4,7 @@ Usage:
     coral-board join <project> --as <job-title> [--webhook <url>]
     coral-board post <message>
     coral-board check [--quiet]
-    coral-board read [--limit N]
+    coral-board read [--limit N] [--last N]
     coral-board leave
     coral-board projects
     coral-board subscribers
@@ -146,8 +146,9 @@ def cmd_join(args: argparse.Namespace) -> None:
     result = _api("POST", f"/{args.project}/subscribe", body)
     _save_state(args.project, args.job_title)
     print(f"Joined '{args.project}' as '{args.job_title}' (session: {result['session_id']})")
-    print("Note: Do NOT run 'coral-board read' to catch up on old messages — it will fill your context.")
-    print("You will be notified of new messages that @mention you or use @notify-all.")
+    print("Tip: Run 'coral-board read --last 5' to see recent context without flooding your conversation.")
+    print("     Do NOT run 'coral-board read' to catch up on all old messages — it will fill your context.")
+    print("     You will be notified of new messages that @mention you or use @notify-all.")
 
 
 def cmd_leave(args: argparse.Namespace) -> None:
@@ -173,6 +174,19 @@ def cmd_read(args: argparse.Namespace) -> None:
     """Read new messages from the current project board."""
     project = _active_project()
     sid = _session_id()
+
+    if args.last:
+        # Fetch enough messages and show only the last N (no cursor advancement)
+        messages = _api("GET", f"/{project}/messages/all?limit=200")
+        if not messages:
+            print("No messages on this board.")
+            return
+        for msg in messages[-args.last:]:
+            title = msg.get("job_title", msg["session_id"])
+            ts = msg["created_at"][:16].replace("T", " ")
+            print(f"[{ts}] {title}: {msg['content']}")
+        return
+
     messages = _api("GET", f"/{project}/messages?session_id={sid}&limit={args.limit}")
     if not messages:
         print("No new messages.")
@@ -267,6 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
     # read
     p_read = sub.add_parser("read", help="Read new messages")
     p_read.add_argument("--limit", type=int, default=50, help="Max messages to fetch (default: 50)")
+    p_read.add_argument("--last", type=int, default=0, help="Show the last N messages (does not advance cursor)")
     p_read.set_defaults(func=cmd_read)
 
     # projects
