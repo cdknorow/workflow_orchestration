@@ -152,6 +152,10 @@ app.include_router(tasks_api.router)
 app.include_router(uploads_api.router)
 app.include_router(themes_api.router)
 
+# Mount self-contained message board sub-app
+from coral.messageboard.app import create_app as create_board_app
+app.mount("/api/board", create_board_app())
+
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))

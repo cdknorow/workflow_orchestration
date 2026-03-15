@@ -50,6 +50,7 @@ export async function selectLiveSession(name, agentType, sessionId) {
     document.getElementById("welcome-screen").style.display = "none";
     document.getElementById("history-session-view").style.display = "none";
     document.getElementById("scheduler-view").style.display = "none";
+    document.getElementById("messageboard-view").style.display = "none";
     document.getElementById("live-session-view").style.display = "flex";
 
     // Update header
@@ -144,6 +145,7 @@ export async function selectHistorySession(sessionId) {
     document.getElementById("welcome-screen").style.display = "none";
     document.getElementById("live-session-view").style.display = "none";
     document.getElementById("scheduler-view").style.display = "none";
+    document.getElementById("messageboard-view").style.display = "none";
     document.getElementById("history-session-view").style.display = "flex";
 
     document.getElementById("history-session-title").textContent = `Session: ${sessionId}`;

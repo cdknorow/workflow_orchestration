@@ -75,6 +75,7 @@ export async function selectScheduledJob(jobId) {
     document.getElementById('welcome-screen').style.display = 'none';
     document.getElementById('live-session-view').style.display = 'none';
     document.getElementById('history-session-view').style.display = 'none';
+    document.getElementById('messageboard-view').style.display = 'none';
     document.getElementById('scheduler-view').style.display = 'block';
 
     // Deselect live/history sessions

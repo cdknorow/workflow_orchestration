@@ -31,7 +31,9 @@ import {
 } from './webhooks.js';
 import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
 import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js';
+
 import { checkForUpdates, dismissUpdateToast } from './update_check.js';
+import { initMessageBoard, selectBoardProject, showMessageBoardProjects, postBoardMessage, deleteMessageBoardProject } from './message_board.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -125,6 +127,10 @@ window.switchJobsSubtab = switchJobsSubtab;
 window.showThemeConfigurator = showThemeConfigurator;
 window.hideThemeConfigurator = hideThemeConfigurator;
 window.dismissUpdateToast = dismissUpdateToast;
+window.selectBoardProject = selectBoardProject;
+window.showMessageBoardProjects = showMessageBoardProjects;
+window.postBoardMessage = postBoardMessage;
+window.deleteMessageBoardProject = deleteMessageBoardProject;
 
 // ── History search/filter/pagination state ───────────────────────────────
 let historyPage = 1;  // page number only; all other filter state lives in filterState
@@ -248,6 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     initScheduler();
     initLiveJobs();
+    initMessageBoard();
 
     // ── Filter event wiring ─────────────────────────────────────────────
 
