@@ -213,18 +213,33 @@ class MessageBoardStore:
         return [dict(r) for r in rows]
 
     async def check_unread(self, project: str, session_id: str) -> int:
-        """Return count of unread messages without advancing the cursor."""
+        """Return count of unread messages that mention this agent.
+
+        Only counts messages containing ``@notify-all``, ``@<session_id>``,
+        or ``@<job_title>`` (case-insensitive).  Messages without a relevant
+        mention are silently skipped so agents aren't spammed.
+        """
         conn = await self._get_conn()
         sub_rows = await conn.execute_fetchall(
-            "SELECT last_read_id FROM board_subscribers WHERE project = ? AND session_id = ?",
+            "SELECT last_read_id, job_title FROM board_subscribers WHERE project = ? AND session_id = ?",
             (project, session_id),
         )
         if not sub_rows:
             return 0
         last_read_id = sub_rows[0]["last_read_id"]
+        job_title = sub_rows[0]["job_title"]
+
+        # Build mention patterns: @notify-all, @<session_id>, @<job_title>
+        patterns = [f"%@notify-all%", f"%@{session_id}%"]
+        if job_title:
+            patterns.append(f"%@{job_title}%")
+
+        where_clauses = " OR ".join("content LIKE ? COLLATE NOCASE" for _ in patterns)
         count_rows = await conn.execute_fetchall(
-            "SELECT COUNT(*) as cnt FROM board_messages WHERE project = ? AND id > ? AND session_id != ?",
-            (project, last_read_id, session_id),
+            f"""SELECT COUNT(*) as cnt FROM board_messages
+                WHERE project = ? AND id > ? AND session_id != ?
+                AND ({where_clauses})""",
+            (project, last_read_id, session_id, *patterns),
         )
         return count_rows[0]["cnt"]
 

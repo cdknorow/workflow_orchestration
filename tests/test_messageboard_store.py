@@ -151,7 +151,7 @@ async def test_get_webhook_targets(store):
 
 
 @pytest.mark.asyncio
-async def test_check_unread_returns_count(store):
+async def test_check_unread_with_notify_all(store):
     await store.subscribe("proj1", "agent-1", "Backend")
     await store.subscribe("proj1", "agent-2", "Frontend")
 
@@ -159,9 +159,9 @@ async def test_check_unread_returns_count(store):
     count = await store.check_unread("proj1", "agent-1")
     assert count == 0
 
-    # agent-2 posts two messages
-    await store.post_message("proj1", "agent-2", "msg 1")
-    await store.post_message("proj1", "agent-2", "msg 2")
+    # agent-2 posts messages with @notify-all
+    await store.post_message("proj1", "agent-2", "@notify-all msg 1")
+    await store.post_message("proj1", "agent-2", "@notify-all msg 2")
 
     # agent-1 should see 2 unread
     count = await store.check_unread("proj1", "agent-1")
@@ -173,11 +173,52 @@ async def test_check_unread_returns_count(store):
 
 
 @pytest.mark.asyncio
+async def test_check_unread_with_session_id_mention(store):
+    await store.subscribe("proj1", "agent-1", "Backend")
+    await store.subscribe("proj1", "agent-2", "Frontend")
+
+    await store.post_message("proj1", "agent-2", "@agent-1 need your help")
+    count = await store.check_unread("proj1", "agent-1")
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_check_unread_with_job_title_mention(store):
+    await store.subscribe("proj1", "agent-1", "Backend Dev")
+    await store.subscribe("proj1", "agent-2", "Frontend")
+
+    await store.post_message("proj1", "agent-2", "@Backend Dev can you review this?")
+    count = await store.check_unread("proj1", "agent-1")
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_check_unread_ignores_unmentioned_messages(store):
+    await store.subscribe("proj1", "agent-1", "Backend")
+    await store.subscribe("proj1", "agent-2", "Frontend")
+
+    # Message without any @mention — should NOT trigger notification
+    await store.post_message("proj1", "agent-2", "just a general update")
+    count = await store.check_unread("proj1", "agent-1")
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_check_unread_mention_case_insensitive(store):
+    await store.subscribe("proj1", "agent-1", "Backend Dev")
+    await store.subscribe("proj1", "agent-2", "Frontend")
+
+    await store.post_message("proj1", "agent-2", "@backend dev please look")
+    count = await store.check_unread("proj1", "agent-1")
+    assert count == 1
+
+
+@pytest.mark.asyncio
 async def test_check_unread_does_not_advance_cursor(store):
     await store.subscribe("proj1", "agent-1", "Backend")
     await store.subscribe("proj1", "agent-2", "Frontend")
 
-    await store.post_message("proj1", "agent-2", "hello")
+    await store.post_message("proj1", "agent-2", "@notify-all hello")
 
     # Check twice — count should stay the same (cursor not advanced)
     count1 = await store.check_unread("proj1", "agent-1")

@@ -124,10 +124,10 @@ async def test_check_unread(client):
     assert resp.status_code == 200
     assert resp.json() == {"unread": 0}
 
-    # a2 posts a message
-    await client.post("/proj1/messages", json={"session_id": "a2", "content": "hello"})
+    # a2 posts a message mentioning a1
+    await client.post("/proj1/messages", json={"session_id": "a2", "content": "@a1 hello"})
 
-    # a1 checks — 1 unread
+    # a1 checks — 1 unread (mentioned by session_id)
     resp = await client.get("/proj1/messages/check", params={"session_id": "a1"})
     assert resp.json() == {"unread": 1}
 
