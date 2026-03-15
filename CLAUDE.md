@@ -15,6 +15,7 @@
   - `tools/`: Core utilities (`session_manager.py`, `tmux_manager.py`, `log_streamer.py`, `pulse_detector.py`, `jsonl_reader.py`, `cron_parser.py`, `run_callback.py`, `utils.py`).
   - `background_tasks/`: Background services (`session_indexer.py`, `auto_summarizer.py`, `git_poller.py`, `idle_detector.py`, `scheduler.py`, `webhook_dispatcher.py`).
   - `hooks/`: Claude Code integration hooks (`task_state.py`, `agentic_state.py`, `utils.py`).
+  - `messageboard/`: Inter-agent message board (`store.py`, `api.py`, `app.py`, `cli.py`, `AGENT_GUIDE.md`).
   - `templates/`: Jinja2 HTML templates (`index.html`, `diff.html`, `includes/`).
   - `static/`: JavaScript, CSS, images, and favicon assets.
 - `tests/`: Test suite (Python and JavaScript tests).
@@ -73,6 +74,39 @@ All agent events use the `||PULSE:<EVENT_TYPE> <payload>||` format. The dashboar
 - `||PULSE:SUMMARY <Goal Description>||`: High-level goal (emit once at start or when goal changes).
 - `||PULSE:CONFIDENCE <Low|High> <specific reason>||`: Flag uncertainty (`Low`) or non-obvious confidence (`High`) with a specific reason.
 
+## Message Board & Agent Teams
+
+Agents communicate via a shared **message board** scoped to a project. The `+New` modal offers three launch types:
+
+- **Agent Team**: Launch multiple agents on a shared board with per-agent roles and behavior prompts.
+- **AI Agent**: Launch a single agent, optionally with an initial prompt and board subscription.
+- **Terminal**: Launch a plain shell session.
+
+### Message Board CLI (`coral-board`)
+Agents use the `coral-board` CLI (not raw HTTP) to communicate:
+```bash
+coral-board join myproject --as "Backend Dev"   # subscribe to a board
+coral-board read                                 # read new messages from teammates
+coral-board post "Auth middleware is done."      # post a message
+coral-board read --last 5                        # see 5 most recent messages
+coral-board subscribers                          # see who is on the board
+coral-board leave                                # leave the board
+```
+
+See `src/coral/messageboard/AGENT_GUIDE.md` for the full agent guide.
+
+### Persistence
+- `prompt` and `board_name` are stored in the `live_sessions` DB table.
+- On session restart, the agent is re-subscribed to the board and re-sent its prompt.
+- The Info modal shows the prompt and a clickable link to the message board.
+
+### REST API (mounted at `/api/board`)
+- `GET /projects` — list all boards
+- `POST /{project}/subscribe` — subscribe a session
+- `POST /{project}/messages` — post a message
+- `GET /{project}/messages/all?limit=200` — list all messages (no cursor)
+- `GET /{project}/messages?session_id=X` — read new messages (cursor-based, for agents)
+
 ## Releasing
 
 Use the `/release <version>` skill to publish a new version. It handles changelog updates,
@@ -91,7 +125,7 @@ for the full workflow.
 - **Dependencies:** `fastapi`, `uvicorn`, `jinja2`, `aiosqlite`, `httpx`, `python-multipart` (Python 3.8+).
 - **Database:** SQLite (`~/.coral/sessions.db`) using WAL mode.
 - **Logs:** Agents stream output to `/tmp/<agent_type>_coral_<folder_name>.log` via `tmux pipe-pane`.
-- **Entry Points:** `coral` / `coral-dashboard` (web server), `launch-coral` (agent launcher), `coral-hook-task-sync` (task sync hook), `coral-hook-agentic-state` (agentic state hook).
+- **Entry Points:** `coral` / `coral-dashboard` (web server), `launch-coral` (agent launcher), `coral-hook-task-sync` (task sync hook), `coral-hook-agentic-state` (agentic state hook), `coral-board` (message board CLI).
 
 ## Documentation
 - Documentation uses MkDocs with Material theme, configured in `docs/mkdocs.yml`.
