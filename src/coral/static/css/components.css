@@ -414,6 +414,112 @@
     to { transform: translateY(0); opacity: 1; }
 }
 
+/* ── Update Toast ──────────────────────────────────────────── */
+
+.update-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--accent-dim);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    z-index: 300;
+    min-width: 320px;
+    max-width: 440px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    animation: slideInFromTop 0.3s ease;
+}
+
+.update-toast-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+}
+
+.update-toast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.update-toast-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.update-toast-current {
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.update-toast-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.update-toast-close:hover {
+    color: var(--text-primary);
+}
+
+.update-toast-cmd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-tertiary);
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+
+.update-toast-cmd code {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.update-toast-copy {
+    flex-shrink: 0;
+}
+
+.update-toast-notes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.update-toast-notes li::before {
+    content: "\2022  ";
+    color: var(--accent-dim);
+}
+
+.update-toast-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.update-toast-link:hover {
+    text-decoration: underline;
+}
+
 /* ── Tooltips ──────────────────────────────────────────────── */
 
 .btn-nav[data-tooltip],

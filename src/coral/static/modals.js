@@ -409,6 +409,10 @@ export async function showSettingsModal() {
     const notifyCheck = document.getElementById("settings-notify-needs-input");
     if (notifyCheck) notifyCheck.checked = !!s.notify_needs_input;
 
+    // Check for Updates (stored in localStorage, defaults to on)
+    const updateCheck = document.getElementById("settings-check-updates");
+    if (updateCheck) updateCheck.checked = localStorage.getItem("coral-update-check-enabled") !== "false";
+
     document.getElementById("settings-modal").style.display = "flex";
 }
 
@@ -423,6 +427,8 @@ export async function applySettings() {
     const workingDir = document.getElementById("settings-working-dir")?.value.trim() || "";
     const fitPaneWidth = document.getElementById("settings-fit-pane-width")?.checked || false;
     const notifyNeedsInput = document.getElementById("settings-notify-needs-input")?.checked || false;
+    const checkUpdates = document.getElementById("settings-check-updates")?.checked ?? true;
+    localStorage.setItem("coral-update-check-enabled", checkUpdates ? "true" : "false");
 
     // Parse theme selection — "custom:<name>" or built-in "dark"/"light"/"system"
     let theme, customTheme;

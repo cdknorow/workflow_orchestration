@@ -73,6 +73,19 @@ All agent events use the `||PULSE:<EVENT_TYPE> <payload>||` format. The dashboar
 - `||PULSE:SUMMARY <Goal Description>||`: High-level goal (emit once at start or when goal changes).
 - `||PULSE:CONFIDENCE <Low|High> <specific reason>||`: Flag uncertainty (`Low`) or non-obvious confidence (`High`) with a specific reason.
 
+## Releasing
+
+Use the `/release <version>` skill to publish a new version. It handles changelog updates,
+version bumping, testing, PyPI upload, and GitHub Release creation. See `.claude/skills/release.md`
+for the full workflow.
+
+**Release checklist (manual reference):**
+1. Update version in `pyproject.toml`
+2. Add release section to `CHANGELOG.md` (Keep a Changelog format)
+3. Commit, push, merge to main
+4. Create GitHub Release with tag `vX.Y.Z` — paste the CHANGELOG section as release notes
+5. GitHub Actions (`.github/workflows/publish.yml`) builds and publishes to PyPI automatically via trusted publishing
+
 ## Development Guidelines
 - **Build System:** Setuptools with `pyproject.toml`.
 - **Dependencies:** `fastapi`, `uvicorn`, `jinja2`, `aiosqlite`, `httpx`, `python-multipart` (Python 3.8+).

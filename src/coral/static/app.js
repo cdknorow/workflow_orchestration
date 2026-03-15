@@ -31,6 +31,7 @@ import {
 } from './webhooks.js';
 import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
 import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js';
+import { checkForUpdates, dismissUpdateToast } from './update_check.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
 window.sendCommand = sendCommand;
@@ -123,6 +124,7 @@ window.selectLiveJobRun = selectLiveJobRun;
 window.switchJobsSubtab = switchJobsSubtab;
 window.showThemeConfigurator = showThemeConfigurator;
 window.hideThemeConfigurator = hideThemeConfigurator;
+window.dismissUpdateToast = dismissUpdateToast;
 
 // ── History search/filter/pagination state ───────────────────────────────
 let historyPage = 1;  // page number only; all other filter state lives in filterState
@@ -239,6 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadLiveSessions();
     connectCoralWs();
+    checkForUpdates();
     populateHfTagSelect().then(() => {
         syncFilterDomToState();
         loadHistoryFiltered();

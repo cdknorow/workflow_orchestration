@@ -19,6 +19,25 @@ router = APIRouter()
 store: CoralStore = None  # type: ignore[assignment]
 
 
+@router.get("/api/system/update-check")
+async def update_check():
+    """Return update availability info from cached check."""
+    from coral.web_server import app
+    info = getattr(app.state, "update_info", None)
+    if info is None or not info.current:
+        return {"available": False, "current": "unknown"}
+    result = {
+        "available": info.available,
+        "current": info.current,
+    }
+    if info.available:
+        result["latest"] = info.latest
+        result["release_notes"] = info.release_notes
+        result["release_url"] = info.release_url
+        result["upgrade_command"] = "pip install --upgrade agent-coral"
+    return result
+
+
 @router.get("/api/settings")
 async def get_settings():
     """Return all global user settings."""

@@ -1,5 +1,18 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/).
+
+## 2.1.0 — 2026-03-10
+
+### Added
+- Two-step launch modal with Agent vs Terminal chooser
+- Bidirectional terminal input via xterm.js and WebSocket
+
+### Fixed
+- Toolbar tooltip clipping and multi-line paste handling
+- Browse button in terminal launch modal
+
 ## 0.9.0
 
 ### Features

@@ -89,6 +89,17 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler
     tasks_api.scheduler = scheduler
 
+    # Periodic update check (PyPI + GitHub releases)
+    from coral.tools.update_checker import UpdateInfo, check_for_update
+    app.state.update_info = UpdateInfo()
+
+    async def _periodic_update_check():
+        while True:
+            await check_for_update(app.state.update_info)
+            await asyncio.sleep(6 * 3600)
+
+    update_task = asyncio.create_task(_periodic_update_check())
+
     # Store indexer and git poller on app state so endpoints can trigger refresh
     app.state.indexer = indexer
     app.state.git_poller = git_poller
@@ -97,6 +108,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    update_task.cancel()
     indexer_task.cancel()
     summarizer_task.cancel()
     git_task.cancel()
