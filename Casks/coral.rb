@@ -1,5 +1,5 @@
 cask "coral" do
-  version "2.2.1"
+  version "2.3.0"
   sha256 ""  # TODO: fill after DMG is published
 
   url "https://github.com/cdknorow/coral/releases/download/v#{version}/Coral.dmg"

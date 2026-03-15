@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2.3.0 — 2026-03-15
+
+### Added
+- Monochrome template icon for macOS menu bar — renders white on dark, black on light
+- Update notifications in tray app — checks PyPI on launch, shows macOS notification
+- "Check for Updates" menu item for on-demand version checks
+- Homebrew Cask (`Casks/coral.rb`) for `brew install --cask coral` with DMG download
+
 ## 2.2.1 — 2026-03-15
 
 ### Added
