@@ -229,8 +229,14 @@ class MessageBoardStore:
         last_read_id = sub_rows[0]["last_read_id"]
         job_title = sub_rows[0]["job_title"]
 
-        # Build mention patterns: @notify-all, @<session_id>, @<job_title>
-        patterns = [f"%@notify-all%", f"%@{session_id}%"]
+        # Build mention patterns: @notify-all (and variants), @<session_id>, @<job_title>
+        patterns = [
+            "%@notify-all%",
+            "%@notify_all%",
+            "%@notifyall%",
+            "%@all%",
+            f"%@{session_id}%",
+        ]
         if job_title:
             patterns.append(f"%@{job_title}%")
 

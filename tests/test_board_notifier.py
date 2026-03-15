@@ -20,12 +20,18 @@ async def notifier(board_store):
     return MessageBoardNotifier(board_store)
 
 
-def _make_agent(session_id, agent_name="test-agent"):
+# Simulates what discover_coral_agents() returns: session_id is the bare UUID,
+# tmux_session is the full tmux session name (which the CLI uses as board session_id).
+TMUX_1 = "claude-aaaa-1111"
+TMUX_2 = "claude-bbbb-2222"
+
+
+def _make_agent(session_id, agent_name="test-agent", tmux_session=TMUX_1):
     return {
         "agent_type": "claude",
         "agent_name": agent_name,
         "session_id": session_id,
-        "tmux_session": f"claude-{session_id}",
+        "tmux_session": tmux_session,
         "log_path": f"/tmp/claude_coral_{session_id}.log",
         "working_directory": f"/tmp/{agent_name}",
     }
@@ -37,11 +43,12 @@ def _make_agent(session_id, agent_name="test-agent"):
 async def test_notifies_agent_with_unread_messages(mock_discover, mock_send, board_store, notifier):
     """Agent with unread messages should receive a nudge."""
     mock_discover.return_value = [_make_agent("agent-1", "worktree_1")]
-    mock_send.return_value = None  # no error
+    mock_send.return_value = None
 
-    await board_store.subscribe("proj1", "agent-1", "Backend Dev")
-    await board_store.subscribe("proj1", "agent-2", "Frontend Dev")
-    await board_store.post_message("proj1", "agent-2", "@notify-all Need help with schema")
+    # Subscribe using tmux_session name (what the CLI does)
+    await board_store.subscribe("proj1", TMUX_1, "Backend Dev")
+    await board_store.subscribe("proj1", "other-agent", "Frontend Dev")
+    await board_store.post_message("proj1", "other-agent", "@notify-all Need help with schema")
 
     result = await notifier.run_once()
     assert result["notified"] == 1
@@ -58,9 +65,9 @@ async def test_does_not_renotify_same_count(mock_discover, mock_send, board_stor
     mock_discover.return_value = [_make_agent("agent-1")]
     mock_send.return_value = None
 
-    await board_store.subscribe("proj1", "agent-1", "Backend Dev")
-    await board_store.subscribe("proj1", "agent-2", "Frontend Dev")
-    await board_store.post_message("proj1", "agent-2", "@agent-1 msg 1")
+    await board_store.subscribe("proj1", TMUX_1, "Backend Dev")
+    await board_store.subscribe("proj1", "other-agent", "Frontend Dev")
+    await board_store.post_message("proj1", "other-agent", f"@{TMUX_1} msg 1")
 
     # First run: should notify
     result1 = await notifier.run_once()
@@ -80,15 +87,15 @@ async def test_renotifies_on_new_messages(mock_discover, mock_send, board_store,
     mock_discover.return_value = [_make_agent("agent-1")]
     mock_send.return_value = None
 
-    await board_store.subscribe("proj1", "agent-1", "Backend Dev")
-    await board_store.subscribe("proj1", "agent-2", "Frontend Dev")
-    await board_store.post_message("proj1", "agent-2", "@notify-all msg 1")
+    await board_store.subscribe("proj1", TMUX_1, "Backend Dev")
+    await board_store.subscribe("proj1", "other-agent", "Frontend Dev")
+    await board_store.post_message("proj1", "other-agent", "@notify-all msg 1")
 
     await notifier.run_once()
     assert mock_send.call_count == 1
 
     # New message arrives
-    await board_store.post_message("proj1", "agent-2", "@notify-all msg 2")
+    await board_store.post_message("proj1", "other-agent", "@notify-all msg 2")
     result = await notifier.run_once()
     assert result["notified"] == 1
     assert mock_send.call_count == 2
@@ -102,17 +109,17 @@ async def test_clears_state_when_messages_read(mock_discover, mock_send, board_s
     mock_discover.return_value = [_make_agent("agent-1")]
     mock_send.return_value = None
 
-    await board_store.subscribe("proj1", "agent-1", "Backend Dev")
-    await board_store.subscribe("proj1", "agent-2", "Frontend Dev")
-    await board_store.post_message("proj1", "agent-2", "@notify-all msg 1")
+    await board_store.subscribe("proj1", TMUX_1, "Backend Dev")
+    await board_store.subscribe("proj1", "other-agent", "Frontend Dev")
+    await board_store.post_message("proj1", "other-agent", "@notify-all msg 1")
 
     await notifier.run_once()
-    assert "agent-1" in notifier._notified
+    assert TMUX_1 in notifier._notified
 
-    # Agent reads messages
-    await board_store.read_messages("proj1", "agent-1")
+    # Agent reads messages (using board session_id = tmux_session)
+    await board_store.read_messages("proj1", TMUX_1)
     await notifier.run_once()
-    assert "agent-1" not in notifier._notified
+    assert TMUX_1 not in notifier._notified
 
 
 @pytest.mark.asyncio
@@ -137,9 +144,9 @@ async def test_no_notification_without_mention(mock_discover, mock_send, board_s
     mock_discover.return_value = [_make_agent("agent-1")]
     mock_send.return_value = None
 
-    await board_store.subscribe("proj1", "agent-1", "Backend Dev")
-    await board_store.subscribe("proj1", "agent-2", "Frontend Dev")
-    await board_store.post_message("proj1", "agent-2", "just a general update, no mention")
+    await board_store.subscribe("proj1", TMUX_1, "Backend Dev")
+    await board_store.subscribe("proj1", "other-agent", "Frontend Dev")
+    await board_store.post_message("proj1", "other-agent", "just a general update, no mention")
 
     result = await notifier.run_once()
     assert result["notified"] == 0
@@ -154,14 +161,14 @@ async def test_cleans_up_stale_sessions(mock_discover, mock_send, board_store, n
     mock_discover.return_value = [_make_agent("agent-1")]
     mock_send.return_value = None
 
-    await board_store.subscribe("proj1", "agent-1", "Dev")
-    await board_store.subscribe("proj1", "agent-2", "Dev")
-    await board_store.post_message("proj1", "agent-2", "@notify-all msg")
+    await board_store.subscribe("proj1", TMUX_1, "Dev")
+    await board_store.subscribe("proj1", "other-agent", "Dev")
+    await board_store.post_message("proj1", "other-agent", "@notify-all msg")
 
     await notifier.run_once()
-    assert "agent-1" in notifier._notified
+    assert TMUX_1 in notifier._notified
 
     # Agent disappears from tmux
     mock_discover.return_value = []
     await notifier.run_once()
-    assert "agent-1" not in notifier._notified
+    assert TMUX_1 not in notifier._notified

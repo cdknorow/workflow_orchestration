@@ -173,6 +173,19 @@ async def test_check_unread_with_notify_all(store):
 
 
 @pytest.mark.asyncio
+async def test_check_unread_notify_all_variants(store):
+    await store.subscribe("proj1", "agent-1", "Backend")
+    await store.subscribe("proj1", "agent-2", "Frontend")
+
+    await store.post_message("proj1", "agent-2", "@notify_all underscore variant")
+    await store.post_message("proj1", "agent-2", "@notifyall no separator")
+    await store.post_message("proj1", "agent-2", "@all short form")
+
+    count = await store.check_unread("proj1", "agent-1")
+    assert count == 3
+
+
+@pytest.mark.asyncio
 async def test_check_unread_with_session_id_mention(store):
     await store.subscribe("proj1", "agent-1", "Backend")
     await store.subscribe("proj1", "agent-2", "Frontend")

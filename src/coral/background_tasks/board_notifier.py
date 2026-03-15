@@ -37,29 +37,35 @@ class MessageBoardNotifier:
         """Check all live agents for unread messages. Returns {"notified": n}."""
         agents = await discover_coral_agents()
         notified_count = 0
-        live_session_ids: set[str] = set()
+        live_board_ids: set[str] = set()
 
         for agent in agents:
             sid = agent.get("session_id")
             if not sid:
                 continue
-            live_session_ids.add(sid)
+
+            # The CLI subscribes using the tmux session name (e.g.
+            # "claude-<uuid>"), which is what the board stores as session_id.
+            # discover_coral_agents() returns the bare UUID as "session_id"
+            # and the full tmux name as "tmux_session".
+            board_sid = agent.get("tmux_session") or sid
+            live_board_ids.add(board_sid)
 
             # Check if this agent is subscribed to a board
-            sub = await self._board_store.get_subscription(sid)
+            sub = await self._board_store.get_subscription(board_sid)
             if not sub:
                 continue
 
             project = sub["project"]
-            unread = await self._board_store.check_unread(project, sid)
+            unread = await self._board_store.check_unread(project, board_sid)
 
             if unread == 0:
                 # Agent has read their messages — clear notification state
-                self._notified.pop(sid, None)
+                self._notified.pop(board_sid, None)
                 continue
 
             # Only notify if unread count changed since last notification
-            if self._notified.get(sid) == unread:
+            if self._notified.get(board_sid) == unread:
                 continue
 
             # Send nudge
@@ -72,12 +78,12 @@ class MessageBoardNotifier:
                 log.debug("Failed to nudge %s: %s", agent["agent_name"], err)
                 continue
 
-            self._notified[sid] = unread
+            self._notified[board_sid] = unread
             notified_count += 1
             log.debug("Nudged %s about %d unread message(s)", agent["agent_name"], unread)
 
         # Clean up _notified entries for sessions that are no longer live
-        stale = set(self._notified) - live_session_ids
+        stale = set(self._notified) - live_board_ids
         for sid in stale:
             self._notified.pop(sid, None)
 
