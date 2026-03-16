@@ -56,6 +56,10 @@ class MessageBoardNotifier:
             if not sub:
                 continue
 
+            # Skip remote subscribers — the RemoteBoardPoller handles those
+            if sub.get("origin_server"):
+                continue
+
             project = sub["project"]
             unread = await self._board_store.check_unread(project, board_sid)
 

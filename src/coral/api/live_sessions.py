@@ -596,12 +596,14 @@ async def launch_session(body: dict):
     flags = body.get("flags", [])
     prompt = body.get("prompt", "").strip()
     board_name = body.get("board_name", "").strip()
+    board_server = body.get("board_server", "").strip() or None
 
     if not working_dir:
         return {"error": "working_dir is required"}
     result = await launch_claude_session(
         working_dir, agent_type, display_name=display_name, flags=flags,
         prompt=prompt or None, board_name=board_name or None,
+        board_server=board_server,
     )
 
     if result.get("error"):
@@ -614,6 +616,12 @@ async def launch_session(body: dict):
     if board_name:
         job_title = display_name or agent_type
         await board_store.subscribe(board_name, session_id, job_title)
+        # Write board state file so coral-board auto-routes to correct server
+        try:
+            from coral.tools.session_manager import _write_board_state
+            _write_board_state(session_name, board_name, job_title, server_url=board_server)
+        except Exception:
+            pass
 
     # Send initial prompt after agent initializes
     if prompt:
@@ -651,6 +659,7 @@ async def launch_team(body: dict):
     from coral.tools.tmux_manager import send_to_tmux
 
     board_name = body.get("board_name", "").strip()
+    board_server = body.get("board_server", "").strip() or None
     working_dir = body.get("working_dir", "").strip()
     agent_type = body.get("agent_type", "claude").strip()
     flags = body.get("flags", [])
@@ -679,6 +688,7 @@ async def launch_team(body: dict):
             flags=flags or None,
             prompt=agent_prompt or None,
             board_name=board_name or None,
+            board_server=board_server,
         )
         if result.get("error"):
             launched.append({"name": agent_name, "error": result["error"]})
@@ -689,6 +699,12 @@ async def launch_team(body: dict):
 
         # Subscribe this agent to the message board
         await board_store.subscribe(board_name, session_id, agent_name)
+        # Write board state file so coral-board auto-routes to correct server
+        try:
+            from coral.tools.session_manager import _write_board_state
+            _write_board_state(session_name, board_name, agent_name, server_url=board_server)
+        except Exception:
+            pass
 
         # Send the agent's behavior prompt after it initializes
         if agent_prompt:

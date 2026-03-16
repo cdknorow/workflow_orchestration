@@ -176,10 +176,15 @@ class CoralStore(DatabaseManager):
     async def register_live_session(self, session_id: str, agent_type: str, agent_name: str,
                                      working_dir: str, display_name: str | None = None,
                                      resume_from_id: str | None = None,
-                                     flags: list[str] | None = None) -> None:
+                                     flags: list[str] | None = None,
+                                     is_job: bool = False,
+                                     prompt: str | None = None,
+                                     board_name: str | None = None,
+                                     board_server: str | None = None) -> None:
         await self._get_conn()
         return await self._sessions.register_live_session(
-            session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags)
+            session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags,
+            is_job=is_job, prompt=prompt, board_name=board_name, board_server=board_server)
 
     async def update_live_session_display_name(self, session_id: str, display_name: str) -> None:
         await self._get_conn()

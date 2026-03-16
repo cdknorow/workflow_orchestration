@@ -56,8 +56,12 @@ def main():
         if not project or not session_id:
             return
 
-        port = os.environ.get("CORAL_PORT", "8420")
-        base = f"http://localhost:{port}"
+        # Server resolution: state file > CORAL_URL env > localhost fallback
+        base = (
+            state.get("server_url")
+            or os.environ.get("CORAL_URL")
+            or f"http://localhost:{os.environ.get('CORAL_PORT', '8420')}"
+        ).rstrip("/")
 
         result = coral_api(base, "GET", f"/api/board/{project}/messages/check?session_id={session_id}")
         if not result:

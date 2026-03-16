@@ -107,8 +107,13 @@ def _run_uvicorn(host: str, port: int, started: threading.Event, server_holder: 
     server.run()
 
 
-def _run_foreground(host: str, port: int) -> None:
+def _run_foreground(host: str, port: int, home_dir: str | None = None) -> None:
     """Run the tray app in the foreground (called by the detached subprocess)."""
+    # Set working directory so coral_root picks it up
+    if home_dir:
+        target = Path(home_dir).expanduser().resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        os.chdir(target)
     try:
         import rumps
     except ImportError:
@@ -288,9 +293,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Coral Dashboard (menu bar)")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8420, help="Port to bind to (default: 8420)")
+    parser.add_argument("--home", default=None,
+                        help="Home directory for Coral (default: user home directory)")
     parser.add_argument("--foreground", action="store_true", help="Run in foreground (used internally)")
     parser.add_argument("--stop", action="store_true", help="Stop a running tray instance")
     args = parser.parse_args()
+
+    # Resolve home directory: explicit flag > default to user home
+    home_dir = args.home or str(Path.home())
 
     # Handle --stop
     if args.stop:
@@ -304,7 +314,7 @@ def main() -> None:
 
     # If --foreground, run directly (this is the detached child)
     if args.foreground:
-        _run_foreground(args.host, args.port)
+        _run_foreground(args.host, args.port, home_dir)
         return
 
     # Check if already running
@@ -315,7 +325,8 @@ def main() -> None:
 
     # Spawn ourselves as a detached background process
     cmd = [sys.executable, "-m", "coral.tray", "--foreground",
-           "--host", args.host, "--port", str(args.port)]
+           "--host", args.host, "--port", str(args.port),
+           "--home", home_dir]
 
     log_dir = Path.home() / ".coral"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -331,6 +342,7 @@ def main() -> None:
         )
 
     print(f"Coral tray started in background (dashboard on port {args.port})")
+    print(f"  Home: {home_dir}")
     print(f"  Logs: {log_file}")
     print(f"  Stop: coral-tray --stop")
 

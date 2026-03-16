@@ -66,6 +66,11 @@ class MessageBoardStore:
             CREATE INDEX IF NOT EXISTS idx_board_messages_project
                 ON board_messages(project, id);
         """)
+        # Migration: add origin_server column to track remote subscribers
+        try:
+            await conn.execute("ALTER TABLE board_subscribers ADD COLUMN origin_server TEXT")
+        except Exception:
+            pass  # Column already exists
 
     # ── Subscribers ──────────────────────────────────────────────────────
 
@@ -75,16 +80,18 @@ class MessageBoardStore:
         session_id: str,
         job_title: str,
         webhook_url: str | None = None,
+        origin_server: str | None = None,
     ) -> dict[str, Any]:
         conn = await self._get_conn()
         now = datetime.now(timezone.utc).isoformat()
         await conn.execute(
-            """INSERT INTO board_subscribers (project, session_id, job_title, webhook_url, subscribed_at)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO board_subscribers (project, session_id, job_title, webhook_url, origin_server, subscribed_at)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(project, session_id)
                DO UPDATE SET job_title = excluded.job_title,
-                             webhook_url = excluded.webhook_url""",
-            (project, session_id, job_title, webhook_url, now),
+                             webhook_url = excluded.webhook_url,
+                             origin_server = excluded.origin_server""",
+            (project, session_id, job_title, webhook_url, origin_server, now),
         )
         await conn.commit()
         row = await conn.execute_fetchall(
