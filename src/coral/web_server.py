@@ -147,15 +147,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Coral Dashboard", lifespan=lifespan)
 
-# CORS: only allow requests from localhost origins to prevent cross-site attacks
-_cors_origins = [
-    f"http://localhost:{p}" for p in range(8400, 8500)
-] + [
-    f"http://127.0.0.1:{p}" for p in range(8400, 8500)
-]
+# CORS: allow same-origin by default (browser enforces this).
+# Explicitly allow localhost origins for cross-tab/port scenarios.
+# This blocks cross-site attacks from arbitrary external origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -248,7 +245,7 @@ def main():
     import uvicorn
 
     parser = argparse.ArgumentParser(description="Coral Dashboard")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
+    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8420, help="Port to bind to (default: 8420)")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     parser.add_argument("--no-browser", action="store_true", help="Don't open the browser on startup")
