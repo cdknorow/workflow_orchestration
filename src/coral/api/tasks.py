@@ -41,6 +41,13 @@ async def submit_task(body: dict):
         if skip_flag not in flags:
             flags = f"{skip_flag} {flags}".strip()
 
+    webhook_url = body.get("webhook_url")
+    if webhook_url:
+        from coral.api.webhooks import _validate_url
+        url_error = _validate_url(webhook_url, "generic")
+        if url_error:
+            return {"error": f"Invalid webhook_url: {url_error}"}, 400
+
     config = {
         "prompt": prompt,
         "repo_path": repo_path,
@@ -51,7 +58,7 @@ async def submit_task(body: dict):
         "cleanup_worktree": body.get("cleanup_worktree", True),
         "flags": flags,
         "display_name": body.get("display_name"),
-        "webhook_url": body.get("webhook_url"),
+        "webhook_url": webhook_url,
         "auto_accept": body.get("auto_accept", False),
         "max_auto_accepts": body.get("max_auto_accepts", 10),
     }

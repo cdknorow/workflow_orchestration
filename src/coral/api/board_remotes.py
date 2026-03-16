@@ -71,9 +71,58 @@ async def list_remote_subscriptions():
 # display remote board data without direct browser-to-remote connections.
 
 
+def _is_safe_remote_server(url: str) -> bool:
+    """Validate that a remote server URL is safe (not targeting private/internal networks)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    if parsed.scheme not in ("http", "https"):
+        return False
+    if not parsed.hostname:
+        return False
+
+    # Resolve the hostname to check the actual IP
+    try:
+        addr_infos = socket.getaddrinfo(parsed.hostname, parsed.port or 80, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return False
+
+    for family, _, _, _, sockaddr in addr_infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return False
+
+    return True
+
+
+async def _validate_remote_server(remote_server: str) -> None:
+    """Validate that the remote_server is a registered subscription target."""
+    if store is None:
+        raise HTTPException(503, "Remote board store not initialized")
+
+    # Check against registered remote subscriptions
+    subs = await store.list_all()
+    registered_servers = {s["remote_server"].rstrip("/") for s in subs}
+    if remote_server.rstrip("/") not in registered_servers:
+        raise HTTPException(403, "Remote server is not registered. Add a subscription first.")
+
+    # Block private/internal IPs to prevent SSRF
+    if not _is_safe_remote_server(remote_server):
+        raise HTTPException(403, "Remote server resolves to a private or reserved IP address")
+
+
 async def _proxy_get(remote_server: str, path: str, timeout: float = 5.0) -> dict | list:
     """Forward a GET request to a remote Coral server's board API."""
     import httpx
+
+    await _validate_remote_server(remote_server)
+
     url = f"{remote_server.rstrip('/')}/api/board{path}"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:

@@ -55,10 +55,19 @@ async def put_settings(body: dict):
 
 @router.get("/api/filesystem/list")
 async def list_filesystem(path: str = "~"):
-    """List directories at a given path for the directory browser."""
-    expanded = os.path.expanduser(path)
+    """List directories at a given path for the directory browser.
+
+    Restricted to the user's home directory to prevent arbitrary filesystem browsing.
+    """
+    expanded = os.path.realpath(os.path.expanduser(path))
+    home_dir = os.path.realpath(os.path.expanduser("~"))
+
+    # Only allow browsing within the user's home directory
+    if not expanded.startswith(home_dir + os.sep) and expanded != home_dir:
+        return {"error": "Access restricted to home directory", "entries": []}
+
     if not os.path.isdir(expanded):
-        return {"error": f"Not a directory: {path}", "entries": []}
+        return {"error": "Not a directory", "entries": []}
 
     entries = []
     try:

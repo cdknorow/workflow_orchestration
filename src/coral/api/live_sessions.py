@@ -28,6 +28,7 @@ from coral.tools.tmux_manager import (
     kill_session,
     open_terminal_attached,
     resize_pane,
+    resize_pane_target,
     find_pane_target,
     _find_pane,
 )
@@ -380,7 +381,10 @@ async def get_file_diff(name: str, filepath: str = Query(...), session_id: str |
     # For untracked files, show the file content as a "new file" diff
     if not diff_text:
         import os
-        full_path = os.path.join(workdir, filepath)
+        full_path = os.path.realpath(os.path.join(workdir, filepath))
+        # Prevent path traversal — resolved path must stay within workdir
+        if not full_path.startswith(os.path.realpath(workdir) + os.sep):
+            return {"filepath": filepath, "diff": "", "working_directory": workdir}
         if os.path.isfile(full_path):
             try:
                 with open(full_path, "r", errors="replace") as f:
@@ -830,12 +834,17 @@ async def ws_terminal(websocket: WebSocket, name: str):
                     msg = json.loads(raw)
                 except (json.JSONDecodeError, TypeError):
                     continue
-                if msg.get("type") == "terminal_input":
+                msg_type = msg.get("type")
+                if msg_type == "terminal_input":
                     data = msg.get("data", "")
                     if data and target:
                         await send_terminal_input_to_target(target, data)
                     # Wake the writer to capture output immediately
                     input_event.set()
+                elif msg_type == "terminal_resize":
+                    cols = msg.get("cols")
+                    if isinstance(cols, int) and cols >= 10 and target:
+                        await resize_pane_target(target, cols)
         except WebSocketDisconnect:
             closed = True
         except Exception:

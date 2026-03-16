@@ -51,6 +51,11 @@ async def list_subscribers(project: str):
 
 @router.post("/{project}/subscribe")
 async def subscribe(project: str, body: SubscribeRequest):
+    if body.webhook_url:
+        from coral.api.webhooks import _validate_url
+        url_error = _validate_url(body.webhook_url, "generic")
+        if url_error:
+            raise HTTPException(status_code=400, detail=f"Invalid webhook_url: {url_error}")
     return await store.subscribe(
         project, body.session_id, body.job_title, body.webhook_url
     )
