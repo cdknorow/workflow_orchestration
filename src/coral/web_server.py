@@ -32,6 +32,7 @@ from coral.api import webhooks as webhooks_api
 from coral.api import tasks as tasks_api
 from coral.api import uploads as uploads_api
 from coral.api import themes as themes_api
+from coral.api import board_remotes as board_remotes_api
 
 from coral.tools.utils import get_package_dir
 
@@ -43,6 +44,8 @@ BASE_DIR = get_package_dir()
 async def lifespan(app: FastAPI):
     """Start background indexer, batch summarizer, git poller, and webhook dispatcher on server startup."""
     from coral.background_tasks import SessionIndexer, BatchSummarizer, GitPoller, WebhookDispatcher, IdleDetector, MessageBoardNotifier
+    from coral.background_tasks.remote_board_poller import RemoteBoardPoller
+    from coral.store.remote_boards import RemoteBoardStore
     from coral.agents import get_agent
     from coral.tools.session_manager import discover_coral_agents, resume_persistent_sessions
     from coral.api.themes import seed_bundled_themes
@@ -89,6 +92,11 @@ async def lifespan(app: FastAPI):
     idle_task = asyncio.create_task(idle_detector.run_forever(interval=60))
     board_notifier_task = asyncio.create_task(board_notifier.run_forever(interval=30))
 
+    remote_board_store = RemoteBoardStore()
+    board_remotes_api.store = remote_board_store
+    remote_poller = RemoteBoardPoller(remote_board_store)
+    remote_poller_task = asyncio.create_task(remote_poller.run_forever(interval=30))
+
     # Start job scheduler
     from coral.background_tasks.scheduler import JobScheduler
     scheduler = JobScheduler(schedule_store)
@@ -123,6 +131,11 @@ async def lifespan(app: FastAPI):
     webhook_task.cancel()
     idle_task.cancel()
     board_notifier_task.cancel()
+    remote_poller_task.cancel()
+    try:
+        await asyncio.wait_for(remote_poller.close(), timeout=5)
+    except asyncio.TimeoutError:
+        log.warning("Remote board poller close timed out")
     try:
         await asyncio.wait_for(dispatcher.close(), timeout=5)
     except asyncio.TimeoutError:
@@ -159,6 +172,7 @@ app.include_router(webhooks_api.router)
 app.include_router(tasks_api.router)
 app.include_router(uploads_api.router)
 app.include_router(themes_api.router)
+app.include_router(board_remotes_api.router)
 
 # Mount self-contained message board sub-app
 from coral.messageboard.app import create_app as create_board_app

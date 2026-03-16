@@ -189,6 +189,37 @@ class TestRunForeground:
 
         assert "--no-browser" in captured_argv["argv"]
 
+    def test_chdir_to_home_dir(self, tmp_path):
+        """_run_foreground should chdir to the specified home directory."""
+        from coral.tray import _run_foreground
+
+        mock_rumps = MagicMock()
+        mock_rumps.App = MagicMock(return_value=MagicMock())
+        mock_rumps.MenuItem = MagicMock()
+
+        import builtins
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "rumps":
+                return mock_rumps
+            return real_import(name, *args, **kwargs)
+
+        target_dir = str(tmp_path / "my-coral-home")
+
+        with patch("threading.Thread") as MockThread, \
+             patch("coral.tray._write_pid"), \
+             patch("coral.tray._remove_pid"), \
+             patch("builtins.__import__", side_effect=mock_import):
+            MockThread.return_value = MagicMock()
+            original_cwd = os.getcwd()
+            try:
+                _run_foreground("0.0.0.0", 8420, target_dir)
+                assert os.getcwd() == target_dir
+                assert os.path.isdir(target_dir)
+            finally:
+                os.chdir(original_cwd)
+
     def test_writes_pid_file(self):
         """_run_foreground should write a PID file on startup."""
         from coral.tray import _run_foreground
@@ -273,7 +304,32 @@ class TestMainBackground:
              patch("coral.tray._run_foreground") as mock_fg:
             main()
 
-        mock_fg.assert_called_once_with("0.0.0.0", 8420)
+        # home_dir defaults to Path.home() when not specified
+        mock_fg.assert_called_once_with("0.0.0.0", 8420, str(Path.home()))
+
+    def test_main_home_flag_passed_to_foreground(self):
+        """main() with --home should forward the home dir to _run_foreground."""
+        from coral.tray import main
+
+        with patch("sys.argv", ["coral-tray", "--foreground", "--home", "/tmp/my-coral"]), \
+             patch("coral.tray._run_foreground") as mock_fg:
+            main()
+
+        mock_fg.assert_called_once_with("0.0.0.0", 8420, "/tmp/my-coral")
+
+    def test_main_home_flag_in_spawn_command(self):
+        """main() should pass --home to the spawned subprocess."""
+        from coral.tray import main
+
+        with patch("sys.argv", ["coral-tray", "--home", "/tmp/my-coral"]), \
+             patch("coral.tray._is_running", return_value=None), \
+             patch("subprocess.Popen") as mock_popen, \
+             patch("builtins.open", MagicMock()):
+            main()
+
+        cmd = mock_popen.call_args[0][0]
+        assert "--home" in cmd
+        assert "/tmp/my-coral" in cmd
 
 
 # ── PID file helpers ────────────────────────────────────────────────────────

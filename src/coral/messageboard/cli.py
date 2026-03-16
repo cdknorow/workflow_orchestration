@@ -1,8 +1,8 @@
 """CLI for the Coral message board.
 
 Usage:
-    coral-board join <project> --as <job-title> [--webhook <url>]
-    coral-board post <message>
+    coral-board [--server URL] join <project> --as <job-title> [--webhook <url>]
+    coral-board [--server URL] post <message>
     coral-board check [--quiet]
     coral-board read [--limit N] [--last N]
     coral-board leave
@@ -15,8 +15,11 @@ Only one project can be active at a time.
 
 Session ID is resolved from the tmux session name, with hostname as fallback.
 
-Environment variables:
-    CORAL_URL  — Base URL of the Coral server (default: http://localhost:8420)
+Server resolution priority:
+    1. --server flag (highest)
+    2. server_url saved in state file (from last join)
+    3. CORAL_URL environment variable
+    4. http://localhost:8420 (default)
 """
 
 from __future__ import annotations
@@ -34,8 +37,18 @@ from urllib.request import Request, urlopen
 
 _STATE_DIR = Path.home() / ".coral"
 
+# Set by main() when --server is passed on the command line.
+_server_override: str | None = None
 
-def _base_url() -> str:
+
+def _resolve_server() -> str:
+    """Resolve the Coral server URL using priority chain:
+    --server flag > state file server_url > CORAL_URL env var > default."""
+    if _server_override:
+        return _server_override.rstrip("/")
+    state = _load_state()
+    if state and state.get("server_url"):
+        return state["server_url"].rstrip("/")
     return os.environ.get("CORAL_URL", "http://localhost:8420").rstrip("/")
 
 
@@ -75,11 +88,13 @@ def _load_state() -> dict | None:
 def _save_state(project: str, job_title: str) -> None:
     """Save the active project for this worktree."""
     _STATE_DIR.mkdir(parents=True, exist_ok=True)
-    _state_file().write_text(json.dumps({
+    data: dict = {
         "project": project,
         "job_title": job_title,
         "session_id": _session_id(),
-    }))
+        "server_url": _resolve_server(),
+    }
+    _state_file().write_text(json.dumps(data))
 
 
 def _clear_state() -> None:
@@ -100,7 +115,7 @@ def _active_project() -> str:
 
 def _api(method: str, path: str, body: dict | None = None) -> dict | list:
     """Make an HTTP request to the message board API."""
-    url = f"{_base_url()}/api/board{path}"
+    url = f"{_resolve_server()}/api/board{path}"
     data = json.dumps(body).encode() if body else None
     req = Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
@@ -116,11 +131,58 @@ def _api(method: str, path: str, body: dict | None = None) -> dict | list:
         print(f"Error {e.code}: {detail or e.reason}", file=sys.stderr)
         sys.exit(1)
     except URLError as e:
-        print(f"Cannot reach Coral server at {_base_url()}: {e.reason}", file=sys.stderr)
+        print(f"Cannot reach Coral server at {_resolve_server()}: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
 # ── Commands ────────────────────────────────────────────────────────────────
+
+
+def _is_remote_join() -> bool:
+    """Check if the current join is to a non-local server."""
+    server = _resolve_server()
+    # Consider it remote if it doesn't point to localhost
+    from urllib.parse import urlparse
+    parsed = urlparse(server)
+    hostname = parsed.hostname or ""
+    return hostname not in ("localhost", "127.0.0.1", "::1")
+
+
+def _local_coral_url() -> str:
+    """URL of the local Coral server for remote subscription registration."""
+    port = os.environ.get("CORAL_PORT", "8420")
+    return f"http://localhost:{port}"
+
+
+def _register_remote_with_local(session_id: str, remote_server: str, project: str, job_title: str) -> None:
+    """Register a remote board subscription with the local Coral server."""
+    url = f"{_local_coral_url()}/api/board/remotes"
+    body = json.dumps({
+        "session_id": session_id,
+        "remote_server": remote_server,
+        "project": project,
+        "job_title": job_title,
+    }).encode()
+    req = Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urlopen(req, timeout=5) as resp:
+            resp.read()
+    except Exception:
+        print("Warning: Could not register with local Coral for remote notifications.", file=sys.stderr)
+
+
+def _unregister_remote_from_local(session_id: str) -> None:
+    """Remove remote board subscription from the local Coral server."""
+    url = f"{_local_coral_url()}/api/board/remotes"
+    body = json.dumps({"session_id": session_id}).encode()
+    req = Request(url, data=body, method="DELETE")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urlopen(req, timeout=5) as resp:
+            resp.read()
+    except Exception:
+        pass  # Best-effort cleanup
 
 
 def cmd_join(args: argparse.Namespace) -> None:
@@ -145,6 +207,11 @@ def cmd_join(args: argparse.Namespace) -> None:
         body["webhook_url"] = args.webhook
     result = _api("POST", f"/{args.project}/subscribe", body)
     _save_state(args.project, args.job_title)
+
+    # If joining a remote board, register with local Coral for tmux notifications
+    if _is_remote_join():
+        _register_remote_with_local(sid, _resolve_server(), args.project, args.job_title)
+
     print(f"Joined '{args.project}' as '{args.job_title}' (session: {result['session_id']})")
     print("Tip: Run 'coral-board read --last 5' to see recent context without flooding your conversation.")
     print("     Do NOT run 'coral-board read' to catch up on all old messages — it will fill your context.")
@@ -154,7 +221,13 @@ def cmd_join(args: argparse.Namespace) -> None:
 def cmd_leave(args: argparse.Namespace) -> None:
     """Unsubscribe from the current project."""
     project = _active_project()
-    _api("DELETE", f"/{project}/subscribe", {"session_id": _session_id()})
+    sid = _session_id()
+
+    # If leaving a remote board, unregister from local Coral
+    if _is_remote_join():
+        _unregister_remote_from_local(sid)
+
+    _api("DELETE", f"/{project}/subscribe", {"session_id": sid})
     _clear_state()
     print(f"Left '{project}'")
 
@@ -255,6 +328,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="coral-board",
         description="CLI for the Coral inter-agent message board. Join a project once, then post/read without repeating the project name.",
     )
+    parser.add_argument(
+        "--server", default=None,
+        help="Coral server URL (overrides state file and CORAL_URL env var)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     # join
@@ -300,8 +377,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    global _server_override
     parser = build_parser()
     args = parser.parse_args()
+    if args.server:
+        _server_override = args.server
     args.func(args)
 
 

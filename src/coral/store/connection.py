@@ -304,6 +304,11 @@ class DatabaseManager:
         except aiosqlite.OperationalError:
             pass  # Column already exists
 
+        try:
+            await conn.execute("ALTER TABLE live_sessions ADD COLUMN board_server TEXT")
+        except aiosqlite.OperationalError:
+            pass  # Column already exists
+
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)")
 
         # Migrate git_snapshots UNIQUE constraint from (agent_name, commit_hash)

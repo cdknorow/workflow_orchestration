@@ -172,3 +172,47 @@ async def test_cleans_up_stale_sessions(mock_discover, mock_send, board_store, n
     mock_discover.return_value = []
     await notifier.run_once()
     assert TMUX_1 not in notifier._notified
+
+
+@pytest.mark.asyncio
+@patch("coral.background_tasks.board_notifier.send_to_tmux", new_callable=AsyncMock)
+@patch("coral.background_tasks.board_notifier.discover_coral_agents", new_callable=AsyncMock)
+async def test_skips_remote_subscribers(mock_discover, mock_send, board_store, notifier):
+    """Subscribers with origin_server set (remote agents) should be skipped."""
+    mock_discover.return_value = [_make_agent("agent-1")]
+    mock_send.return_value = None
+
+    # Subscribe as a remote agent (origin_server set)
+    await board_store.subscribe("proj1", TMUX_1, "Backend Dev", origin_server="http://remote:8420")
+    await board_store.subscribe("proj1", "other-agent", "Frontend Dev")
+    await board_store.post_message("proj1", "other-agent", "@notify-all Need help")
+
+    result = await notifier.run_once()
+    assert result["notified"] == 0
+    mock_send.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("coral.background_tasks.board_notifier.send_to_tmux", new_callable=AsyncMock)
+@patch("coral.background_tasks.board_notifier.discover_coral_agents", new_callable=AsyncMock)
+async def test_notifies_local_but_skips_remote(mock_discover, mock_send, board_store, notifier):
+    """Local agents get nudged, remote agents are skipped."""
+    mock_discover.return_value = [
+        _make_agent("agent-1", "local-agent", TMUX_1),
+        _make_agent("agent-2", "remote-agent", TMUX_2),
+    ]
+    mock_send.return_value = None
+
+    # Local subscriber (no origin_server)
+    await board_store.subscribe("proj1", TMUX_1, "Local Dev")
+    # Remote subscriber (origin_server set)
+    await board_store.subscribe("proj1", TMUX_2, "Remote Dev", origin_server="http://remote:8420")
+    # Third party posts
+    await board_store.subscribe("proj1", "poster", "Poster")
+    await board_store.post_message("proj1", "poster", "@notify-all Hello team")
+
+    result = await notifier.run_once()
+    assert result["notified"] == 1
+    # Only the local agent should have been nudged
+    assert mock_send.call_count == 1
+    assert mock_send.call_args[0][0] == "local-agent"

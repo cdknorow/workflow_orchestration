@@ -547,6 +547,7 @@ class SessionStore(DatabaseManager):
         is_job: bool = False,
         prompt: str | None = None,
         board_name: str | None = None,
+        board_server: str | None = None,
     ) -> None:
         import json as _json
         conn = await self._get_conn()
@@ -554,9 +555,9 @@ class SessionStore(DatabaseManager):
         flags_json = _json.dumps(flags) if flags else None
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), prompt, board_name, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), prompt, board_name, board_server, now),
         )
         await conn.commit()
 
@@ -577,9 +578,9 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         now = datetime.now(timezone.utc).isoformat()
-        # Carry forward flags, prompt, and board_name from old session
+        # Carry forward flags, prompt, board_name, and board_server from old session
         old_row = await (await conn.execute(
-            "SELECT flags, prompt, board_name FROM live_sessions WHERE session_id = ?", (old_session_id,)
+            "SELECT flags, prompt, board_name, board_server FROM live_sessions WHERE session_id = ?", (old_session_id,)
         )).fetchone()
         if flags is None:
             flags_json = old_row["flags"] if old_row and old_row["flags"] else None
@@ -587,24 +588,25 @@ class SessionStore(DatabaseManager):
             flags_json = _json.dumps(flags) if flags else None
         old_prompt = old_row["prompt"] if old_row else None
         old_board = old_row["board_name"] if old_row else None
+        old_board_server = old_row["board_server"] if old_row else None
         await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (old_session_id,))
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, old_board_server, now),
         )
         await conn.commit()
 
     async def get_live_session_prompt_info(self, session_id: str) -> dict[str, str | None] | None:
-        """Return prompt and board_name for a live session, or None if not found."""
+        """Return prompt, board_name, and board_server for a live session, or None if not found."""
         conn = await self._get_conn()
         row = await (await conn.execute(
-            "SELECT prompt, board_name FROM live_sessions WHERE session_id = ?", (session_id,)
+            "SELECT prompt, board_name, board_server FROM live_sessions WHERE session_id = ?", (session_id,)
         )).fetchone()
         if not row:
             return None
-        return {"prompt": row["prompt"], "board_name": row["board_name"]}
+        return {"prompt": row["prompt"], "board_name": row["board_name"], "board_server": row["board_server"]}
 
     async def get_agent_type_for_session(self, session_id: str) -> str:
         """Look up the agent_type for a live session. Returns 'claude' as default."""
@@ -618,7 +620,7 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         rows = await (await conn.execute(
-            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, created_at "
+            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, created_at "
             "FROM live_sessions ORDER BY created_at"
         )).fetchall()
         results = []
