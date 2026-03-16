@@ -3,6 +3,28 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2.5.0 — 2026-03-16
+
+### Added
+- **Batch board unread counts** — New `get_all_unread_counts()` method replaces N+1 per-agent `check_unread()` queries with a single DB pass
+- **Log status mtime cache** — `get_log_status()` skips re-parsing when log file hasn't changed, eliminating up to 4MB of file I/O per agent per poll cycle
+- **WebSocket diff updates** — Dashboard sends only changed/removed sessions instead of the full array (~80% payload reduction with 10 agents)
+- **DB indexes** — Added indexes on `agent_events(session_id, event_type)` and `git_snapshots(session_id, recorded_at DESC)` for faster queries
+- **Performance test suite** — 23 new tests covering critical performance paths (git store, log snapshots, board queries, pulse detector, idle detector)
+- **Test DB isolation** — `conftest.py` with per-test temp database directories to prevent SQLite lock contention across concurrent test runs
+- **Toolbar WebSocket input** — `sendRawKeys()` now sends through WebSocket instead of POST requests, with POST fallback
+
+### Changed
+- **CoralStore simplified** — Replaced 80+ manual delegation methods with `__getattr__` dynamic dispatch (414→81 lines)
+- **Shared helpers extracted** — `_build_session_list()`, `_resolve_workdir()`, `get_diff_base()` deduplicated across endpoints (~130 lines removed)
+- **Migration blocks consolidated** — 12 separate `ALTER TABLE` try/except blocks replaced with data-driven loop
+- **Idle detector optimized** — Uses `Path.stat()` instead of reading 200 log lines per agent every 60s
+
+### Fixed
+- **Message board cursor bug** — Read cursor no longer advances past unseen messages from other agents
+- **"Unknown" author names** — Board subscriber records now use tmux session names matching message post IDs
+- **Consolidated CoralStore instances** — `restart_session()` uses single store instead of creating 3 separate ones
+
 ## 2.4.1 — 2026-03-16
 
 ### Added
