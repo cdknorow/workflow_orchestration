@@ -64,6 +64,27 @@
     margin: 8px 20px;
 }
 
+/* Message board delete button */
+.mb-delete-msg-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.mb-message:hover .mb-delete-msg-btn {
+    opacity: 1;
+}
+
+.mb-delete-msg-btn:hover {
+    color: var(--error, #f85149);
+}
+
 /* Icon + label buttons */
 .btn-icon-label {
     display: inline-flex;

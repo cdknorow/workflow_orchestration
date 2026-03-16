@@ -317,6 +317,17 @@ class MessageBoardStore:
 
         return result
 
+    # ── Delete individual message ───────────────────────────────────────
+
+    async def delete_message(self, message_id: int) -> bool:
+        """Delete a single message by ID. Returns True if a row was removed."""
+        conn = await self._get_conn()
+        cursor = await conn.execute(
+            "DELETE FROM board_messages WHERE id = ?", (message_id,)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
     # ── Webhooks ─────────────────────────────────────────────────────────
 
     async def get_webhook_targets(

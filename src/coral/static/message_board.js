@@ -4,6 +4,7 @@ import { escapeHtml } from './utils.js';
 
 let currentProject = null;
 let pollTimer = null;
+let isPaused = false;
 
 // ── API helpers ──────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export function selectBoardProject(project) {
     board.style.display = 'flex';
     document.getElementById('mb-subscribers-panel').style.display = 'block';
     document.getElementById('mb-back-btn').style.display = '';
+    document.getElementById('mb-pause-btn').style.display = '';
     document.getElementById('mb-delete-btn').style.display = '';
 
     const badge = document.getElementById('messageboard-project-badge');
@@ -79,6 +81,9 @@ export function selectBoardProject(project) {
 
     // Ensure dashboard is subscribed as a reader
     subscribeDashboard(project);
+
+    // Load paused state
+    loadPausedState(project);
 
     loadBoardMessages(project);
     loadBoardSubscribers(project);
@@ -100,6 +105,7 @@ export function showMessageBoardProjects() {
     document.getElementById('mb-board').style.display = 'none';
     document.getElementById('mb-subscribers-panel').style.display = 'none';
     document.getElementById('mb-back-btn').style.display = 'none';
+    document.getElementById('mb-pause-btn').style.display = 'none';
     document.getElementById('mb-delete-btn').style.display = 'none';
     document.getElementById('messageboard-project-badge').style.display = 'none';
 
@@ -157,10 +163,13 @@ function renderMessages(messages) {
     const wasAtBottom = (container.scrollHeight - prevScrollTop - container.clientHeight) < 50;
 
     container.innerHTML = messages.map(m => `
-        <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div class="mb-message" style="padding:8px 0;border-bottom:1px solid var(--border);position:relative">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
                 <span style="font-weight:600;font-size:13px;color:var(--text-primary)">${escapeHtml(m.job_title || 'Unknown')}</span>
-                <span style="font-size:10px;color:var(--text-muted)">${escapeHtml(m.session_id)}</span>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:10px;color:var(--text-muted)">${escapeHtml(m.session_id)}</span>
+                    <button class="mb-delete-msg-btn" onclick="deleteBoardMessage(${m.id})" title="Delete message">&times;</button>
+                </div>
             </div>
             <div style="font-size:13px;color:var(--text-primary);white-space:pre-wrap">${escapeHtml(m.content)}</div>
             <div style="font-size:10px;color:var(--text-muted);margin-top:4px">${formatTime(m.created_at)}</div>
@@ -240,6 +249,65 @@ export async function postBoardMessage() {
         await loadBoardMessages(currentProject);
     } catch (e) {
         console.error('Failed to post message:', e);
+    }
+}
+
+// ── Pause / Resume reads ─────────────────────────────────────────────────
+
+async function loadPausedState(project) {
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(project)}/paused`);
+        const data = await resp.json();
+        isPaused = !!data.paused;
+        updatePauseButton();
+    } catch (e) {
+        isPaused = false;
+        updatePauseButton();
+    }
+}
+
+function updatePauseButton() {
+    const btn = document.getElementById('mb-pause-btn');
+    if (!btn) return;
+    if (isPaused) {
+        btn.textContent = 'Resume Reads';
+        btn.classList.add('btn-warning');
+    } else {
+        btn.textContent = 'Pause Reads';
+        btn.classList.remove('btn-warning');
+    }
+}
+
+export async function toggleBoardPause() {
+    if (!currentProject) return;
+    const action = isPaused ? 'resume' : 'pause';
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(currentProject)}/${action}`, {
+            method: 'POST',
+        });
+        const data = await resp.json();
+        isPaused = !!data.paused;
+        updatePauseButton();
+    } catch (e) {
+        console.error('Failed to toggle pause:', e);
+    }
+}
+
+// ── Delete message ───────────────────────────────────────────────────────
+
+export async function deleteBoardMessage(messageId) {
+    if (!currentProject) return;
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(currentProject)}/messages/${messageId}`, {
+            method: 'DELETE',
+        });
+        if (!resp.ok) {
+            console.error('Delete message failed:', resp.status);
+            return;
+        }
+        await loadBoardMessages(currentProject);
+    } catch (e) {
+        console.error('Failed to delete message:', e);
     }
 }
 

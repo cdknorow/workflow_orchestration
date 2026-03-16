@@ -19,6 +19,9 @@ router = APIRouter()
 # Set by app.py during create_app()
 store: MessageBoardStore = None  # type: ignore[assignment]
 
+# In-memory set of paused projects (operator can pause/resume reads)
+_paused_projects: set[str] = set()
+
 
 # ── Request models ───────────────────────────────────────────────────────
 
@@ -81,11 +84,15 @@ async def post_message(project: str, body: PostMessageRequest):
 
 @router.get("/{project}/messages")
 async def read_messages(project: str, session_id: str, limit: int = 50):
+    if project in _paused_projects:
+        return []
     return await store.read_messages(project, session_id, limit)
 
 
 @router.get("/{project}/messages/check")
 async def check_unread(project: str, session_id: str):
+    if project in _paused_projects:
+        return {"unread": 0}
     count = await store.check_unread(project, session_id)
     return {"unread": count}
 
@@ -95,8 +102,34 @@ async def list_messages(project: str, limit: int = 200):
     return await store.list_messages(project, limit)
 
 
+@router.delete("/{project}/messages/{message_id}")
+async def delete_message(project: str, message_id: int):
+    removed = await store.delete_message(message_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True}
+
+
+@router.post("/{project}/pause")
+async def pause_reads(project: str):
+    _paused_projects.add(project)
+    return {"ok": True, "paused": True}
+
+
+@router.post("/{project}/resume")
+async def resume_reads(project: str):
+    _paused_projects.discard(project)
+    return {"ok": True, "paused": False}
+
+
+@router.get("/{project}/paused")
+async def get_paused(project: str):
+    return {"paused": project in _paused_projects}
+
+
 @router.delete("/{project}")
 async def delete_project(project: str):
+    _paused_projects.discard(project)
     await store.delete_project(project)
     return {"ok": True}
 
