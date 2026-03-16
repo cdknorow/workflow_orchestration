@@ -87,7 +87,7 @@ async def setup_board_and_prompt(
         try:
             from coral.messageboard.store import MessageBoardStore
             board_store = MessageBoardStore()
-            await board_store.subscribe(board_name, session_id, role)
+            await board_store.subscribe(board_name, session_name, role)
         except Exception:
             log.warning("Failed to subscribe session %s to board %s", session_id[:8], board_name)
         try:
@@ -255,8 +255,16 @@ def get_agent_log_path(
     return best
 
 
+# Cache for get_log_status: avoids re-parsing unchanged log files.
+# Key: str(log_path), Value: (mtime, file_size, result_dict)
+_log_status_cache: dict[str, tuple[float, int, dict[str, Any]]] = {}
+
+
 def get_log_status(log_path: str | Path) -> dict[str, Any]:
-    """Read a log file and return current status, summary, staleness, and recent lines."""
+    """Read a log file and return current status, summary, staleness, and recent lines.
+
+    Uses mtime+size cache to skip re-parsing when the file hasn't changed.
+    """
     log_path = Path(log_path)
     result: dict[str, Any] = {
         "status": None,
@@ -265,7 +273,18 @@ def get_log_status(log_path: str | Path) -> dict[str, Any]:
         "recent_lines": [],
     }
     try:
-        result["staleness_seconds"] = time.time() - log_path.stat().st_mtime
+        stat = log_path.stat()
+        mtime = stat.st_mtime
+        fsize = stat.st_size
+        result["staleness_seconds"] = time.time() - mtime
+
+        # Check cache: if mtime and size match, return cached result with updated staleness
+        cache_key = str(log_path)
+        cached = _log_status_cache.get(cache_key)
+        if cached and cached[0] == mtime and cached[1] == fsize:
+            cached_result = cached[2].copy()
+            cached_result["staleness_seconds"] = result["staleness_seconds"]
+            return cached_result
 
         with open(log_path, "rb") as f:
             f.seek(0, 2)
@@ -332,6 +351,9 @@ def get_log_status(log_path: str | Path) -> dict[str, Any]:
                     result["summary"] = clean_match(head_matches[-1])
 
             result["recent_lines"] = lines
+
+        # Update cache
+        _log_status_cache[cache_key] = (mtime, fsize, result)
     except OSError:
         pass
     return result
@@ -570,6 +592,8 @@ async def restart_session(
         await asyncio.sleep(0.3)
 
         # 6. Load persisted flags, prompt, board_name, and board_server from the live session record
+        from coral.store import CoralStore
+        _store = CoralStore()
         stored_flags = []
         stored_prompt = None
         stored_board = None
@@ -577,9 +601,7 @@ async def restart_session(
         if session_id:
             try:
                 import json as _json
-                from coral.store import CoralStore
-                _flag_store = CoralStore()
-                _flag_conn = await _flag_store._get_conn()
+                _flag_conn = await _store._get_conn()
                 _flag_row = await (await _flag_conn.execute(
                     "SELECT flags, prompt, board_name, board_server FROM live_sessions WHERE session_id = ?", (session_id,)
                 )).fetchone()
@@ -620,8 +642,6 @@ async def restart_session(
         # Migrate display_name and update live session record
         if session_id:
             try:
-                from coral.store import CoralStore
-                _store = CoralStore()
                 old_display_name = await _store.get_display_name(session_id)
                 await _store.migrate_display_name(session_id, new_session_id)
                 await _store.replace_live_session(
@@ -632,10 +652,7 @@ async def restart_session(
             except Exception:
                 pass  # Non-critical
         else:
-            # No old session_id — just register the new one
             try:
-                from coral.store import CoralStore
-                _store = CoralStore()
                 await _store.register_live_session(
                     new_session_id, effective_type, agent_name, working_dir,
                 )
@@ -646,9 +663,7 @@ async def restart_session(
         if stored_board or stored_prompt:
             old_display_name_for_prompt = None
             try:
-                from coral.store import CoralStore
-                _dn_store = CoralStore()
-                old_display_name_for_prompt = await _dn_store.get_display_name(new_session_id)
+                old_display_name_for_prompt = await _store.get_display_name(new_session_id)
             except Exception:
                 pass
             asyncio.create_task(setup_board_and_prompt(

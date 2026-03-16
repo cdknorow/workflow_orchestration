@@ -11,7 +11,7 @@ from typing import Any
 from coral.tools.session_manager import discover_coral_agents
 from coral.tools.tmux_manager import _find_pane
 from coral.store import CoralStore
-from coral.tools.utils import run_cmd, HISTORY_PATH
+from coral.tools.utils import run_cmd, get_diff_base, HISTORY_PATH
 
 log = logging.getLogger(__name__)
 
@@ -121,31 +121,6 @@ class GitPoller:
         except (asyncio.TimeoutError, OSError, FileNotFoundError):
             return None
 
-    async def _get_diff_base(self, workdir: str) -> str:
-        """Return the base ref to diff against.
-
-        On a feature branch: merge-base with main/master (shows all branch work).
-        On the default branch (or merge-base fails): HEAD (shows changes since last commit).
-        """
-        # Detect current branch
-        rc, branch, _ = await run_cmd(
-            "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD", timeout=5.0,
-        )
-        current_branch = branch.strip() if rc == 0 else ""
-
-        # If we're not on a default branch, try to find the merge-base
-        if current_branch not in ("main", "master", "HEAD", ""):
-            for base_branch in ("main", "master"):
-                rc, stdout, _ = await run_cmd(
-                    "git", "-C", workdir, "merge-base", base_branch, "HEAD", timeout=5.0,
-                )
-                if rc == 0 and stdout:
-                    return stdout.strip()
-
-        # On the default branch or merge-base unavailable — diff against HEAD
-        # (shows only uncommitted changes since the last commit)
-        return "HEAD"
-
     async def _get_base_timestamp(self, workdir: str, base_ref: str) -> float:
         """Get the unix timestamp of the base ref commit.
 
@@ -172,7 +147,7 @@ class GitPoller:
         file_map: dict[str, dict[str, Any]] = {}
 
         try:
-            base = await self._get_diff_base(workdir)
+            base = await get_diff_base(workdir)
             base_ts = await self._get_base_timestamp(workdir, base)
 
             # Diff from base to working tree — captures committed (on branch) +

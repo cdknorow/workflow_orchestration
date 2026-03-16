@@ -256,20 +256,26 @@ class DatabaseManager:
         """)
 
         # Migrations: add columns that may not exist in older schemas
-        try:
-            await conn.execute("ALTER TABLE agent_notes ADD COLUMN session_id TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE agent_tasks ADD COLUMN session_id TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE session_meta ADD COLUMN display_name TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
+        _add_columns = [
+            ("agent_notes", "session_id", "TEXT"),
+            ("agent_tasks", "session_id", "TEXT"),
+            ("session_meta", "display_name", "TEXT"),
+            ("live_sessions", "resume_from_id", "TEXT"),
+            ("live_sessions", "flags", "TEXT"),
+            ("live_sessions", "is_job", "INTEGER NOT NULL DEFAULT 0"),
+            ("live_sessions", "prompt", "TEXT"),
+            ("live_sessions", "board_name", "TEXT"),
+            ("live_sessions", "board_server", "TEXT"),
+            ("scheduled_jobs", "flags", "TEXT DEFAULT ''"),
+            ("scheduled_runs", "trigger_type", "TEXT DEFAULT 'cron'"),
+            ("scheduled_runs", "webhook_url", "TEXT"),
+            ("scheduled_runs", "display_name", "TEXT"),
+        ]
+        for table, col, defn in _add_columns:
+            try:
+                await conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+            except aiosqlite.OperationalError:
+                pass  # Column already exists
 
         # Create agent_live_state if missing (migration)
         await conn.execute("""
@@ -278,38 +284,6 @@ class DatabaseManager:
                 current_session_id TEXT
             )
         """)
-
-        try:
-            await conn.execute("ALTER TABLE live_sessions ADD COLUMN resume_from_id TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE live_sessions ADD COLUMN flags TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE live_sessions ADD COLUMN is_job INTEGER NOT NULL DEFAULT 0")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE live_sessions ADD COLUMN prompt TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE live_sessions ADD COLUMN board_name TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        try:
-            await conn.execute("ALTER TABLE live_sessions ADD COLUMN board_server TEXT")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)")
 
         # Migrate git_snapshots UNIQUE constraint from (agent_name, commit_hash)
         # to (session_id, commit_hash) to support multiple sessions in the same directory.
@@ -342,25 +316,14 @@ class DatabaseManager:
         except Exception:
             pass
 
-        try:
-            await conn.execute("ALTER TABLE scheduled_jobs ADD COLUMN flags TEXT DEFAULT ''")
-        except aiosqlite.OperationalError:
-            pass  # Column already exists
-
-        # Live Jobs / one-shot task runs: new columns on scheduled_runs
-        for col, defn in [
-            ("trigger_type", "TEXT DEFAULT 'cron'"),
-            ("webhook_url", "TEXT"),
-            ("display_name", "TEXT"),
-        ]:
-            try:
-                await conn.execute(f"ALTER TABLE scheduled_runs ADD COLUMN {col} {defn}")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-
         for ddl in [
+            "CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)",
             "CREATE INDEX IF NOT EXISTS idx_session_tags_tag_id ON session_tags(tag_id)",
             "CREATE INDEX IF NOT EXISTS idx_session_index_first_ts ON session_index(first_timestamp)",
+            # Performance indexes for frequent queries
+            "CREATE INDEX IF NOT EXISTS idx_agent_events_session ON agent_events(session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_agent_events_session_type ON agent_events(session_id, event_type)",
+            "CREATE INDEX IF NOT EXISTS idx_git_snap_session_time ON git_snapshots(session_id, recorded_at DESC)",
         ]:
             try:
                 await conn.execute(ddl)

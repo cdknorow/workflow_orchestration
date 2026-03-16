@@ -10,6 +10,24 @@ from typing import Any
 
 from coral.tools.utils import run_cmd
 
+# Bracket paste mode escape sequences (ESC [ 200 ~ and ESC [ 201 ~)
+_BRACKET_PASTE_START = ["-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "30", "-H", "7e"]
+_BRACKET_PASTE_END = ["-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "31", "-H", "7e"]
+
+
+async def _send_bracket_pasted(target: str, text: str) -> str | None:
+    """Send text wrapped in bracket paste sequences. Returns error string or None."""
+    rc, _, stderr = await run_cmd("tmux", "send-keys", "-t", target, *_BRACKET_PASTE_START)
+    if rc != 0:
+        return f"bracket paste start failed (rc={rc}): {stderr}"
+    rc, _, stderr = await run_cmd("tmux", "send-keys", "-t", target, "-l", text)
+    if rc != 0:
+        return f"send-keys failed (rc={rc}): {stderr}"
+    rc, _, stderr = await run_cmd("tmux", "send-keys", "-t", target, *_BRACKET_PASTE_END)
+    if rc != 0:
+        return f"bracket paste end failed (rc={rc}): {stderr}"
+    return None
+
 
 async def list_tmux_sessions() -> list[dict[str, str]]:
     """List all tmux panes with their titles, session names, and targets."""
@@ -132,26 +150,9 @@ async def send_to_tmux(
     try:
         # Multi-line: wrap in bracket paste sequences
         if "\n" in command:
-            start_hex = ["-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "30", "-H", "7e"]
-            end_hex = ["-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "31", "-H", "7e"]
-
-            rc, _, stderr = await run_cmd(
-                "tmux", "send-keys", "-t", target, *start_hex,
-            )
-            if rc != 0:
-                return f"bracket paste start failed (rc={rc}): {stderr}"
-
-            rc, _, stderr = await run_cmd(
-                "tmux", "send-keys", "-t", target, "-l", command,
-            )
-            if rc != 0:
-                return f"send-keys failed (rc={rc}): {stderr}"
-
-            rc, _, stderr = await run_cmd(
-                "tmux", "send-keys", "-t", target, *end_hex,
-            )
-            if rc != 0:
-                return f"bracket paste end failed (rc={rc}): {stderr}"
+            err = await _send_bracket_pasted(target, command)
+            if err:
+                return err
         else:
             # Single-line: send as literal text
             rc, _, stderr = await run_cmd(
@@ -256,30 +257,7 @@ async def send_terminal_input_to_target(target: str, data: str) -> str | None:
         # Multi-line text: wrap in bracket paste sequences so the terminal
         # treats it as pasted content rather than executing each newline.
         if "\n" in data or "\r\n" in data:
-            # Bracket paste start
-            start_hex = ["-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "30", "-H", "7e"]
-            # Bracket paste end
-            end_hex = ["-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "31", "-H", "7e"]
-
-            rc, _, stderr = await run_cmd(
-                "tmux", "send-keys", "-t", target, *start_hex,
-            )
-            if rc != 0:
-                return f"bracket paste start failed (rc={rc}): {stderr}"
-
-            rc, _, stderr = await run_cmd(
-                "tmux", "send-keys", "-t", target, "-l", data,
-            )
-            if rc != 0:
-                return f"send-keys -l failed (rc={rc}): {stderr}"
-
-            rc, _, stderr = await run_cmd(
-                "tmux", "send-keys", "-t", target, *end_hex,
-            )
-            if rc != 0:
-                return f"bracket paste end failed (rc={rc}): {stderr}"
-
-            return None
+            return await _send_bracket_pasted(target, data)
 
         # Single-line literal text
         rc, _, stderr = await run_cmd(

@@ -55,6 +55,114 @@ board_store: MessageBoardStore = MessageBoardStore()
 _last_known: dict[str, dict[str, str | None]] = {}
 
 
+async def _resolve_workdir(name: str, agent_type: str | None, session_id: str | None) -> str | None:
+    """Resolve working directory from tmux pane, falling back to git snapshot."""
+    pane = await _find_pane(name, agent_type, session_id=session_id)
+    if pane:
+        workdir = pane.get("current_path")
+        if workdir:
+            return workdir
+    git = None
+    if session_id:
+        git = await store.get_latest_git_state_by_session(session_id)
+    if not git:
+        git = await store.get_latest_git_state(name)
+    if git:
+        return git.get("working_directory")
+    return None
+
+
+async def _build_session_list(include_commands: bool = False) -> list[dict]:
+    """Build the enriched session list used by both REST and WebSocket endpoints."""
+    agents = await discover_coral_agents()
+    git_state = await store.get_all_latest_git_state()
+    file_counts = await store.get_all_changed_file_counts()
+    session_ids = [a["session_id"] for a in agents if a.get("session_id")]
+    display_names = await store.get_display_names(session_ids)
+    latest_events = await store.get_latest_event_types(session_ids)
+    latest_goals = await store.get_latest_goals(session_ids)
+
+    try:
+        board_subs = await board_store.get_all_subscriptions()
+    except Exception:
+        board_subs = {}
+
+    # Batch fetch all unread counts in one pass (eliminates N+1 queries)
+    try:
+        all_unread = await board_store.get_all_unread_counts()
+    except Exception:
+        all_unread = {}
+
+    results = []
+    for agent in agents:
+        log_info = get_log_status(agent["log_path"])
+        name = agent["agent_name"]
+        sid = agent.get("session_id")
+
+        git = git_state.get(sid) if sid else None
+        if not git:
+            git = git_state.get(name)
+        fc = file_counts.get(sid) if sid else None
+        if fc is None:
+            fc = file_counts.get(name, 0)
+        ev_tuple = latest_events.get(sid) if sid else None
+        latest_ev = ev_tuple[0] if ev_tuple else None
+        ev_summary = ev_tuple[1] if ev_tuple else None
+        waiting = latest_ev in ("stop", "notification")
+        working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
+
+        summary = log_info["summary"]
+        if not summary and sid:
+            summary = latest_goals.get(sid)
+
+        tmux_name = agent.get("tmux_session") or ""
+        board_sub = board_subs.get(tmux_name)
+        board_unread = all_unread.get(tmux_name, 0) if board_sub else 0
+
+        entry = {
+            "name": name,
+            "agent_type": agent["agent_type"],
+            "session_id": sid,
+            "tmux_session": agent.get("tmux_session"),
+            "status": log_info["status"],
+            "summary": summary,
+            "staleness_seconds": log_info["staleness_seconds"],
+            "branch": git["branch"] if git else None,
+            "display_name": display_names.get(sid) if sid else None,
+            "working_directory": agent.get("working_directory", ""),
+            "waiting_for_input": waiting,
+            "waiting_reason": latest_ev if waiting else None,
+            "waiting_summary": ev_summary if waiting else None,
+            "working": working,
+            "changed_file_count": fc,
+            "board_project": board_sub["project"] if board_sub else None,
+            "board_job_title": board_sub["job_title"] if board_sub else None,
+            "board_unread": board_unread,
+        }
+        if include_commands:
+            entry["commands"] = get_agent(agent["agent_type"]).available_commands
+        entry["log_path"] = agent["log_path"]
+
+        results.append(entry)
+        await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
+        await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
+
+    return results
+
+
+async def _exclude_job_sessions(results: list[dict]) -> list[dict]:
+    """Filter out sessions owned by scheduled job runs."""
+    if not schedule_store:
+        return results
+    try:
+        job_sids = await schedule_store.get_all_job_session_ids()
+        if job_sids:
+            return [s for s in results if s.get("session_id") not in job_sids]
+    except Exception:
+        pass
+    return results
+
+
 async def _send_auto_accept(tmux_session: str) -> None:
     """Send 'y' + Enter to a tmux session to accept a permission prompt."""
     from coral.tools.utils import run_cmd
@@ -90,86 +198,8 @@ async def _track_status_summary_events(
 @router.get("/api/sessions/live")
 async def get_live_sessions():
     """List active coral agents with their current status."""
-    agents = await discover_coral_agents()
-    git_state = await store.get_all_latest_git_state()
-    file_counts = await store.get_all_changed_file_counts()
-    session_ids = [a["session_id"] for a in agents if a.get("session_id")]
-    display_names = await store.get_display_names(session_ids)
-    latest_events = await store.get_latest_event_types(session_ids)
-    latest_goals = await store.get_latest_goals(session_ids)
-
-    # Fetch board subscriptions (keyed by tmux session name)
-    try:
-        board_subs = await board_store.get_all_subscriptions()
-    except Exception:
-        board_subs = {}
-    results = []
-    for agent in agents:
-        log_info = get_log_status(agent["log_path"])
-        name = agent["agent_name"]
-        sid = agent.get("session_id")
-        # Look up git state by session_id first, then fall back to agent_name
-        git = git_state.get(sid) if sid else None
-        if not git:
-            git = git_state.get(name)
-        fc = file_counts.get(sid) if sid else None
-        if fc is None:
-            fc = file_counts.get(name, 0)
-        latest_ev_tuple = latest_events.get(sid) if sid else None
-        latest_ev = latest_ev_tuple[0] if latest_ev_tuple else None
-        latest_ev_summary = latest_ev_tuple[1] if latest_ev_tuple else None
-        waiting = latest_ev in ("stop", "notification")
-        working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
-        # Use log summary, fall back to latest goal event from DB
-        summary = log_info["summary"]
-        if not summary and sid:
-            summary = latest_goals.get(sid)
-        # Board subscription lookup (CLI subscribes using tmux session name)
-        tmux_name = agent.get("tmux_session") or ""
-        board_sub = board_subs.get(tmux_name)
-        board_unread = 0
-        if board_sub:
-            try:
-                board_unread = await board_store.check_unread(board_sub["project"], tmux_name)
-            except Exception:
-                pass
-
-        entry = {
-            "name": name,
-            "agent_type": agent["agent_type"],
-            "session_id": sid,
-            "tmux_session": agent.get("tmux_session"),
-            "log_path": agent["log_path"],
-            "status": log_info["status"],
-            "summary": summary,
-            "staleness_seconds": log_info["staleness_seconds"],
-            "commands": get_agent(agent["agent_type"]).available_commands,
-            "branch": git["branch"] if git else None,
-            "display_name": display_names.get(sid) if sid else None,
-            "working_directory": agent.get("working_directory", ""),
-            "waiting_for_input": waiting,
-            "waiting_reason": latest_ev if waiting else None,
-            "waiting_summary": latest_ev_summary if waiting else None,
-            "working": working,
-            "changed_file_count": fc,
-            "board_project": board_sub["project"] if board_sub else None,
-            "board_job_title": board_sub["job_title"] if board_sub else None,
-            "board_unread": board_unread,
-        }
-        results.append(entry)
-        await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
-        await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
-
-    # Exclude sessions owned by job runs (any status)
-    if schedule_store:
-        try:
-            job_sids = await schedule_store.get_all_job_session_ids()
-            if job_sids:
-                results = [s for s in results if s.get("session_id") not in job_sids]
-        except Exception:
-            pass
-
-    return results
+    results = await _build_session_list(include_commands=True)
+    return await _exclude_job_sessions(results)
 
 
 @router.get("/api/sessions/live/{name}")
@@ -261,19 +291,7 @@ async def refresh_live_session_files(name: str, body: dict | None = None):
 
     session_id = (body or {}).get("session_id")
 
-    # Resolve working directory from tmux pane or DB
-    workdir = None
-    pane = await _find_pane(name, None, session_id=session_id)
-    if pane:
-        workdir = pane.get("current_path")
-    if not workdir:
-        git = None
-        if session_id:
-            git = await store.get_latest_git_state_by_session(session_id)
-        if not git:
-            git = await store.get_latest_git_state(name)
-        if git:
-            workdir = git.get("working_directory")
+    workdir = await _resolve_workdir(name, None, session_id)
     if not workdir:
         return {"error": "Could not determine working directory", "files": []}
 
@@ -339,54 +357,18 @@ async def refresh_live_session_files(name: str, body: dict | None = None):
     return {"agent_name": name, "files": files_list}
 
 
-async def _get_diff_base(workdir: str) -> str:
-    """Return the base ref to diff against.
-
-    On a feature branch: merge-base with main/master (shows all branch work).
-    On the default branch (or merge-base fails): HEAD (shows uncommitted changes).
-    """
-    from coral.tools.utils import run_cmd
-
-    rc, branch, _ = await run_cmd(
-        "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD", timeout=5.0,
-    )
-    current_branch = branch.strip() if rc == 0 else ""
-
-    if current_branch not in ("main", "master", "HEAD", ""):
-        for base_branch in ("main", "master"):
-            rc, stdout, _ = await run_cmd(
-                "git", "-C", workdir, "merge-base", base_branch, "HEAD", timeout=5.0,
-            )
-            if rc == 0 and stdout:
-                return stdout.strip()
-
-    return "HEAD"
-
-
 @router.get("/api/sessions/live/{name}/diff")
 async def get_file_diff(name: str, filepath: str = Query(...), session_id: str | None = None):
     """Return the unified diff for a single file in the agent's working tree."""
-    from coral.tools.utils import run_cmd
+    from coral.tools.utils import run_cmd, get_diff_base
 
-    # Resolve working directory from tmux pane or git snapshot
-    workdir = None
-    pane = await _find_pane(name, None, session_id=session_id)
-    if pane:
-        workdir = pane.get("current_path")
-    if not workdir:
-        git = None
-        if session_id:
-            git = await store.get_latest_git_state_by_session(session_id)
-        if not git:
-            git = await store.get_latest_git_state(name)
-        if git:
-            workdir = git.get("working_directory")
+    workdir = await _resolve_workdir(name, None, session_id)
     if not workdir:
         return {"error": "Could not determine working directory"}
 
     # Determine the diff base — on feature branches this is the merge-base
     # with main/master so we show all branch changes, not just uncommitted ones.
-    base = await _get_diff_base(workdir)
+    base = await get_diff_base(workdir)
 
     # Diff from base to working tree for this file — captures committed +
     # staged + unstaged changes in one shot.
@@ -423,19 +405,7 @@ async def search_files(name: str, q: str = Query(""), session_id: str | None = N
     """Search for files in the agent's working directory by name fragment."""
     from coral.tools.utils import run_cmd
 
-    # Resolve working directory
-    workdir = None
-    pane = await _find_pane(name, None, session_id=session_id)
-    if pane:
-        workdir = pane.get("current_path")
-    if not workdir:
-        git = None
-        if session_id:
-            git = await store.get_latest_git_state_by_session(session_id)
-        if not git:
-            git = await store.get_latest_git_state(name)
-        if git:
-            workdir = git.get("working_directory")
+    workdir = await _resolve_workdir(name, None, session_id)
     if not workdir:
         return {"files": []}
 
@@ -915,79 +885,24 @@ async def ws_terminal(websocket: WebSocket, name: str):
 
 @router.websocket("/ws/coral")
 async def ws_coral(websocket: WebSocket):
-    """Stream coral-wide session list updates (polls every 3s)."""
+    """Stream coral-wide session list updates (polls every 3s).
+
+    First message is a full ``coral_update`` with all sessions.
+    Subsequent messages are ``coral_diff`` with only changed/removed sessions
+    to reduce bandwidth. Full session objects are sent per changed agent
+    (no field-level diffs) as recommended by security review.
+    """
     await websocket.accept()
 
-    last_state = None
+    # Per-session state tracking for diff calculation
+    prev_sessions: dict[str, str] = {}  # session key -> json string
+    prev_runs_json: str = "[]"
+    first_message = True
+
     try:
         while True:
-            agents = await discover_coral_agents()
-            git_state = await store.get_all_latest_git_state()
-            ws_file_counts = await store.get_all_changed_file_counts()
-            ws_session_ids = [a["session_id"] for a in agents if a.get("session_id")]
-            ws_display_names = await store.get_display_names(ws_session_ids)
-            ws_latest_events = await store.get_latest_event_types(ws_session_ids)
-            ws_latest_goals = await store.get_latest_goals(ws_session_ids)
-
-            # Fetch board subscriptions for hover cards
-            try:
-                ws_board_subs = await board_store.get_all_subscriptions()
-            except Exception:
-                ws_board_subs = {}
-
-            results = []
-            for agent in agents:
-                log_info = get_log_status(agent["log_path"])
-                name = agent["agent_name"]
-                sid = agent.get("session_id")
-                # Look up git state by session_id first, then fall back to agent_name
-                git = git_state.get(sid) if sid else None
-                if not git:
-                    git = git_state.get(name)
-                ws_fc = ws_file_counts.get(sid) if sid else None
-                if ws_fc is None:
-                    ws_fc = ws_file_counts.get(name, 0)
-                ws_ev_tuple = ws_latest_events.get(sid) if sid else None
-                latest_ev = ws_ev_tuple[0] if ws_ev_tuple else None
-                ws_ev_summary = ws_ev_tuple[1] if ws_ev_tuple else None
-                waiting = latest_ev in ("stop", "notification")
-                working = latest_ev == "tool_use" and (log_info["staleness_seconds"] or 999) < 120
-                ws_summary = log_info["summary"]
-                if not ws_summary and sid:
-                    ws_summary = ws_latest_goals.get(sid)
-
-                # Board subscription lookup
-                ws_tmux_name = agent.get("tmux_session") or ""
-                ws_board_sub = ws_board_subs.get(ws_tmux_name)
-                ws_board_unread = 0
-                if ws_board_sub:
-                    try:
-                        ws_board_unread = await board_store.check_unread(ws_board_sub["project"], ws_tmux_name)
-                    except Exception:
-                        pass
-
-                results.append({
-                    "name": name,
-                    "agent_type": agent["agent_type"],
-                    "session_id": sid,
-                    "tmux_session": agent.get("tmux_session"),
-                    "status": log_info["status"],
-                    "summary": ws_summary,
-                    "staleness_seconds": log_info["staleness_seconds"],
-                    "branch": git["branch"] if git else None,
-                    "display_name": ws_display_names.get(sid) if sid else None,
-                    "working_directory": agent.get("working_directory", ""),
-                    "waiting_for_input": waiting,
-                    "waiting_reason": latest_ev if waiting else None,
-                    "waiting_summary": ws_ev_summary if waiting else None,
-                    "working": working,
-                    "changed_file_count": ws_fc,
-                    "board_project": ws_board_sub["project"] if ws_board_sub else None,
-                    "board_job_title": ws_board_sub["job_title"] if ws_board_sub else None,
-                    "board_unread": ws_board_unread,
-                })
-                await _track_status_summary_events(name, log_info["status"], log_info["summary"], session_id=sid)
-                await scan_log_for_pulse_events(store, name, agent["log_path"], session_id=sid)
+            results = await _build_session_list()
+            results = await _exclude_job_sessions(results)
 
             # Fetch active job runs for Jobs sidebar
             active_runs = []
@@ -1000,19 +915,47 @@ async def ws_coral(websocket: WebSocket):
                 except Exception:
                     pass
 
-                # Exclude sessions owned by job runs (any status) from live sessions
-                try:
-                    job_session_ids = await schedule_store.get_all_job_session_ids()
-                    if job_session_ids:
-                        results = [s for s in results if s.get("session_id") not in job_session_ids]
-                except Exception:
-                    pass
+            # Build per-session state map
+            curr_sessions: dict[str, str] = {}
+            session_by_key: dict[str, dict] = {}
+            for s in results:
+                key = s.get("session_id") or s["name"]
+                curr_sessions[key] = json.dumps(s, sort_keys=True)
+                session_by_key[key] = s
 
-            payload = {"type": "coral_update", "sessions": results, "active_runs": active_runs}
-            current_state = json.dumps(payload, sort_keys=True)
-            if current_state != last_state:
-                await websocket.send_json(payload)
-                last_state = current_state
+            curr_runs_json = json.dumps(active_runs, sort_keys=True)
+
+            if first_message:
+                # Always send full state on first message
+                await websocket.send_json({
+                    "type": "coral_update",
+                    "sessions": results,
+                    "active_runs": active_runs,
+                })
+                prev_sessions = curr_sessions
+                prev_runs_json = curr_runs_json
+                first_message = False
+            else:
+                # Calculate diff: changed + removed sessions
+                changed = []
+                for key, s_json in curr_sessions.items():
+                    if prev_sessions.get(key) != s_json:
+                        changed.append(session_by_key[key])
+
+                removed = [k for k in prev_sessions if k not in curr_sessions]
+                runs_changed = curr_runs_json != prev_runs_json
+
+                if changed or removed or runs_changed:
+                    payload: dict = {"type": "coral_diff"}
+                    if changed:
+                        payload["changed"] = changed
+                    if removed:
+                        payload["removed"] = removed
+                    if runs_changed:
+                        payload["active_runs"] = active_runs
+                    await websocket.send_json(payload)
+                    prev_sessions = curr_sessions
+                    prev_runs_json = curr_runs_json
 
             await asyncio.sleep(3)
     except WebSocketDisconnect:

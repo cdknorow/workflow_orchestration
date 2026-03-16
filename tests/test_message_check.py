@@ -26,7 +26,7 @@ def board_state_dir(tmp_path, monkeypatch):
     # _load_board_state uses os.path.expanduser("~") -> tmp_path
     # then appends ".coral/board_state_{name}.json"
     coral_dir = tmp_path / ".coral"
-    coral_dir.mkdir()
+    coral_dir.mkdir(exist_ok=True)
     monkeypatch.setattr(
         "os.path.expanduser",
         lambda p: str(tmp_path) if p == "~" else os.path.expanduser(p),

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from pathlib import Path
 
 from coral.tools.session_manager import discover_coral_agents
-from coral.tools.log_streamer import get_log_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -55,9 +56,11 @@ class IdleDetector:
                 self._notified.discard(name)
                 continue
 
-            # Agent is waiting for input — check staleness
-            snapshot = get_log_snapshot(str(agent["log_path"]))
-            staleness = snapshot.get("staleness_seconds") or 0
+            # Agent is waiting for input — check staleness via stat (no file read)
+            try:
+                staleness = time.time() - Path(agent["log_path"]).stat().st_mtime
+            except OSError:
+                staleness = 0
 
             if staleness < NEEDS_INPUT_THRESHOLD:
                 continue

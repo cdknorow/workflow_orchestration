@@ -6,3 +6,4 @@ build/
 *.egg
 site/
 .venv/*
+.claude/scheduled_tasks.lock

@@ -196,12 +196,42 @@ export function renderQuickActions() {
     `;
 }
 
+// Map tmux key names to raw terminal sequences for WebSocket input
+const _KEY_TO_SEQ = {
+    "Enter": "\r",
+    "Escape": "\x1b",
+    "Tab": "\t",
+    "BTab": "\x1b[Z",
+    "BSpace": "\x7f",
+    "Up": "\x1b[A",
+    "Down": "\x1b[B",
+    "Right": "\x1b[C",
+    "Left": "\x1b[D",
+    "Home": "\x1b[H",
+    "End": "\x1b[F",
+    "DC": "\x1b[3~",      // Delete
+    "PageUp": "\x1b[5~",
+    "PageDown": "\x1b[6~",
+};
+
 export async function sendRawKeys(keys) {
     if (!state.currentSession || state.currentSession.type !== "live") {
         showToast("No live session selected", true);
         return;
     }
 
+    // Try WebSocket path first — much faster than POST
+    const xterm = await _getXtermModule();
+    const allMapped = keys.every(k => k in _KEY_TO_SEQ);
+    if (allMapped && xterm.sendTerminalInputWs) {
+        const seq = keys.map(k => _KEY_TO_SEQ[k]).join("");
+        if (xterm.sendTerminalInputWs(seq)) {
+            showToast(`Sent: ${keys.join(" + ")}`);
+            return;
+        }
+    }
+
+    // Fall back to POST endpoint for unmapped keys or when WebSocket is unavailable
     try {
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/keys`, {
             method: "POST",

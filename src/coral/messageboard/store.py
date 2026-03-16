@@ -174,12 +174,19 @@ class MessageBoardStore:
         )
         messages = [dict(r) for r in rows]
 
-        # Advance cursor to the max message ID in the project (even if no messages returned)
-        max_rows = await conn.execute_fetchall(
-            "SELECT COALESCE(MAX(id), 0) as max_id FROM board_messages WHERE project = ?",
-            (project,),
+        # Advance cursor past returned messages and past our own messages
+        # (so we don't re-scan our own posts), but never past unseen messages
+        # from other agents.
+        candidates = [last_read_id]
+        if messages:
+            candidates.append(max(m["id"] for m in messages))
+        # Skip past our own messages so they don't block the cursor
+        own_max_rows = await conn.execute_fetchall(
+            "SELECT COALESCE(MAX(id), 0) as max_id FROM board_messages WHERE project = ? AND session_id = ?",
+            (project, session_id),
         )
-        new_cursor = max_rows[0]["max_id"]
+        candidates.append(own_max_rows[0]["max_id"])
+        new_cursor = max(candidates)
         if new_cursor > last_read_id:
             await conn.execute(
                 "UPDATE board_subscribers SET last_read_id = ? WHERE project = ? AND session_id = ?",
@@ -241,6 +248,74 @@ class MessageBoardStore:
             (project, last_read_id, session_id, *patterns),
         )
         return count_rows[0]["cnt"]
+
+    async def get_all_unread_counts(self) -> dict[str, int]:
+        """Return unread mention counts for ALL subscribers in one pass.
+
+        Returns a dict keyed by session_id with unread counts.
+        Replaces N individual check_unread() calls with a single DB scan.
+        """
+        conn = await self._get_conn()
+
+        # Fetch all subscribers
+        sub_rows = await conn.execute_fetchall(
+            "SELECT project, session_id, job_title, last_read_id FROM board_subscribers"
+        )
+        if not sub_rows:
+            return {}
+
+        # Group subscribers by project for efficient querying
+        by_project: dict[str, list[dict]] = {}
+        for row in sub_rows:
+            r = dict(row)
+            by_project.setdefault(r["project"], []).append(r)
+
+        result: dict[str, int] = {}
+
+        for project, subs in by_project.items():
+            # Find the minimum last_read_id to fetch all potentially unread messages
+            min_cursor = min(s["last_read_id"] for s in subs)
+
+            # Fetch all messages after the minimum cursor in one query
+            msg_rows = await conn.execute_fetchall(
+                "SELECT id, session_id, content FROM board_messages "
+                "WHERE project = ? AND id > ? ORDER BY id",
+                (project, min_cursor),
+            )
+            if not msg_rows:
+                for s in subs:
+                    result[s["session_id"]] = 0
+                continue
+
+            messages = [dict(r) for r in msg_rows]
+
+            # Count mentions per subscriber in Python
+            for sub in subs:
+                last_read = sub["last_read_id"]
+                sid = sub["session_id"]
+                job_title = sub["job_title"] or ""
+
+                # Build mention patterns for this subscriber
+                mention_terms = [
+                    "@notify-all", "@notify_all", "@notifyall", "@all",
+                    f"@{sid}",
+                ]
+                if job_title:
+                    mention_terms.append(f"@{job_title}")
+
+                count = 0
+                for msg in messages:
+                    if msg["id"] <= last_read:
+                        continue
+                    if msg["session_id"] == sid:
+                        continue  # Skip own messages
+                    content_lower = msg["content"].lower()
+                    if any(term.lower() in content_lower for term in mention_terms):
+                        count += 1
+
+                result[sid] = count
+
+        return result
 
     # ── Webhooks ─────────────────────────────────────────────────────────
 

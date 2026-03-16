@@ -15,6 +15,35 @@ export function connectCoralWs() {
 
     state.coralWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
+        // Handle diff updates: merge changed/removed into existing session list
+        if (data.type === "coral_diff") {
+            let sessions = [...(state.liveSessions || [])];
+
+            // Apply changed sessions (update existing or add new)
+            if (data.changed) {
+                for (const changed of data.changed) {
+                    const key = changed.session_id || changed.name;
+                    const idx = sessions.findIndex(s => (s.session_id || s.name) === key);
+                    if (idx >= 0) {
+                        sessions[idx] = changed;
+                    } else {
+                        sessions.push(changed);
+                    }
+                }
+            }
+
+            // Remove sessions that no longer exist
+            if (data.removed) {
+                const removedSet = new Set(data.removed);
+                sessions = sessions.filter(s => !removedSet.has(s.session_id || s.name));
+            }
+
+            // Treat merged list as a full update for the rest of the handler
+            data.type = "coral_update";
+            data.sessions = sessions;
+        }
+
         if (data.type === "coral_update") {
             // Detect sessions that just transitioned to "needs input"
             for (const s of data.sessions) {

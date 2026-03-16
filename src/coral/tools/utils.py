@@ -36,6 +36,28 @@ HISTORY_PATH = Path(os.environ.get("CLAUDE_PROJECTS_DIR", Path.home() / ".claude
 GEMINI_HISTORY_BASE = Path(os.environ.get("GEMINI_TMP_DIR", Path.home() / ".gemini" / "tmp"))
 
 
+async def get_diff_base(workdir: str) -> str:
+    """Return the base ref to diff against for a working directory.
+
+    On a feature branch: merge-base with main/master (shows all branch work).
+    On the default branch (or merge-base fails): HEAD (shows uncommitted changes).
+    """
+    rc, branch, _ = await run_cmd(
+        "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD", timeout=5.0,
+    )
+    current_branch = branch.strip() if rc == 0 else ""
+
+    if current_branch not in ("main", "master", "HEAD", ""):
+        for base_branch in ("main", "master"):
+            rc, stdout, _ = await run_cmd(
+                "git", "-C", workdir, "merge-base", base_branch, "HEAD", timeout=5.0,
+            )
+            if rc == 0 and stdout:
+                return stdout.strip()
+
+    return "HEAD"
+
+
 async def run_cmd(*args: str, timeout: float | None = None) -> Tuple[int, str, str]:
     """Execute a subprocess command asynchronously.
 
