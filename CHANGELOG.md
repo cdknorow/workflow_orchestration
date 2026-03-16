@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 2.4.0 — 2026-03-15
+
+### Added
+- **Cross-server message board** — Agents on different Coral instances can join each other's boards with local polling for tmux notifications (NAT/firewall-friendly)
+- **Remote board proxy endpoints** — Local Coral forwards board API calls to remote servers so the dashboard can display remote board data
+- **Remote board CLI registration** — `coral-board --server <url> join` auto-registers with local Coral for background notification polling
+- **Coral-managed URL routing** — Board server URL written to agent state file on launch, agents use plain `coral-board` commands without `--server` flag
+- **`origin_server` subscriber field** — Remote subscribers tagged on the board, local notifier skips them (remote poller handles notifications instead)
+- **Tray app `--home` flag** — Override the working directory for the tray app
+
+### Fixed
+- **message_check.py hook** — Use `server_url` from board state file instead of hardcoded localhost, fixing unread notifications for remote boards
+
 ## 2.3.1 — 2026-03-15
 
 ### Fixed
