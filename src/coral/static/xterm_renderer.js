@@ -226,6 +226,24 @@ export function createTerminal(containerEl) {
     terminal.open(containerEl);
     fitAddon.fit();
 
+    // Make the native scrollbar clickable/draggable.
+    // xterm.js places .xterm-screen (canvas) on top of .xterm-viewport (scrollbar),
+    // blocking pointer events on the scrollbar. Fix: set pointer-events:none on the
+    // screen layer and re-enable on the canvas elements inside it so terminal
+    // interaction still works, while the scrollbar on the viewport becomes accessible.
+    const xtermViewport = containerEl.querySelector('.xterm-viewport');
+    const xtermScreen = containerEl.querySelector('.xterm-screen');
+    if (xtermViewport && xtermScreen) {
+        xtermViewport.style.zIndex = '1';
+        xtermScreen.style.zIndex = '0';
+        xtermScreen.style.pointerEvents = 'none';
+        // Re-enable pointer events on the actual canvas elements inside screen
+        xtermScreen.querySelectorAll('canvas').forEach(c => { c.style.pointerEvents = 'auto'; });
+        // Also ensure the textarea (for keyboard input) keeps pointer events
+        const helperTextarea = containerEl.querySelector('.xterm-helper-textarea');
+        if (helperTextarea) helperTextarea.style.pointerEvents = 'auto';
+    }
+
     // Focus management: track terminal focus state
     // (terminal.textarea is only available after open())
     if (terminal.textarea) {

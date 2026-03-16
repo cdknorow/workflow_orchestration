@@ -85,7 +85,12 @@
     background-clip: padding-box;
 }
 
-/* Ensure the xterm-viewport scrollbar is clickable by keeping it above the screen layer */
+/*
+ * xterm.js scrollbar fix: The .xterm-screen canvas sits on top of .xterm-viewport
+ * and blocks the native scrollbar. We shrink the screen canvas by the scrollbar
+ * width using clip-path so it no longer covers the scrollbar track, while keeping
+ * the viewport scrollbar accessible.
+ */
 .xterm-container .xterm .xterm-viewport {
     scrollbar-width: auto;
     scrollbar-color: var(--border-light) transparent;
