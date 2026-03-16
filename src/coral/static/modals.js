@@ -68,9 +68,11 @@ export function showLaunchModal() {
     document.getElementById("launch-flags").value = "";
     document.getElementById("launch-agent-prompt").value = "";
     document.getElementById("launch-board-name").value = "";
+    document.getElementById("launch-board-server").value = "";
     const agentBoardSelect = document.getElementById("launch-board-select");
     if (agentBoardSelect) agentBoardSelect.value = "";
     document.getElementById("launch-new-board-row").style.display = "none";
+    document.getElementById("launch-board-server-row").style.display = "none";
     _syncFlagButtons("launch-flags");
 
     // Reset terminal form
@@ -140,6 +142,8 @@ export async function launchSession() {
             } else {
                 payload.board_name = boardSelect.value;
             }
+            const boardServer = document.getElementById("launch-board-server").value.trim();
+            if (boardServer) payload.board_server = boardServer;
         }
     }
 
@@ -183,7 +187,11 @@ async function _loadAgentBoardProjects() {
 function _onAgentBoardChange() {
     const select = document.getElementById("launch-board-select");
     const newRow = document.getElementById("launch-new-board-row");
+    const serverRow = document.getElementById("launch-board-server-row");
+    const hasBoard = select.value && select.value !== "";
     newRow.style.display = select.value === "__new__" ? "" : "none";
+    serverRow.style.display = hasBoard ? "" : "none";
+    if (!hasBoard) document.getElementById("launch-board-server").value = "";
 }
 window._onAgentBoardChange = _onAgentBoardChange;
 
@@ -194,6 +202,7 @@ let _teamAgentCounter = 0;
 async function _initTeamForm() {
     // Reset form
     document.getElementById("team-board-name").value = "";
+    document.getElementById("team-board-server").value = "";
     document.getElementById("team-flags").value = "";
     _syncFlagButtons("team-flags");
     _teamAgentCounter = 0;
@@ -303,6 +312,7 @@ async function launchTeam() {
         agents.push({ name, prompt });
     }
 
+    const boardServer = document.getElementById("team-board-server").value.trim();
     const payload = {
         board_name: boardName,
         working_dir: workingDir,
@@ -310,6 +320,7 @@ async function launchTeam() {
         flags,
         agents,
     };
+    if (boardServer) payload.board_server = boardServer;
 
     try {
         const resp = await fetch("/api/sessions/launch-team", {

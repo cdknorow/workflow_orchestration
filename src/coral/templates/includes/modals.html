@@ -97,6 +97,11 @@
                         <input type="text" id="launch-board-name" placeholder="e.g. Auth Feature, Sprint 42">
                     </label>
                 </div>
+                <div id="launch-board-server-row" style="display:none">
+                    <label>Remote Server <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                        <input type="text" id="launch-board-server" placeholder="e.g. http://remote-machine:8420">
+                    </label>
+                </div>
                 <div class="modal-actions">
                     <button class="btn" onclick="hideLaunchModal()">Cancel</button>
                     <button class="btn btn-primary" onclick="launchSession()">Launch</button>
@@ -149,6 +154,11 @@
                         <div id="team-new-board-row">
                             <label>Board Name:
                                 <input type="text" id="team-board-name" placeholder="e.g. Auth Feature, Sprint 42">
+                            </label>
+                        </div>
+                        <div>
+                            <label>Remote Server <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                                <input type="text" id="team-board-server" placeholder="e.g. http://remote-machine:8420">
                             </label>
                         </div>
                         <label>Working Directory:
