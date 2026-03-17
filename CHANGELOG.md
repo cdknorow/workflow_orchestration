@@ -3,6 +3,32 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 3.0.0 — 2026-03-17
+
+### Added
+- **Hooks via `--settings` temp file** — No longer modifies user's `settings.local.json`; reads and deep-merges the full settings hierarchy (global → project → local), appends Coral hooks, writes to `/tmp/coral_settings_<id>.json`
+- **System prompt in settings file** — PROTOCOL.md and per-agent persona consolidated into `systemPrompt` field in the temp settings file, removing `--append-system-prompt` flag
+- **Sidebar kebab menu** — Per-agent dropdown with Attach, Restart, Rename, Session Info, and Kill Session actions
+- **Collapsible agent groups** — Click group headers to collapse/expand, persisted in localStorage
+- **Group-level Kill All** — Kill all agents in a group from the group header kebab menu
+- **Agent group cards** — Agents on the same message board are grouped into bordered cards with auto-generated accent color and board link icon
+- **Terminal session icon** — Terminal sessions show a `>_` icon instead of generic "Agent" label
+- **Drag-to-reorder agents** in sidebar with persistent ordering
+- **Message board operator controls** — Pause agent reads and delete messages from the board UI
+- **Terminal input polish** — Disconnect indicator, input queue, and WebSocket resize support
+
+### Fixed
+- Diff view line numbers overlapping code text (diff2html position fix)
+- Sidebar hover jitter eliminated (opacity transitions instead of display toggle)
+- Tooltip no longer covers sidebar kebab menu (z-index fix)
+- SSRF protection hardened per security review
+- Critical and high severity security audit findings addressed
+
+### Removed
+- `install_hooks()` function that wrote hooks into user's `settings.local.json`
+- Dead `install_hooks()` call sites in web_server.py, session_manager.py, and base.py
+- Stale coral-hook/corral-hook entries cleaned from all settings files
+
 ## 2.5.0 — 2026-03-16
 
 ### Added
