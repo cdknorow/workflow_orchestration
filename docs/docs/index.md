@@ -11,6 +11,7 @@ Coral is an MIT-licensed multi-agent orchestration application built with tmux, 
 ## Features
 
 - **Multi-agent support** — Launch and manage both Claude and Gemini agents side-by-side across worktrees
+- **Agent teams & message board** — Launch coordinated teams of agents on a shared message board with per-agent roles and prompts
 - **Web dashboard** — Real-time monitoring with terminal capture, status tracking, and command input
 - **Session history** — Browse past sessions with advanced filters (date range, agent type, tags, full-text search)
 - **Full-text search** — Search across all session content using SQLite FTS5 with porter stemming
@@ -20,6 +21,7 @@ Coral is an MIT-licensed multi-agent orchestration application built with tmux, 
 - **Session notes & activity** — Add markdown notes and track activity per session
 - **Remote control** — Send commands, navigate modes, and manage agents from the dashboard
 - **Git integration & PR linking** — Tracks commits, branches, and remote URLs per agent and session
+- **Themes & customization** — Customize the dashboard appearance with built-in themes, import/export, or AI-generated themes
 - **Custom macros** — Add configurable toolbar buttons for frequently used commands
 
 ---
@@ -110,59 +112,6 @@ See the [Jobs API](api/jobs.md) for programmatic access.
 
 ---
 
-## Claude Code Hooks
-
-To fully integrate Claude Code's agentic state and task management into the Coral dashboard, configure the provided hook scripts in your Claude Code `settings.json` (usually at `~/.claude.json` or `~/.claude/settings.json`):
-
-```json
-"hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "TaskCreate|TaskUpdate",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-task-sync"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-agentic-state"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-agentic-state"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-agentic-state"
-          }
-        ]
-      }
-    ]
-}
-```
-
----
-
 ## Agent Protocol
 
 Agents emit structured markers using the `||PULSE:<EVENT_TYPE> <payload>||` format. The dashboard parses these from agent output in real time:
@@ -170,7 +119,7 @@ Agents emit structured markers using the `||PULSE:<EVENT_TYPE> <payload>||` form
 ```
 ||PULSE:STATUS <Short description of current task>||
 ||PULSE:SUMMARY <One-sentence high-level goal>||
-||PULSE:CONFIDENCE <1-5> <short reason>||
+||PULSE:CONFIDENCE <Low|High> <specific reason>||
 ```
 
 The protocol is automatically injected via `PROTOCOL.md` when launching agents.

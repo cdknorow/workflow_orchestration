@@ -105,7 +105,6 @@ Once agents are running, you can control them from the dashboard:
 | **Launch command** | `claude --session-id {uuid}` |
 | **Resume support** | Yes — restart with `--resume` to continue a previous session |
 | **History location** | `~/.claude/projects/**/*.jsonl` |
-| **Hook integration** | Full support — `PostToolUse`, `Stop`, `Notification` hooks |
 | **Tool event tracking** | Rich activity timeline (Read, Write, Edit, Bash, Grep, Glob, Web, Subagents) |
 
 ### Gemini
@@ -115,7 +114,6 @@ Once agents are running, you can control them from the dashboard:
 | **Launch command** | Uses `GEMINI_SYSTEM_MD` env var for protocol injection |
 | **Resume support** | No |
 | **History location** | `~/.gemini/tmp/*/chats/session-*.json` |
-| **Hook integration** | Not supported |
 | **Tool event tracking** | Basic (parsed from terminal output) |
 
 ### Custom agents

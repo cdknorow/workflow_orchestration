@@ -130,6 +130,8 @@ Coral currently supports one webhook event type:
 |-------|---------|----------|
 | `needs_input` | Agent has been idle for 5+ minutes while waiting for input | Fires once per waiting period. Clears when the agent becomes active again. |
 
+Webhooks can also be configured with a **low confidence filter** (`low_confidence_only`) to restrict notifications to only low-confidence PULSE events, useful for catching moments when an agent is uncertain and may need human review.
+
 Each event carries this schema:
 
 | Field | Description |
@@ -210,7 +212,7 @@ Each platform receives a differently formatted payload optimized for its renderi
 | Delivery history retention | Latest 200 per webhook |
 | Idle detector polling interval | 60 seconds |
 | Dispatcher polling interval | 15 seconds |
-| Idle threshold | 5 minutes |
+| Idle threshold | 5 minutes (configurable per-webhook via `idle_threshold_seconds`) |
 | Notification behavior | One-shot per waiting period |
 | URL validation | HTTPS required (except `localhost`) |
 | Request timeout | 10 seconds per attempt |

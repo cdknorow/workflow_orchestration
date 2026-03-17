@@ -109,7 +109,8 @@ The PULSE protocol flows through a pipeline from agent output to the browser:
 5. **Live sessions API** calls both the log streamer and pulse detector on every poll cycle (every 3 seconds via WebSocket).
 6. **Status/Summary dedup** — the store only inserts a new row when the value actually changes, so repeated identical emissions are collapsed.
 7. **WebSocket** pushes the updated session state to all connected browsers every 3 seconds.
-8. **Dashboard renders** the status in the session header "Status:" line, the summary as the "Goal:" line, and confidence events in the Activity timeline.
+8. **Stale detection** — if no STATUS is emitted for a configurable period, the status dot turns yellow (stale), signaling the agent may be idle.
+9. **Dashboard renders** the status in the session header "Status:" line, the summary as the "Goal:" line, and confidence events in the Activity timeline.
 
 ![Dashboard showing the full pipeline: agent output flows through tmux pipe-pane to the browser](images/dashboard-full-view.png)
 
@@ -145,70 +146,6 @@ Any process that writes `||PULSE:STATUS ...||` to stdout will work with Coral. T
 
 !!! tip
     If you're wrapping an external tool (Aider, Cursor, OpenDevin, etc.), you only need a thin shell script that emits PULSE tags at key points. The agent itself doesn't need to know about Coral.
-
----
-
-## Claude Code hooks integration
-
-Coral has two complementary channels for tracking agent activity:
-
-| Channel | Transport | Scope | Data |
-|---------|-----------|-------|------|
-| **PULSE protocol** | Log-based (stdout to file) | All agent types | Status, goal, confidence |
-| **Claude Code hooks** | API-based (HTTP to Coral server) | Claude only | Tool use, task sync, agentic state |
-
-The hooks provide richer, structured data — individual tool calls (Read, Edit, Bash, etc.), task creation/updates, and stop/notification events. They are auto-installed by Coral into each worktree when a Claude agent is launched.
-
-To configure hooks manually, add the following to your Claude Code settings (`~/.claude.json` or `~/.claude/settings.json`):
-
-```json
-"hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "TaskCreate|TaskUpdate",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-task-sync"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-agentic-state"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-agentic-state"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "coral-hook-agentic-state"
-          }
-        ]
-      }
-    ]
-}
-```
-
-See [Live Sessions](live-sessions.md) for how hook-reported events appear in the Activity timeline.
 
 ---
 
