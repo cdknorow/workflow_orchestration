@@ -342,9 +342,10 @@ export function renderLiveSessions(sessions) {
                         </button>
                     </div>
                 </div>`;
+                const teamSubline = `<div class="board-card-subline"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 11a4 4 0 0 1 4 4v2"/></svg> Agent Team</div>`;
                 html += `<li class="session-board-card" style="border-left-color: ${accentColor}">
                     <div class="session-group-header board-card-header" onclick="toggleGroupCollapse('${escapeHtml(boardName)}')">
-                        <span class="group-chevron">${bChevron}</span>${escapeHtml(boardName)} <span class="session-group-count">${boardSessions.length}</span><span class="session-name-spacer"></span>${boardLink}${bKebab}
+                        <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)} <span class="session-group-count">${boardSessions.length}</span></div>${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
                     </div>
                     <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
                 for (const s of boardSessions) {
