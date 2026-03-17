@@ -300,12 +300,12 @@
 /* ── Grouped Sessions ──────────────────────────────────────── */
 
 .session-group-header {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-secondary);
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text-muted);
     padding: 6px 16px 2px !important;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.05em;
     cursor: pointer;
     display: flex;
     align-items: center;
