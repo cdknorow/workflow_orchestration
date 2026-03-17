@@ -9,9 +9,9 @@
 }
 
 .session-list li {
-    padding: 8px 16px;
+    padding: 10px 16px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-secondary);
     display: flex;
     align-items: flex-start;
@@ -174,12 +174,12 @@
 }
 
 .session-goal {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-top: 2px;
+    margin-top: 3px;
 }
 
 /* ── Sidebar Kebab Menu ───────────────────────────────────── */
@@ -263,12 +263,12 @@
 }
 
 .session-compact {
-    padding-top: 5px !important;
-    padding-bottom: 5px !important;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
 }
 
 .session-goal-compact {
-    font-size: 10px !important;
+    font-size: 11px !important;
 }
 
 .group-board-link {
@@ -355,7 +355,7 @@
 .session-group-item {
     padding-left: 22px !important;
     cursor: grab;
-    min-height: 42px;
+    min-height: 46px;
 }
 
 .session-group-item.dragging {
