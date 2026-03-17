@@ -223,6 +223,74 @@
     min-width: 160px;
 }
 
+/* ── Board Card Groups ─────────────────────────────────────── */
+
+.session-board-card {
+    border: 1px solid var(--border) !important;
+    border-left: 3px solid var(--accent) !important;
+    border-radius: 8px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    margin: 6px 8px !important;
+    padding: 0 !important;
+    display: block !important;
+    cursor: default !important;
+}
+
+.session-board-card:hover {
+    background: rgba(255, 255, 255, 0.02) !important;
+    box-shadow: none !important;
+}
+
+.board-card-header {
+    padding: 6px 10px 4px !important;
+    margin: 0;
+    border-radius: 7px 7px 0 0;
+}
+
+.board-card-agents {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.board-card-agents .session-group-item {
+    padding-left: 14px !important;
+}
+
+.board-card-collapsed {
+    display: none;
+}
+
+.session-compact {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+}
+
+.session-goal-compact {
+    font-size: 10px !important;
+}
+
+.group-board-link {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    line-height: 1;
+    display: none;
+    flex-shrink: 0;
+}
+
+.group-board-link:hover {
+    color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.session-group-header:hover .group-board-link {
+    display: inline-block;
+}
+
 /* ── Grouped Sessions ──────────────────────────────────────── */
 
 .session-group-header {

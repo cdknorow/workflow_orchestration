@@ -177,7 +177,7 @@ export async function restartDirect(name, agentType, sessionId) {
 }
 
 export async function killGroup(groupName) {
-    const groupSessions = state.liveSessions.filter(s => (s.name || 'unknown') === groupName);
+    const groupSessions = state.liveSessions.filter(s => s.board_project === groupName || (!s.board_project && (s.name || 'unknown') === groupName));
     if (!groupSessions.length) return;
     if (!confirm(`Kill all ${groupSessions.length} agent(s) in "${groupName}"? This will terminate them.`)) return;
 
@@ -201,6 +201,69 @@ export async function killGroup(groupName) {
 // Drag-and-drop state
 let _draggedSid = null;
 
+function _renderSessionItem(s, groupName, isCompact, collapsed) {
+    const dotClass = getDotClass(s.staleness_seconds, s.waiting_for_input, s.working, s.waiting_reason);
+    const isActive = state.currentSession && state.currentSession.type === "live" && state.currentSession.session_id === s.session_id;
+    const typeTag = s.agent_type && s.agent_type !== "claude" ? ` <span class="badge ${escapeHtml(s.agent_type)}">${escapeHtml(s.agent_type)}</span>` : "";
+    const branchTag = (!isCompact && s.branch) ? `<span class="sidebar-branch"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(s.branch)}</span>` : "";
+    const waitingBadge = s.waiting_for_input
+        ? (s.waiting_reason === "stop"
+            ? ' <span class="badge done-badge">Done</span>'
+            : ' <span class="badge waiting-badge">Needs input</span>')
+        : '';
+    const goal = s.summary ? escapeHtml(s.summary) : "No goal set";
+    const isTerminal = s.agent_type === "terminal";
+    const displayLabel = s.display_name || (isCompact && s.board_job_title) || (isTerminal ? "Terminal" : "Agent");
+    const sid = s.session_id ? escapeHtml(s.session_id) : "";
+    const kebabMenu = `<div class="sidebar-kebab-wrapper">
+        <button class="sidebar-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="More actions">&#x22EE;</button>
+        <div class="sidebar-kebab-menu" style="display:none">
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); attachDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg>
+                Attach
+            </button>
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); restartDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg>
+                Restart
+            </button>
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); renameAgent('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3L5 14H2v-3z"/></svg>
+                Rename
+            </button>
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showInfoDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg>
+                Session Info
+            </button>
+            <hr class="overflow-menu-divider">
+            <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killSessionDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+                Kill Session
+            </button>
+        </div>
+    </div>`;
+    const tooltip = buildSessionTooltip(s);
+    const compactClass = isCompact ? ' session-compact' : '';
+    const collapsedClass = collapsed ? ' group-collapsed' : '';
+    return `<li class="session-group-item${isActive ? ' active' : ''}${compactClass}${collapsedClass}"
+        draggable="true"
+        data-session-id="${sid}"
+        data-group="${escapeHtml(groupName)}"
+        onclick="selectLiveSession('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
+        <span class="session-dot ${dotClass}"></span>
+        <div class="session-info">
+            <div class="session-name-row">
+                <span class="session-label">${isTerminal ? '<svg class="terminal-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg> ' : ''}${escapeHtml(displayLabel)}${typeTag}</span>
+                <span class="session-name-spacer"></span>
+                ${kebabMenu}
+                ${waitingBadge}
+            </div>
+            <span class="session-goal${isCompact ? ' session-goal-compact' : ''}">${goal}</span>
+            ${branchTag}
+        </div>
+        <div class="session-tooltip">${tooltip}</div>
+    </li>`;
+}
+
 export function renderLiveSessions(sessions) {
     const list = document.getElementById("live-sessions-list");
 
@@ -211,16 +274,62 @@ export function renderLiveSessions(sessions) {
         return;
     }
 
-    // Group sessions by agent_name (folder)
-    const groups = {};
+    // Group sessions: board groups first, then ungrouped by folder name
+    const boardGroups = {};
+    const folderGroups = {};
     for (const s of sessions) {
-        const key = s.name || "unknown";
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(s);
+        if (s.board_project) {
+            if (!boardGroups[s.board_project]) boardGroups[s.board_project] = [];
+            boardGroups[s.board_project].push(s);
+        } else {
+            const key = s.name || "unknown";
+            if (!folderGroups[key]) folderGroups[key] = [];
+            folderGroups[key].push(s);
+        }
+    }
+
+    // Helper to generate a deterministic accent color from a string
+    function _boardAccentColor(name) {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+        const hue = ((hash % 360) + 360) % 360;
+        return `hsl(${hue}, 60%, 55%)`;
     }
 
     let html = "";
-    for (const [groupName, groupSessions] of Object.entries(groups)) {
+
+    // Render board groups as cards
+    for (const [boardName, groupSessions] of Object.entries(boardGroups)) {
+        const sorted = _sortByOrder(groupSessions);
+        const countBadge = ` <span class="session-group-count">${sorted.length}</span>`;
+        const collapsed = _isGroupCollapsed(boardName);
+        const chevron = collapsed ? '&#x25B8;' : '&#x25BE;';
+        const accentColor = _boardAccentColor(boardName);
+        const boardLink = `<button class="group-board-link" onclick="event.stopPropagation(); selectBoardProject('${escapeHtml(boardName)}')" title="View message board"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H5l-3 3V3z"/></svg></button>`;
+        const groupKebab = `<div class="sidebar-kebab-wrapper group-kebab">
+            <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
+            <div class="sidebar-kebab-menu" style="display:none">
+                <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('${escapeHtml(boardName)}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+                    Kill All
+                </button>
+            </div>
+        </div>`;
+        html += `<li class="session-board-card" style="border-left-color: ${accentColor}">
+            <div class="session-group-header board-card-header" data-group-name="${escapeHtml(boardName)}" onclick="toggleGroupCollapse('${escapeHtml(boardName)}')">
+                <span class="group-chevron">${chevron}</span>${escapeHtml(boardName)}${countBadge}<span class="session-name-spacer"></span>${boardLink}${groupKebab}
+            </div>
+            <ul class="board-card-agents${collapsed ? ' board-card-collapsed' : ''}">`;
+
+        for (const s of sorted) {
+            html += _renderSessionItem(s, boardName, true);
+        }
+
+        html += `</ul></li>`;
+    }
+
+    // Render ungrouped sessions (no board) with folder headers
+    for (const [groupName, groupSessions] of Object.entries(folderGroups)) {
         const sorted = _sortByOrder(groupSessions);
         const isMulti = sorted.length > 1;
         const countBadge = isMulti ? ` <span class="session-group-count">${sorted.length}</span>` : "";
@@ -239,64 +348,7 @@ export function renderLiveSessions(sessions) {
             <span class="group-chevron">${chevron}</span>${escapeHtml(groupName)}${countBadge}<span class="session-name-spacer"></span>${groupKebab}</li>`;
 
         for (const s of sorted) {
-            const dotClass = getDotClass(s.staleness_seconds, s.waiting_for_input, s.working, s.waiting_reason);
-            const isActive = state.currentSession && state.currentSession.type === "live" && state.currentSession.session_id === s.session_id;
-            const typeTag = s.agent_type && s.agent_type !== "claude" ? ` <span class="badge ${escapeHtml(s.agent_type)}">${escapeHtml(s.agent_type)}</span>` : "";
-            const branchTag = s.branch ? `<span class="sidebar-branch"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(s.branch)}</span>` : "";
-            const waitingBadge = s.waiting_for_input
-                ? (s.waiting_reason === "stop"
-                    ? ' <span class="badge done-badge">Done</span>'
-                    : ' <span class="badge waiting-badge">Needs input</span>')
-                : '';
-            const goal = s.summary ? escapeHtml(s.summary) : "No goal set";
-            const isTerminal = s.agent_type === "terminal";
-            const displayLabel = s.display_name || (isTerminal ? "Terminal" : "Agent");
-            const sid = s.session_id ? escapeHtml(s.session_id) : "";
-            const kebabMenu = `<div class="sidebar-kebab-wrapper">
-                        <button class="sidebar-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="More actions">&#x22EE;</button>
-                        <div class="sidebar-kebab-menu" style="display:none">
-                            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); attachDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg>
-                                Attach
-                            </button>
-                            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); restartDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2v4h4"/><path d="M3.5 6A5.5 5.5 0 1 1 2.5 8"/></svg>
-                                Restart
-                            </button>
-                            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); renameAgent('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3L5 14H2v-3z"/></svg>
-                                Rename
-                            </button>
-                            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showInfoDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg>
-                                Session Info
-                            </button>
-                            <hr class="overflow-menu-divider">
-                            <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killSessionDirect('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
-                                Kill Session
-                            </button>
-                        </div>
-                    </div>`;
-            const tooltip = buildSessionTooltip(s);
-            html += `<li class="session-group-item${isActive ? ' active' : ''}${collapsed ? ' group-collapsed' : ''}"
-                draggable="true"
-                data-session-id="${sid}"
-                data-group="${escapeHtml(groupName)}"
-                onclick="selectLiveSession('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')">
-                <span class="session-dot ${dotClass}"></span>
-                <div class="session-info">
-                    <div class="session-name-row">
-                        <span class="session-label">${isTerminal ? '<svg class="terminal-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg> ' : ''}${escapeHtml(displayLabel)}${typeTag}</span>
-                        <span class="session-name-spacer"></span>
-                        ${kebabMenu}
-                        ${waitingBadge}
-                    </div>
-                    <span class="session-goal">${goal}</span>
-                    ${branchTag}
-                </div>
-                <div class="session-tooltip">${tooltip}</div>
-            </li>`;
+            html += _renderSessionItem(s, groupName, false, collapsed);
         }
     }
 
