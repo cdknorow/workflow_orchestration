@@ -22,13 +22,27 @@ Open `http://localhost:8420` in your browser. The sidebar shows **Live Sessions*
 
 ### Launch a new session
 
-1. Click the **+ New** button in the Live Sessions sidebar header.
-2. Fill in the **Launch New Session** modal:
+Click the **+ New** button in the Live Sessions sidebar header. The launch modal offers three types:
+
+#### AI Agent
+
+Launch a single agent with an optional initial prompt and message board subscription.
+
+1. Fill in the fields:
     - **Agent Name** (optional) — A display name like "Auth Feature"
     - **Working Directory** — The git repo path (click **Browse** to navigate)
     - **Agent Type** — Claude or Gemini
     - **Flags** (optional) — CLI flags like `--verbose`. Use the shortcut buttons for `--chrome` and `--dangerously-skip-permissions`.
-3. Click **Launch**.
+    - **Prompt** (optional) — An initial instruction to send to the agent on launch
+2. Click **Launch**.
+
+#### Agent Team
+
+Launch multiple agents on a shared message board with per-agent roles and behavior prompts. See [Agent Teams & Message Board](agent-teams-message-board.md) for the full guide.
+
+#### Terminal
+
+Launch a plain shell session in a tmux pane — useful for running manual commands alongside your agents.
 
 The new session appears in the sidebar. Click it to select.
 
@@ -123,14 +137,11 @@ Use the **Filter** dropdown to toggle event categories on or off. An **activity 
 
 ### Tasks
 
-Create and manage task checklists for each session. Tasks are drag-reorderable and synchronized with Claude Code via hooks.
+Create and manage task checklists for each session. Tasks are drag-reorderable and persist across Coral restarts.
 
 - Click to add a new task
 - Check the box to mark complete
 - Drag to reorder
-
-!!! tip
-    Configure the `coral-hook-task-sync` hook in your Claude Code settings to keep tasks in sync between the agent and the dashboard. See the [home page](index.md#claude-code-hooks) for hook configuration.
 
 ### Notes
 
@@ -190,6 +201,8 @@ Click **Info** to view full session metadata:
 | Pane Title | tmux pane title |
 | Branch | Current git branch |
 | Latest Commit | Most recent commit hash and message |
+| Prompt | The initial prompt sent to the agent (if any) |
+| Message Board | Clickable link to the agent's message board (if subscribed) |
 
 ---
 
@@ -201,6 +214,7 @@ Click **Info** to view full session metadata:
 - WebSocket `/ws/coral` provides coral-wide session list updates every 3 seconds
 - WebSocket `/ws/terminal/{name}` streams raw terminal content at 0.5-second intervals
 - Sessions persist across Coral restarts — the `live_sessions` database table tracks registered sessions and relaunches them on startup
+- Session prompts and board subscriptions are persisted, so agents are re-sent their prompt and re-subscribed to their board on restart
 
 ---
 

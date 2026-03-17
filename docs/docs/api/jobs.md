@@ -204,7 +204,7 @@ Set `create_worktree: false` to run the agent directly in `repo_path` — useful
 When `auto_accept: true`, two mechanisms handle permission prompts:
 
 1. **`--dangerously-skip-permissions`** is added to the agent's CLI flags, which skips most prompts at the agent level.
-2. **Notification-based fallback** — if the agent's hook fires a `notification` event (indicating a prompt the flag didn't cover), Coral sends `y` + Enter to the tmux session after a 0.5s delay.
+2. **Notification-based fallback** — if the agent fires a `notification` event (indicating a prompt the flag didn't cover), Coral sends `y` + Enter to the tmux session after a 0.5s delay.
 
 ### Safety limit
 
