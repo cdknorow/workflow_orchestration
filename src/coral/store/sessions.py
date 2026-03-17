@@ -245,6 +245,47 @@ class SessionStore(DatabaseManager):
         )
         await conn.commit()
 
+    # ── Folder Tags ───────────────────────────────────────────────────────
+
+    async def get_folder_tags(self, folder_name: str) -> list[dict[str, Any]]:
+        conn = await self._get_conn()
+        rows = await (await conn.execute(
+            "SELECT t.id, t.name, t.color FROM tags t "
+            "JOIN folder_tags ft ON ft.tag_id = t.id WHERE ft.folder_name = ? ORDER BY t.name",
+            (folder_name,),
+        )).fetchall()
+        return [dict(r) for r in rows]
+
+    async def add_folder_tag(self, folder_name: str, tag_id: int) -> None:
+        conn = await self._get_conn()
+        await conn.execute(
+            "INSERT OR IGNORE INTO folder_tags (folder_name, tag_id) VALUES (?, ?)",
+            (folder_name, tag_id),
+        )
+        await conn.commit()
+
+    async def remove_folder_tag(self, folder_name: str, tag_id: int) -> None:
+        conn = await self._get_conn()
+        await conn.execute(
+            "DELETE FROM folder_tags WHERE folder_name = ? AND tag_id = ?",
+            (folder_name, tag_id),
+        )
+        await conn.commit()
+
+    async def get_all_folder_tags(self) -> dict[str, list[dict[str, Any]]]:
+        """Return {folder_name: [{id, name, color}, ...]} for all folder tags."""
+        conn = await self._get_conn()
+        rows = await (await conn.execute(
+            "SELECT ft.folder_name, t.id, t.name, t.color FROM folder_tags ft "
+            "JOIN tags t ON t.id = ft.tag_id ORDER BY t.name"
+        )).fetchall()
+        result: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            result.setdefault(r["folder_name"], []).append({
+                "id": r["id"], "name": r["name"], "color": r["color"],
+            })
+        return result
+
     # ── Session Index ──────────────────────────────────────────────────────
 
     async def upsert_session_index(

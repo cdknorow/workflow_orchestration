@@ -106,3 +106,34 @@ async def delete_tag(tag_id: int):
     """Delete a tag."""
     await store.delete_tag(tag_id)
     return {"ok": True}
+
+
+# ── Folder Tags ────────────────────────────────────────────────────────
+
+@router.get("/api/folder-tags")
+async def get_all_folder_tags():
+    """Return all folder tags as {folder_name: [tags...]}."""
+    return await store.get_all_folder_tags()
+
+
+@router.get("/api/folder-tags/{folder_name}")
+async def get_folder_tags(folder_name: str):
+    """Return tags for a specific folder."""
+    return await store.get_folder_tags(folder_name)
+
+
+@router.post("/api/folder-tags/{folder_name}")
+async def add_folder_tag(folder_name: str, body: dict):
+    """Add a tag to a folder."""
+    tag_id = body.get("tag_id")
+    if not tag_id:
+        return {"error": "tag_id is required"}
+    await store.add_folder_tag(folder_name, int(tag_id))
+    return {"ok": True}
+
+
+@router.delete("/api/folder-tags/{folder_name}/{tag_id}")
+async def remove_folder_tag(folder_name: str, tag_id: int):
+    """Remove a tag from a folder."""
+    await store.remove_folder_tag(folder_name, tag_id)
+    return {"ok": True}

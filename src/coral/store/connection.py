@@ -63,6 +63,13 @@ class DatabaseManager:
                 FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS folder_tags (
+                folder_name TEXT NOT NULL,
+                tag_id      INTEGER NOT NULL,
+                PRIMARY KEY (folder_name, tag_id),
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS session_index (
                 session_id      TEXT PRIMARY KEY,
                 source_type     TEXT NOT NULL,
@@ -319,6 +326,7 @@ class DatabaseManager:
         for ddl in [
             "CREATE INDEX IF NOT EXISTS idx_git_snap_session ON git_snapshots(session_id)",
             "CREATE INDEX IF NOT EXISTS idx_session_tags_tag_id ON session_tags(tag_id)",
+            "CREATE INDEX IF NOT EXISTS idx_folder_tags_tag_id ON folder_tags(tag_id)",
             "CREATE INDEX IF NOT EXISTS idx_session_index_first_ts ON session_index(first_timestamp)",
             # Performance indexes for frequent queries
             "CREATE INDEX IF NOT EXISTS idx_agent_events_session ON agent_events(session_id)",

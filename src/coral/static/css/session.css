@@ -381,6 +381,49 @@
     line-height: 16px;
 }
 
+.session-group-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.folder-tag-full {
+    font-size: 9px;
+    font-weight: 500;
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 8px;
+    line-height: 14px;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.session-group-spacer {
+    flex: 1;
+}
+
+.folder-tag-btn {
+    display: none;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 4px;
+    border-radius: 3px;
+    background: none;
+    border: none;
+    line-height: 1;
+}
+
+.folder-tag-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.session-group-header:hover .folder-tag-btn {
+    display: inline-block;
+}
+
 .session-group-item {
     padding-left: 33px !important;
     cursor: grab;

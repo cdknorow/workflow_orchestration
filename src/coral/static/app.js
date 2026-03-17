@@ -33,6 +33,7 @@ import {
 import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
 import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js';
 import { initMessageBoard, selectBoardProject, showMessageBoardProjects, postBoardMessage, deleteMessageBoardProject, toggleBoardPause, deleteBoardMessage } from './message_board.js';
+import { loadAllFolderTags, showFolderTagDropdown, hideFolderTagDropdown, addFolderTag, removeFolderTag, createAndAddFolderTag } from './folder_tags.js';
 
 import { checkForUpdates, dismissUpdateToast } from './update_check.js';
 
@@ -134,6 +135,11 @@ window.postBoardMessage = postBoardMessage;
 window.deleteMessageBoardProject = deleteMessageBoardProject;
 window.toggleBoardPause = toggleBoardPause;
 window.deleteBoardMessage = deleteBoardMessage;
+window.showFolderTagDropdown = showFolderTagDropdown;
+window.hideFolderTagDropdown = hideFolderTagDropdown;
+window.addFolderTag = addFolderTag;
+window.removeFolderTag = removeFolderTag;
+window.createAndAddFolderTag = createAndAddFolderTag;
 
 // ── Sidebar kebab menu helpers ───────────────────────────────────────────
 function closeSidebarKebabs() {
@@ -285,6 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
     historyPage = restored.page;
 
     loadLiveSessions();
+    loadAllFolderTags();
     connectCoralWs();
     checkForUpdates();
     populateHfTagSelect().then(() => {

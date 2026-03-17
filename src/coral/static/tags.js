@@ -15,6 +15,9 @@ export async function loadAllTags() {
         console.error("Failed to load tags:", e);
         allTags = [];
     }
+    // Expose cache for cross-module access (folder_tags.js)
+    window._allTagsCache = allTags;
+    return allTags;
 }
 
 export async function loadSessionTags(sessionId) {
