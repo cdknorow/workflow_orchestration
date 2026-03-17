@@ -15,10 +15,16 @@ import json as _json_mod
 
 from coral.tools.utils import run_cmd, LOG_DIR, LOG_PATTERN, get_package_dir
 
-ANSI_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+ANSI_RE = re.compile(
+    r"\x1B(?:"
+    r"\][^\x07\x1B]*(?:\x07|\x1B\\)?"   # OSC sequences (ESC ] ... BEL/ST) — must be before Fe
+    r"|\[[0-?]*[ -/]*[@-~]"              # CSI sequences (ESC [ ... final)
+    r"|[@-Z\\-_]"                         # Fe sequences (ESC + single char)
+    r")"
+)
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-STATUS_RE = re.compile(r"^[\s●⏺]*\|\|PULSE:STATUS (.*?)\|\|", re.MULTILINE)
-SUMMARY_RE = re.compile(r"^[\s●⏺]*\|\|PULSE:SUMMARY (.*?)\|\|", re.MULTILINE)
+STATUS_RE = re.compile(r"^.*?\|\|PULSE:STATUS (.*?)\|\|", re.MULTILINE)
+SUMMARY_RE = re.compile(r"^.*?\|\|PULSE:SUMMARY (.*?)\|\|", re.MULTILINE)
 
 # Regex to parse new-format tmux session names: {agent_type}-{uuid}
 _UUID_RE = re.compile(
@@ -210,12 +216,16 @@ async def discover_coral_agents() -> list[dict[str, Any]]:
             "working_directory": current_path,
         })
 
-    # Clean up stale log files that don't match any live session
+    # Clean up stale log files that don't match any live session.
+    # Only delete files older than 5 minutes to avoid race conditions
+    # where a session was just launched but not yet discovered.
     live_log_paths = {r["log_path"] for r in results}
     for log_path in glob(LOG_PATTERN):
         if log_path not in live_log_paths:
             try:
-                Path(log_path).unlink()
+                age = time.time() - Path(log_path).stat().st_mtime
+                if age > 300:  # Only delete if older than 5 minutes
+                    Path(log_path).unlink()
             except OSError:
                 pass
 

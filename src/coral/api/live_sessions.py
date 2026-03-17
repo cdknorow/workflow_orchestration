@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -96,7 +97,29 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
 
     results = []
     for agent in agents:
-        log_info = get_log_status(agent["log_path"])
+        # Self-heal: if the log file is missing but the tmux session is alive,
+        # recreate the file and re-establish pipe-pane logging.  This handles
+        # the case where a log file was accidentally deleted while the cat
+        # pipe-pane process still had an open fd to the removed inode.
+        log_path = agent["log_path"]
+        if not Path(log_path).exists() and agent.get("tmux_session"):
+            try:
+                from coral.tools.utils import run_cmd
+                tmux_sess = agent["tmux_session"]
+                Path(log_path).write_text("")
+                # Close existing pipe-pane first (kills stale cat process
+                # that may still have an fd to the deleted inode)
+                await run_cmd("tmux", "pipe-pane", "-t", tmux_sess)
+                # Re-establish pipe-pane to the new file
+                await run_cmd(
+                    "tmux", "pipe-pane", "-t", tmux_sess,
+                    "-o", f"cat >> '{log_path}'"
+                )
+                log.info("Re-established pipe-pane for %s", agent.get("session_id", "")[:8])
+            except Exception:
+                pass
+
+        log_info = get_log_status(log_path)
         name = agent["agent_name"]
         sid = agent.get("session_id")
 
