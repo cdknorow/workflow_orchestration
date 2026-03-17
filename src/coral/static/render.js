@@ -255,8 +255,8 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
             <div class="session-name-row">
                 <span class="session-label">${isTerminal ? '<svg class="terminal-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg> ' : ''}${escapeHtml(displayLabel)}${typeTag}</span>
                 <span class="session-name-spacer"></span>
-                ${kebabMenu}
                 ${waitingBadge}
+                ${kebabMenu}
             </div>
             <span class="session-goal${isCompact ? ' session-goal-compact' : ''}">${goal}</span>
             ${branchTag}
@@ -308,9 +308,9 @@ export function renderLiveSessions(sessions) {
             </div>
         </div>`;
         const groupBranch = sorted.find(s => s.branch)?.branch || "";
-        const groupBranchTag = groupBranch ? `<span class="sidebar-branch"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</span>` : "";
+        const groupBranchLine = groupBranch ? `<div class="group-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</div>` : "";
         html += `<li class="session-group-header" data-group-name="${escapeHtml(groupName)}" onclick="toggleGroupCollapse('${escapeHtml(groupName)}')">
-            <span class="group-chevron">${chevron}</span>${escapeHtml(groupName)}${countBadge}${groupBranchTag}<span class="session-name-spacer"></span>${groupKebab}</li>`;
+            <span class="group-chevron">${chevron}</span><div class="group-header-text">${escapeHtml(groupName)}${countBadge}${groupBranchLine}</div><span class="session-name-spacer"></span>${groupKebab}</li>`;
 
         if (collapsed) {
             // Skip rendering items when collapsed
