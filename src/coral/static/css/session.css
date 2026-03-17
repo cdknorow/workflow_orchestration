@@ -231,7 +231,7 @@
     border-left: 3px solid var(--accent) !important;
     border-radius: 8px !important;
     background: rgba(255, 255, 255, 0.02) !important;
-    margin: 6px 8px !important;
+    margin: 4px 8px !important;
     padding: 0 !important;
     display: block !important;
     cursor: default !important;
@@ -243,7 +243,7 @@
 }
 
 .board-card-header {
-    padding: 6px 10px 4px !important;
+    padding: 10px 10px !important;
     margin: 0;
     border-radius: 7px 7px 0 0;
 }
