@@ -310,7 +310,7 @@ export function renderLiveSessions(sessions) {
         const groupBranch = sorted.find(s => s.branch)?.branch || "";
         const groupBranchLine = groupBranch ? `<div class="group-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</div>` : "";
         html += `<li class="session-group-header" data-group-name="${escapeHtml(groupName)}" onclick="toggleGroupCollapse('${escapeHtml(groupName)}')">
-            <span class="group-chevron">${chevron}</span><div class="group-header-text">${escapeHtml(groupName)}${countBadge}${groupBranchLine}</div><span class="session-name-spacer"></span>${groupKebab}</li>`;
+            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupBranchLine}</div><span class="session-name-spacer"></span>${groupKebab}</li>`;
 
         if (collapsed) {
             // Skip rendering items when collapsed

@@ -314,6 +314,12 @@
     min-width: 0;
 }
 
+.group-name-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .group-branch-line {
     font-size: 9px;
     font-weight: 400;
