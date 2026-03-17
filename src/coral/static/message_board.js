@@ -194,7 +194,7 @@ function renderMessages(messages) {
                     <button class="mb-delete-msg-btn" onclick="deleteBoardMessage(${m.id})" title="Delete message">&times;</button>
                 </div>
             </div>
-            <div style="font-size:13px;color:var(--text-primary);white-space:pre-wrap;line-height:1.5">${escapeHtml(m.content)}</div>
+            <div class="mb-message-body" style="font-size:13px;color:var(--text-primary);line-height:1.5">${typeof marked !== 'undefined' ? marked.parse(m.content || '') : escapeHtml(m.content)}</div>
         </div>`;
     }).join('');
     if (wasAtBottom) {

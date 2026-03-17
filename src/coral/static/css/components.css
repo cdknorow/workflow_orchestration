@@ -85,6 +85,67 @@
     color: var(--error, #f85149);
 }
 
+/* Message board markdown content */
+.mb-message-body p {
+    margin: 0 0 6px;
+}
+
+.mb-message-body p:last-child {
+    margin-bottom: 0;
+}
+
+.mb-message-body h1, .mb-message-body h2, .mb-message-body h3,
+.mb-message-body h4, .mb-message-body h5, .mb-message-body h6 {
+    margin: 8px 0 4px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.mb-message-body h2 { font-size: 14px; }
+.mb-message-body h3 { font-size: 13px; }
+
+.mb-message-body ul, .mb-message-body ol {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+
+.mb-message-body li {
+    margin-bottom: 2px;
+}
+
+.mb-message-body code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+}
+
+.mb-message-body pre {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px 10px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 6px 0;
+}
+
+.mb-message-body pre code {
+    background: none;
+    padding: 0;
+    font-size: 12px;
+}
+
+.mb-message-body strong {
+    font-weight: 700;
+}
+
+.mb-message-body blockquote {
+    border-left: 3px solid var(--border);
+    margin: 6px 0;
+    padding: 2px 10px;
+    color: var(--text-muted);
+}
+
 /* Icon + label buttons */
 .btn-icon-label {
     display: inline-flex;
