@@ -197,6 +197,7 @@ class TestRunForeground:
 
         with patch("threading.Thread") as MockThread, \
              patch("threading.Event.wait", return_value=None), \
+             patch("webbrowser.open"), \
              patch("coral.tray._write_pid"), \
              patch("coral.tray._remove_pid"), \
              patch("builtins.__import__", side_effect=self._make_rumps_import(mock_rumps)):
@@ -217,6 +218,7 @@ class TestRunForeground:
 
         with patch("threading.Thread") as MockThread, \
              patch("threading.Event.wait", return_value=None), \
+             patch("webbrowser.open"), \
              patch("coral.tray._write_pid") as mock_write_pid, \
              patch("builtins.__import__", side_effect=self._make_rumps_import(mock_rumps)):
             MockThread.return_value = MagicMock()
