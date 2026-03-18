@@ -298,7 +298,7 @@ async function subscribeDashboard(project) {
         await fetch(`/api/board/${encodeURIComponent(project)}/subscribe`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: 'dashboard', job_title: 'Developer (Dashboard)' }),
+            body: JSON.stringify({ session_id: 'dashboard', job_title: 'Operator' }),
         });
     } catch (e) {
         // Best effort
