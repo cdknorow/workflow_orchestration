@@ -340,8 +340,6 @@ async def get_live_session_info(name: str, agent_type: str | None = None, sessio
             if prompt_info:
                 info["prompt"] = prompt_info["prompt"]
                 info["board_name"] = prompt_info["board_name"]
-                if prompt_info.get("subgent_key_id"):
-                    info["subgent_admin_url"] = prompt_info["subgent_admin_url"]
         except Exception:
             pass
     return info
@@ -573,46 +571,6 @@ async def kill_live_session(name: str, body: dict | None = None):
     """Kill the tmux session for a live agent."""
     agent_type = (body or {}).get("agent_type") or None
     sid = (body or {}).get("session_id") or None
-
-    # Revoke subgent key and stop board listener if this was the last agent on the board
-    if sid:
-        try:
-            info = await store.get_live_session_prompt_info(sid)
-            if info and info.get("subgent_key_id"):
-                # Revoke the agent's API key on the subgent server
-                try:
-                    from coral.messageboard.subgent_client import revoke_key
-                    revoke_key(
-                        admin_url=info["subgent_admin_url"],
-                        admin_key=info["subgent_admin_key"],
-                        key_id=info["subgent_key_id"],
-                    )
-                except Exception:
-                    log.warning("Failed to revoke subgent key for session %s", sid[:8])
-
-                # Check if any other live sessions share this board
-                board_name = info.get("board_name")
-                board_server = info.get("board_server")
-                if board_name and board_server:
-                    remaining = await store.get_subgent_live_sessions()
-                    others = [r for r in remaining if r["session_id"] != sid and r["board_name"] == board_name and r["board_server"] == board_server]
-                    if not others:
-                        # Last agent on this board — stop the WS listener
-                        try:
-                            from coral.web_server import app
-                            listener = getattr(app.state, "subgent_listener", None)
-                            if listener:
-                                ws_url = board_server
-                                if ws_url.startswith("https://"):
-                                    ws_url = "wss://" + ws_url[len("https://"):]
-                                elif ws_url.startswith("http://"):
-                                    ws_url = "ws://" + ws_url[len("http://"):]
-                                await listener.stop_board(ws_url, board_name)
-                        except Exception:
-                            log.warning("Failed to stop subgent listener for board %s", board_name)
-        except Exception:
-            pass  # Non-critical — don't block kill
-
     error = await kill_session(name, agent_type=agent_type, session_id=sid)
     if error:
         return {"error": error}
@@ -715,7 +673,6 @@ async def launch_team(body: dict):
     agent_type = body.get("agent_type", "claude").strip()
     flags = body.get("flags", [])
     agents = body.get("agents", [])
-    subgent_config = body.get("subgent")  # optional: {admin_url, admin_key, org_id}
 
     if not board_name:
         return {"error": "board_name is required"}
@@ -732,38 +689,6 @@ async def launch_team(body: dict):
         if not agent_name:
             continue
 
-        # Create subgent agent key if subgent config is provided
-        subgent_key_id = None
-        subgent_api_key = None
-        subgent_admin_url = None
-        subgent_admin_key = None
-        subgent_org_id = None
-
-        if subgent_config:
-            subgent_admin_url = subgent_config.get("admin_url", "").strip()
-            subgent_admin_key = subgent_config.get("admin_key", "").strip()
-            subgent_org_id = subgent_config.get("org_id", "default").strip() or "default"
-            if subgent_admin_url and subgent_admin_key:
-                try:
-                    from coral.messageboard.subgent_client import create_agent_key
-                    # Generate a session_id early so we can use it for key creation
-                    import uuid
-                    pre_session_id = str(uuid.uuid4())
-                    key_result = await create_agent_key(
-                        admin_url=subgent_admin_url,
-                        admin_key=subgent_admin_key,
-                        org_id=subgent_org_id,
-                        board=board_name,
-                        session_id=pre_session_id,
-                        job_title=agent_name,
-                    )
-                    subgent_key_id = str(key_result.get("key_id", ""))
-                    subgent_api_key = key_result.get("api_key", "")
-                except Exception as e:
-                    log.warning("Failed to create subgent key for %s: %s", agent_name, e)
-                    launched.append({"name": agent_name, "error": "Subgent key creation failed"})
-                    continue
-
         # Launch the agent session
         result = await launch_claude_session(
             working_dir, agent_type,
@@ -772,11 +697,6 @@ async def launch_team(body: dict):
             prompt=agent_prompt or None,
             board_name=board_name or None,
             board_server=board_server,
-            subgent_key_id=subgent_key_id,
-            subgent_api_key=subgent_api_key,
-            subgent_admin_url=subgent_admin_url,
-            subgent_admin_key=subgent_admin_key,
-            subgent_org_id=subgent_org_id,
         )
         if result.get("error"):
             launched.append({"name": agent_name, "error": result["error"]})
@@ -787,8 +707,6 @@ async def launch_team(body: dict):
             result["session_id"], result["session_name"], agent_type,
             prompt=agent_prompt or None, board_name=board_name or None,
             board_server=board_server, display_name=agent_name,
-            subgent_api_key=subgent_api_key,
-            subgent_admin_url=subgent_admin_url,
         ))
 
         launched.append({
@@ -796,34 +714,6 @@ async def launch_team(body: dict):
             "session_id": result["session_id"],
             "session_name": result["session_name"],
         })
-
-    # Start WebSocket listener for subgent board
-    if subgent_config and subgent_api_key and launched:
-        try:
-            from coral.messageboard.subgent_client import validate_url
-            from coral.web_server import app
-            # Re-validate URL before WebSocket connection (SSRF protection)
-            validate_url(subgent_admin_url)
-            listener = getattr(app.state, "subgent_listener", None)
-            if listener:
-                # Convert http(s) to ws(s) for WebSocket connection
-                ws_url = subgent_admin_url
-                if ws_url.startswith("https://"):
-                    ws_url = "wss://" + ws_url[len("https://"):]
-                elif ws_url.startswith("http://"):
-                    ws_url = "ws://" + ws_url[len("http://"):]
-                # Use the first successfully launched agent's session_id
-                first_sid = next((a["session_id"] for a in launched if "session_id" in a), "")
-                await listener.start_board(
-                    ws_url=ws_url,
-                    project=board_name,
-                    api_key=subgent_api_key,
-                    session_id=first_sid,
-                )
-        except ValueError as e:
-            log.warning("Subgent URL validation failed for board %s: %s", board_name, e)
-        except Exception as e:
-            log.warning("Failed to start subgent WS listener for board %s: %s", board_name, e)
 
     return {"ok": True, "board": board_name, "agents": launched}
 
