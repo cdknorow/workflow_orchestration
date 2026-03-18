@@ -9,7 +9,7 @@ import { connectCoralWs } from './websocket.js';
 import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment, editGoal, refreshGoal } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
 import { toggleGroupCollapse, killGroup, killSessionDirect, showInfoDirect, attachDirect, restartDirect } from './render.js';
-import { syncPaneWidth } from './capture.js';
+import { syncPaneWidth, refreshCapture } from './capture.js';
 import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
 import { initSidebarResize, initCommandPaneResize, initTaskBarResize, initSidebarCollapse, switchJobsSubtab, initAgenticPanelCollapse, initAgenticBlockResize, initAgenticBlockCollapse } from './sidebar.js';
@@ -525,6 +525,13 @@ document.addEventListener("DOMContentLoaded", () => {
     initSidebarResize();
     initCommandPaneResize();
     initTaskBarResize();
+
+    // Pause polling when tab is hidden; refresh immediately when visible again
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && state.currentSession && state.currentSession.type === "live") {
+            refreshCapture();
+        }
+    });
 
     // Sync tmux pane width on window resize and panel drag
     let resizeDebounce;

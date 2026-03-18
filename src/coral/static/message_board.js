@@ -151,23 +151,15 @@ async function loadBoardProjectList() {
 
 // ── Messages ─────────────────────────────────────────────────────────────
 
-async function loadBoardMessages(project, loadAll = false) {
+async function loadBoardMessages(project) {
     try {
-        if (loadAll) {
-            // Load everything (for polling refresh after initial load)
-            const result = await fetchMessages(project, 10000, 0);
-            _allMessages = result.messages;
-            _totalMessages = result.total;
-            _loadedOffset = 0;
-        } else {
-            // Load the latest page — calculate offset to get the last PAGE_SIZE messages
-            const countResult = await fetchMessages(project, 1, 0);
-            _totalMessages = countResult.total;
-            const startOffset = Math.max(0, _totalMessages - PAGE_SIZE);
-            const result = await fetchMessages(project, PAGE_SIZE, startOffset);
-            _allMessages = result.messages;
-            _loadedOffset = startOffset;
-        }
+        // Load the latest page — calculate offset to get the last PAGE_SIZE messages
+        const countResult = await fetchMessages(project, 1, 0);
+        _totalMessages = countResult.total;
+        const startOffset = Math.max(0, _totalMessages - PAGE_SIZE);
+        const result = await fetchMessages(project, PAGE_SIZE, startOffset);
+        _allMessages = result.messages;
+        _loadedOffset = startOffset;
         renderMessages(_allMessages);
     } catch (e) {
         console.error('Failed to load board messages:', e);
@@ -420,30 +412,37 @@ export async function deleteMessageBoardProject() {
 async function _pollNewMessages() {
     if (!currentProject || isPaused) return;
     try {
-        // Fetch just the count to see if there are new messages
-        const result = await fetchMessages(currentProject, 1, 0);
-        const newTotal = result.total;
-        if (newTotal > _totalMessages) {
-            // Fetch only the new messages
-            const newCount = newTotal - _totalMessages;
-            const newResult = await fetchMessages(currentProject, newCount, _totalMessages);
-            _allMessages = [..._allMessages, ...newResult.messages];
-            _totalMessages = newTotal;
+        // Fetch a small batch from the end — if total grew, we have new messages
+        const knownEnd = _loadedOffset + _allMessages.length;
+        const result = await fetchMessages(currentProject, PAGE_SIZE, knownEnd);
+        if (result.total > _totalMessages && result.messages.length > 0) {
+            _allMessages = [..._allMessages, ...result.messages];
+            _totalMessages = result.total;
             renderMessages(_allMessages);
+        } else if (result.total !== _totalMessages) {
+            // Messages were deleted — refresh
+            _totalMessages = result.total;
         }
     } catch (e) {
         // Silent fail on poll
     }
 }
 
+let _pollCount = 0;
+
 function startBoardPoll() {
     stopBoardPoll();
+    _pollCount = 0;
     pollTimer = setInterval(() => {
-        if (currentProject) {
+        if (currentProject && !document.hidden) {
             _pollNewMessages();
-            loadBoardSubscribers(currentProject);
+            // Refresh subscribers less often (every 30s instead of every 10s)
+            _pollCount++;
+            if (_pollCount % 3 === 0) {
+                loadBoardSubscribers(currentProject);
+            }
         }
-    }, 5000);
+    }, 10000);
 }
 
 function stopBoardPoll() {

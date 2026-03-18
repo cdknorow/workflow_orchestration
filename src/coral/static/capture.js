@@ -2,8 +2,8 @@
 
 import { state, CAPTURE_REFRESH_MS } from './state.js';
 import { getRenderer } from './renderers.js';
-import { loadAgentTasks } from './tasks.js';
-import { loadAgentEvents } from './agentic_state.js';
+import { renderTaskList } from './tasks.js';
+import { renderEventTimeline } from './agentic_state.js';
 import { getTerminalCols } from './xterm_renderer.js';
 
 /* ── Tmux pane width sync ─────────────────────────────────────────────── */
@@ -70,23 +70,27 @@ export function renderCaptureText(el, text) {
 export async function refreshCapture() {
     if (!state.currentSession || state.currentSession.type !== "live") return;
 
+    // Skip polling when the tab is not visible
+    if (document.hidden) return;
+
     try {
         const params = new URLSearchParams();
         if (state.currentSession.agent_type) params.set("agent_type", state.currentSession.agent_type);
         if (state.currentSession.session_id) params.set("session_id", state.currentSession.session_id);
         const qs = params.toString() ? `?${params}` : "";
-        let captureUrl = `/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/capture${qs}`;
-        const resp = await fetch(captureUrl);
-        const data = await resp.json();
-        const el = document.getElementById("pane-capture");
-        const text = data.capture || data.error || "No capture available";
 
-        // Only update if content changed to avoid scroll jank
+        // Single batch endpoint replaces separate capture + tasks + events calls
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/poll${qs}`);
+        const data = await resp.json();
+
+        // ── Capture ──
+        const captureData = data.capture || {};
+        const el = document.getElementById("pane-capture");
+        const text = captureData.capture || captureData.error || "No capture available";
+
         if (el._lastCapture !== text) {
-            // Defer DOM update while user is selecting text
             if (state.isSelecting) return;
 
-            // Preserve scroll position when user has scrolled up
             const savedScroll = state.autoScroll ? null : el.scrollTop;
 
             el._lastCapture = text;
@@ -98,15 +102,17 @@ export async function refreshCapture() {
                 el.scrollTop = savedScroll;
             }
         }
+
+        // ── Tasks ──
+        state.currentAgentTasks = data.tasks || [];
+        renderTaskList();
+
+        // ── Events ──
+        state.currentAgentEvents = data.events || [];
+        renderEventTimeline();
+
     } catch (e) {
         console.error("Failed to refresh capture:", e);
-    }
-
-    // Poll tasks and events unconditionally
-    if (state.currentSession && state.currentSession.type === "live") {
-        const sid = state.currentSession.session_id;
-        loadAgentTasks(state.currentSession.name, sid);
-        loadAgentEvents(state.currentSession.name, sid);
     }
 }
 

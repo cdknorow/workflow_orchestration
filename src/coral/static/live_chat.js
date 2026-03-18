@@ -182,6 +182,7 @@ function renderMessage(msg, container) {
 
 export async function refreshLiveHistory() {
     if (!state.currentSession || state.currentSession.type !== "live") return;
+    if (document.hidden) return;
 
     const session = state.currentSession;
     if (!session.session_id) return;
