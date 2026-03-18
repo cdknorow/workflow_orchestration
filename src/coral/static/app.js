@@ -6,7 +6,7 @@ import { filterState, deserializeFromUrl, serializeToUrl,
          hasActiveFilters, countActiveFilters, resetFilters }
     from './search_filters.js';
 import { connectCoralWs } from './websocket.js';
-import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment, editGoal, refreshGoal, requestGoal } from './controls.js';
+import { sendCommand, sendRawKeys, sendModeToggle, cycleModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment, editGoal, refreshGoal, requestGoal } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
 import { toggleGroupCollapse, killGroup, shareAgentTeam, saveTeamFromSidebar, killSessionDirect, showInfoDirect, attachDirect, restartDirect, showConfirmModal, hideConfirmModal } from './render.js';
 import { syncPaneWidth, refreshCapture } from './capture.js';
@@ -43,6 +43,7 @@ window._coralLoadLiveSessions = loadLiveSessions;
 window.sendCommand = sendCommand;
 window.sendRawKeys = sendRawKeys;
 window.sendModeToggle = sendModeToggle;
+window.cycleModeToggle = cycleModeToggle;
 window.sendQuickCommand = sendQuickCommand;
 window.executeMacro = executeMacro;
 window.addMacro = addMacro;
