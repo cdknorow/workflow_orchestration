@@ -39,6 +39,7 @@ import { initMobile, syncMobileAgentList } from './mobile.js';
 import { checkForUpdates, dismissUpdateToast } from './update_check.js';
 
 // ── Expose functions to HTML onclick handlers ─────────────────────────────
+window._coralLoadLiveSessions = loadLiveSessions;
 window.sendCommand = sendCommand;
 window.sendRawKeys = sendRawKeys;
 window.sendModeToggle = sendModeToggle;
