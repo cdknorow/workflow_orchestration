@@ -209,6 +209,117 @@ export function wrapSelectLiveSession() {
     };
 }
 
+// ── Pull-to-Refresh ───────────────────────────────────────────────────────
+
+function _initPullToRefresh() {
+    const agentList = document.getElementById('mobile-agent-list');
+    if (!agentList) return;
+
+    let startY = 0;
+    let pulling = false;
+    let refreshIndicator = null;
+
+    agentList.addEventListener('touchstart', (e) => {
+        if (agentList.scrollTop === 0) {
+            startY = e.touches[0].clientY;
+            pulling = true;
+        }
+    }, { passive: true });
+
+    agentList.addEventListener('touchmove', (e) => {
+        if (!pulling) return;
+        const dy = e.touches[0].clientY - startY;
+        if (dy > 10 && agentList.scrollTop === 0) {
+            if (!refreshIndicator) {
+                refreshIndicator = document.createElement('div');
+                refreshIndicator.className = 'pull-refresh-indicator';
+                refreshIndicator.textContent = 'Pull to refresh...';
+                agentList.insertBefore(refreshIndicator, agentList.firstChild);
+            }
+            const progress = Math.min(dy / 80, 1);
+            refreshIndicator.style.height = Math.min(dy * 0.5, 50) + 'px';
+            refreshIndicator.style.opacity = progress;
+            if (dy > 80) {
+                refreshIndicator.textContent = 'Release to refresh';
+            } else {
+                refreshIndicator.textContent = 'Pull to refresh...';
+            }
+        }
+    }, { passive: true });
+
+    agentList.addEventListener('touchend', (e) => {
+        if (!pulling) return;
+        pulling = false;
+        const dy = (e.changedTouches[0]?.clientY || 0) - startY;
+        if (dy > 80 && refreshIndicator) {
+            refreshIndicator.textContent = 'Refreshing...';
+            // Trigger session reload
+            if (window._coralLoadLiveSessions) {
+                window._coralLoadLiveSessions();
+            }
+            setTimeout(() => {
+                if (refreshIndicator && refreshIndicator.parentNode) {
+                    refreshIndicator.remove();
+                }
+                refreshIndicator = null;
+            }, 1000);
+        } else {
+            if (refreshIndicator && refreshIndicator.parentNode) {
+                refreshIndicator.remove();
+            }
+            refreshIndicator = null;
+        }
+    }, { passive: true });
+}
+
+// ── Swipe Between Agents ──────────────────────────────────────────────────
+
+function _initSwipeNavigation() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    document.addEventListener('touchstart', (e) => {
+        if (!isMobile()) return;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        if (!isMobile()) return;
+
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+
+        // Only detect horizontal swipes (dx much larger than dy)
+        if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+
+        // Only swipe when viewing a live session
+        const liveView = document.getElementById('live-session-view');
+        if (!liveView || liveView.style.display === 'none') return;
+
+        const sessions = state.liveSessions || [];
+        if (sessions.length < 2) return;
+
+        const currentId = state.currentSession?.session_id;
+        const currentIdx = sessions.findIndex(s => s.session_id === currentId);
+        if (currentIdx < 0) return;
+
+        let nextIdx;
+        if (dx > 0) {
+            // Swipe right → previous agent
+            nextIdx = currentIdx > 0 ? currentIdx - 1 : sessions.length - 1;
+        } else {
+            // Swipe left → next agent
+            nextIdx = currentIdx < sessions.length - 1 ? currentIdx + 1 : 0;
+        }
+
+        const next = sessions[nextIdx];
+        if (next && window.selectLiveSession) {
+            window.selectLiveSession(next.name, next.agent_type, next.session_id);
+        }
+    }, { passive: true });
+}
+
 // ── Initialize Mobile ─────────────────────────────────────────────────────
 
 export function initMobile() {
@@ -219,6 +330,10 @@ export function initMobile() {
 
     // Wrap selectLiveSession for mobile navigation
     wrapSelectLiveSession();
+
+    // Initialize touch gestures
+    _initPullToRefresh();
+    _initSwipeNavigation();
 
     // Listen for resize to toggle mobile/desktop
     window.addEventListener('resize', () => {

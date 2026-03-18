@@ -330,6 +330,19 @@
     }
 }
 
+/* ── Pull-to-Refresh Indicator ────────────────────────────── */
+
+.pull-refresh-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 0;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
+    transition: height 0.1s ease-out;
+}
+
 /* ── Touch-friendly adjustments ───────────────────────────── */
 
 @media (hover: none) and (pointer: coarse) {
