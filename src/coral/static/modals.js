@@ -50,7 +50,7 @@ function _selectLaunchType(type) {
     _showLaunchStep(type);
     if (type === "agent") {
         _loadAgentBoardProjects();
-        document.getElementById("launch-agent-name").focus();
+        _initAgentPresets();
     } else if (type === "team") {
         _initTeamForm();
     } else {
@@ -75,6 +75,8 @@ export function showLaunchModal() {
     document.getElementById("launch-new-board-row").style.display = "none";
     document.getElementById("launch-board-server-row").style.display = "none";
     _syncFlagButtons("launch-flags");
+    // Clear preset selection
+    document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => btn.classList.remove("active"));
 
     // Reset terminal form
     document.getElementById("launch-terminal-name").value = "";
@@ -195,6 +197,132 @@ function _onAgentBoardChange() {
     if (!hasBoard) document.getElementById("launch-board-server").value = "";
 }
 window._onAgentBoardChange = _onAgentBoardChange;
+
+// ── Agent Preset Selector (single-agent modal) ───────────────────────────
+
+function _initAgentPresets() {
+    const container = document.getElementById("agent-preset-selector");
+    if (!container) return;
+
+    let html = '';
+    for (const preset of AGENT_PRESETS) {
+        html += `<button class="agent-preset-btn" data-preset="${escapeAttr(preset.name)}" onclick="window._selectAgentPreset('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
+    }
+    html += `<button class="agent-preset-btn agent-preset-custom" data-preset="" onclick="window._selectAgentPreset('')">Custom</button>`;
+    container.innerHTML = html;
+}
+
+function _selectAgentPreset(name) {
+    const nameInput = document.getElementById("launch-agent-name");
+    const promptInput = document.getElementById("launch-agent-prompt");
+
+    if (name) {
+        const preset = AGENT_PRESETS.find(p => p.name === name);
+        if (preset) {
+            nameInput.value = preset.name;
+            promptInput.value = preset.prompt;
+        }
+    } else {
+        nameInput.value = "";
+        promptInput.value = "";
+    }
+
+    // Update active state on buttons
+    document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.preset === name);
+    });
+
+    nameInput.focus();
+}
+window._selectAgentPreset = _selectAgentPreset;
+
+// ── Add Agent to Board ───────────────────────────────────────────────────
+
+export function showAddAgentToBoard(boardName, workDir) {
+    const modal = document.getElementById("add-agent-board-modal");
+    document.getElementById("add-agent-board-name").value = boardName;
+    document.getElementById("add-agent-board-workdir").value = workDir;
+    document.getElementById("add-agent-board-subtitle").textContent = `Board: ${boardName}`;
+    document.getElementById("add-agent-board-agent-name").value = "";
+    document.getElementById("add-agent-board-prompt").value = "";
+    document.getElementById("add-agent-board-flags").value = "";
+
+    // Build preset buttons
+    const container = document.getElementById("add-agent-board-presets");
+    let html = '';
+    for (const preset of AGENT_PRESETS) {
+        html += `<button class="agent-preset-btn" data-preset="${escapeAttr(preset.name)}" onclick="window._selectBoardAgentPreset('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
+    }
+    html += `<button class="agent-preset-btn agent-preset-custom" data-preset="" onclick="window._selectBoardAgentPreset('')">Custom</button>`;
+    container.innerHTML = html;
+
+    modal.style.display = "flex";
+}
+
+export function hideAddAgentBoardModal() {
+    document.getElementById("add-agent-board-modal").style.display = "none";
+}
+
+function _selectBoardAgentPreset(name) {
+    const nameInput = document.getElementById("add-agent-board-agent-name");
+    const promptInput = document.getElementById("add-agent-board-prompt");
+
+    if (name) {
+        const preset = AGENT_PRESETS.find(p => p.name === name);
+        if (preset) {
+            nameInput.value = preset.name;
+            promptInput.value = preset.prompt;
+        }
+    } else {
+        nameInput.value = "";
+        promptInput.value = "";
+    }
+
+    document.querySelectorAll("#add-agent-board-presets .agent-preset-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.preset === name);
+    });
+    nameInput.focus();
+}
+window._selectBoardAgentPreset = _selectBoardAgentPreset;
+
+export async function launchAgentToBoard() {
+    const boardName = document.getElementById("add-agent-board-name").value;
+    const workDir = document.getElementById("add-agent-board-workdir").value;
+    const agentName = document.getElementById("add-agent-board-agent-name").value.trim();
+    const prompt = document.getElementById("add-agent-board-prompt").value.trim();
+    const flagsStr = document.getElementById("add-agent-board-flags").value.trim();
+
+    if (!agentName) {
+        showToast("Agent name is required", "error");
+        return;
+    }
+
+    const flags = flagsStr ? flagsStr.split(/\s+/) : [];
+
+    try {
+        const resp = await fetch("/api/sessions/launch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                working_dir: workDir,
+                agent_type: "claude",
+                display_name: agentName,
+                flags,
+                prompt,
+                board_name: boardName,
+            }),
+        });
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, "error");
+        } else {
+            showToast(`Launched ${agentName} on board ${boardName}`);
+            hideAddAgentBoardModal();
+        }
+    } catch (e) {
+        showToast("Failed to launch agent", "error");
+    }
+}
 
 // ── Agent Team ────────────────────────────────────────────────────────────
 

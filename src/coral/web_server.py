@@ -41,6 +41,35 @@ from coral.tools.utils import get_package_dir
 log = logging.getLogger(__name__)
 BASE_DIR = get_package_dir()
 
+# WAL size threshold (1 MB) — checkpoint and vacuum when exceeded
+_WAL_COMPACT_THRESHOLD = 1_000_000
+
+
+async def _compact_databases() -> None:
+    """Checkpoint and vacuum SQLite databases if their WAL files are too large."""
+    import aiosqlite
+    from coral.store.connection import DB_PATH
+    from coral.messageboard.store import DB_PATH as BOARD_DB_PATH
+
+    for db_path in [DB_PATH, BOARD_DB_PATH]:
+        wal_path = Path(f"{db_path}-wal")
+        if not wal_path.exists():
+            continue
+        wal_size = wal_path.stat().st_size
+        if wal_size < _WAL_COMPACT_THRESHOLD:
+            continue
+        try:
+            conn = await aiosqlite.connect(str(db_path))
+            await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            try:
+                await conn.execute("VACUUM")
+            except Exception:
+                pass  # VACUUM needs exclusive access; checkpoint alone is fine
+            await conn.close()
+            log.info("Compacted %s (WAL was %.1f MB)", db_path.name, wal_size / 1_048_576)
+        except Exception as e:
+            log.warning("Failed to compact %s: %s", db_path.name, e)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,9 +83,19 @@ async def lifespan(app: FastAPI):
     # Seed bundled themes (e.g. GhostV3) into ~/.coral/themes/ on first run
     seed_bundled_themes()
 
+    # Compact databases on startup if WAL files are too large
+    await _compact_databases()
+
     # Resume any persistent live sessions that are no longer running in tmux
-    # (excludes sessions owned by scheduled/oneshot job runs)
-    await resume_persistent_sessions(store, schedule_store)
+    # (excludes sessions owned by scheduled/oneshot job runs).
+    # Timeout prevents blocking server startup if tmux operations hang.
+    try:
+        await asyncio.wait_for(
+            resume_persistent_sessions(store, schedule_store),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        log.warning("resume_persistent_sessions timed out after 30s — skipping remaining sessions")
 
     # Register any tmux sessions not yet tracked in the live_sessions table.
     live_agents = await discover_coral_agents()
@@ -137,6 +176,8 @@ async def lifespan(app: FastAPI):
         await asyncio.wait_for(dispatcher.close(), timeout=5)
     except asyncio.TimeoutError:
         log.warning("Webhook dispatcher close timed out")
+    await board_store.close()
+    await remote_board_store.close()
     await store.close()
 
 

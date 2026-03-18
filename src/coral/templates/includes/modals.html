@@ -103,8 +103,9 @@
                         <div class="team-agents-container">
                             <div class="team-agents-header">
                                 <strong style="font-size:14px">Agent</strong>
-                                <p class="team-agents-desc">Configure the agent's name and behavior prompt.</p>
+                                <p class="team-agents-desc">Choose a preset role or configure a custom agent.</p>
                             </div>
+                            <div id="agent-preset-selector" class="agent-preset-selector"></div>
                             <div class="team-agents-scroll">
                                 <div class="team-agent-row">
                                     <div class="team-agent-card editing">
@@ -506,6 +507,33 @@
                 <button class="btn btn-small"
                         onclick="showWebhookList()">&#8592; Back</button>
                 <div id="webhook-history-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Agent to Board Modal -->
+    <div id="add-agent-board-modal" class="modal" style="display:none">
+        <div class="modal-content modal-content-wide">
+            <h3>Add Agent to Board</h3>
+            <p class="add-agent-board-subtitle" id="add-agent-board-subtitle"></p>
+            <input type="hidden" id="add-agent-board-name">
+            <input type="hidden" id="add-agent-board-workdir">
+            <div id="add-agent-board-presets" class="agent-preset-selector" style="margin-bottom:16px"></div>
+            <label>Name / Role:
+                <input type="text" id="add-agent-board-agent-name" placeholder="e.g. Security Reviewer">
+            </label>
+            <label>Behavior Prompt:
+                <textarea id="add-agent-board-prompt" rows="5" placeholder="Describe the agent's role and behavior..."></textarea>
+            </label>
+            <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" id="add-agent-board-flags" placeholder="e.g. --verbose">
+            </label>
+            <div class="flag-shortcuts">
+                <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('add-agent-board-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideAddAgentBoardModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="launchAgentToBoard()">Launch</button>
             </div>
         </div>
     </div>

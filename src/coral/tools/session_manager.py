@@ -23,8 +23,8 @@ ANSI_RE = re.compile(
     r")"
 )
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-STATUS_RE = re.compile(r"^.*?\|\|PULSE:STATUS (.*?)\|\|", re.MULTILINE)
-SUMMARY_RE = re.compile(r"^.*?\|\|PULSE:SUMMARY (.*?)\|\|", re.MULTILINE)
+STATUS_RE = re.compile(r"\|\|PULSE:STATUS (.*?)\|\|")
+SUMMARY_RE = re.compile(r"\|\|PULSE:SUMMARY (.*?)\|\|")
 
 # Regex to parse new-format tmux session names: {agent_type}-{uuid}
 _UUID_RE = re.compile(
@@ -296,71 +296,48 @@ def get_log_status(log_path: str | Path) -> dict[str, Any]:
             cached_result["staleness_seconds"] = result["staleness_seconds"]
             return cached_result
 
+        # Read the last ~1000 lines (≈256KB) from the tail of the file
+        _TAIL_BYTES = 256_000
         with open(log_path, "rb") as f:
             f.seek(0, 2)
             file_size = f.tell()
-            pos = file_size
-            lines = []
-            leftover = b""
-            chunk_size = 4096
+            start = max(0, file_size - _TAIL_BYTES)
+            f.seek(start)
+            raw = f.read()
 
-            max_chunks = 1000  # Up to ~4MB backwards
-            chunks_read = 0
+        raw_lines = raw.split(b"\n")
+        if start > 0:
+            raw_lines = raw_lines[1:]  # drop partial first line
 
-            while pos > 0 and (len(lines) < 20 or result["status"] is None or result["summary"] is None):
-                if chunks_read >= max_chunks:
-                    break
+        # Decode, strip ANSI, rejoin split PULSE tags
+        clean_lines = []
+        for raw_line in raw_lines:
+            try:
+                clean_lines.append(strip_ansi(raw_line.decode("utf-8", errors="replace")))
+            except Exception:
+                clean_lines.append("")
+        clean_lines = _rejoin_pulse_lines(clean_lines)
 
-                read_size = min(chunk_size, pos)
-                pos -= read_size
-                f.seek(pos)
-                chunk = f.read(read_size) + leftover
+        # Walk backwards to find latest status and summary
+        lines = []
+        for clean_line in reversed(clean_lines):
+            if result["status"] is not None and result["summary"] is not None and len(lines) >= 20:
+                break
 
-                parts = chunk.split(b"\n")
-                if pos > 0:
-                    leftover = parts.pop(0)
+            if result["status"] is None:
+                status_matches = STATUS_RE.findall(clean_line)
+                if status_matches:
+                    result["status"] = clean_match(status_matches[-1])
 
-                # Decode, strip ANSI, and rejoin split PULSE tags
-                clean_parts = []
-                for p in parts:
-                    try:
-                        clean_parts.append(strip_ansi(p.decode("utf-8", errors="replace")))
-                    except Exception:
-                        clean_parts.append("")
-                clean_parts = _rejoin_pulse_lines(clean_parts)
-
-                for clean_line in reversed(clean_parts):
-                    need_status = result["status"] is None
-                    need_summary = result["summary"] is None
-                    need_lines = len(lines) < 20
-
-                    if not (need_status or need_summary or need_lines):
-                        break
-
-                    if need_status:
-                        status_matches = STATUS_RE.findall(clean_line)
-                        if status_matches:
-                            result["status"] = clean_match(status_matches[-1])
-
-                    if need_summary:
-                        summary_matches = SUMMARY_RE.findall(clean_line)
-                        if summary_matches:
-                            result["summary"] = clean_match(summary_matches[-1])
-
-                    if need_lines:
-                        lines.insert(0, clean_line)
-
-                chunks_read += 1
-
-            # Fallback for summary: if not found in the tail, it might be at the very top
             if result["summary"] is None:
-                f.seek(0)
-                head_chunk = f.read(16384).decode("utf-8", errors="replace")
-                head_matches = SUMMARY_RE.findall(strip_ansi(head_chunk))
-                if head_matches:
-                    result["summary"] = clean_match(head_matches[-1])
+                summary_matches = SUMMARY_RE.findall(clean_line)
+                if summary_matches:
+                    result["summary"] = clean_match(summary_matches[-1])
 
-            result["recent_lines"] = lines
+            if len(lines) < 20:
+                lines.insert(0, clean_line)
+
+        result["recent_lines"] = lines
 
         # Update cache
         _log_status_cache[cache_key] = (mtime, fsize, result)

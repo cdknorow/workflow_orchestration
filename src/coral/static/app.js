@@ -10,7 +10,7 @@ import { sendCommand, sendRawKeys, sendModeToggle, sendQuickCommand, executeMacr
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
 import { toggleGroupCollapse, killGroup, killSessionDirect, showInfoDirect, attachDirect, restartDirect } from './render.js';
 import { syncPaneWidth, refreshCapture } from './capture.js';
-import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag } from './modals.js';
+import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag, showAddAgentToBoard, hideAddAgentBoardModal, launchAgentToBoard } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
 import { initSidebarResize, initCommandPaneResize, initTaskBarResize, initSidebarCollapse, switchJobsSubtab, initAgenticPanelCollapse, initAgenticBlockResize, initAgenticBlockCollapse } from './sidebar.js';
 import { fitTerminal } from './xterm_renderer.js';
@@ -167,6 +167,9 @@ window.toggleSidebarKebab = toggleSidebarKebab;
 window.closeSidebarKebabs = closeSidebarKebabs;
 window.toggleGroupCollapse = toggleGroupCollapse;
 window.killGroup = killGroup;
+window.showAddAgentToBoard = showAddAgentToBoard;
+window.hideAddAgentBoardModal = hideAddAgentBoardModal;
+window.launchAgentToBoard = launchAgentToBoard;
 window.killSessionDirect = killSessionDirect;
 window.showInfoDirect = showInfoDirect;
 window.attachDirect = attachDirect;

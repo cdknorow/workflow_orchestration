@@ -338,9 +338,15 @@ export function renderLiveSessions(sessions) {
                 const boardCollapsed = _isGroupCollapsed(boardName);
                 const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
                 const boardLink = `<button class="group-board-link" onclick="event.stopPropagation(); selectBoardProject('${escapeHtml(boardName)}')" title="View board: ${escapeHtml(boardName)}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H5l-3 3V3z"/></svg></button>`;
+                const boardWorkDir = boardSessions[0]?.working_directory || '';
                 const bKebab = `<div class="sidebar-kebab-wrapper group-kebab">
                     <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
                     <div class="sidebar-kebab-menu" style="display:none">
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showAddAgentToBoard('${escapeAttr(boardName)}', '${escapeAttr(boardWorkDir)}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+                            Add Agent
+                        </button>
+                        <hr class="overflow-menu-divider">
                         <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('${escapeHtml(groupName)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
                             Kill All

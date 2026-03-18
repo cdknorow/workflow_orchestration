@@ -1341,6 +1341,49 @@
     margin: 4px 8px;
 }
 
+.agent-preset-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 0 12px 0;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 12px;
+}
+
+.agent-preset-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 14px;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.agent-preset-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.agent-preset-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.agent-preset-custom {
+    font-style: italic;
+}
+
+.add-agent-board-subtitle {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: -8px 0 12px 0;
+}
+
 .launch-back-btn {
     background: none;
     border: none;

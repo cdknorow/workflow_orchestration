@@ -255,6 +255,16 @@ async def get_pane_capture(name: str, agent_type: str | None = None, session_id:
     return {"name": name, "capture": text}
 
 
+@router.get("/api/sessions/live/{name}/poll")
+async def poll_session(name: str, agent_type: str | None = None, session_id: str | None = None):
+    """Batch endpoint returning capture, tasks, and events in one call."""
+    text = await capture_pane(name, agent_type=agent_type, session_id=session_id)
+    capture = {"name": name, "capture": text} if text else {"error": f"Could not capture pane for '{name}'"}
+    tasks = await store.list_agent_tasks(name, session_id=session_id) if session_id else []
+    events = await store.list_agent_events(name, 50, session_id=session_id)
+    return {"capture": capture, "tasks": tasks, "events": events}
+
+
 @router.get("/api/sessions/live/{name}/chat")
 async def get_live_chat(
     name: str,

@@ -9,7 +9,7 @@ from coral.tools.session_manager import strip_ansi, clean_match
 
 # Only match known PULSE event types to avoid matching protocol documentation examples
 KNOWN_PULSE_TYPES = ("STATUS", "SUMMARY", "CONFIDENCE")
-PULSE_EVENT_RE = re.compile(r"^.*?\|\|PULSE:(" + "|".join(KNOWN_PULSE_TYPES) + r")\s+(.*?)\|\|", re.MULTILINE | re.DOTALL)
+PULSE_EVENT_RE = re.compile(r"\|\|PULSE:(" + "|".join(KNOWN_PULSE_TYPES) + r")\s+(.*?)\|\|", re.DOTALL)
 
 # Track file positions to avoid re-scanning the same content
 _file_positions: dict[str, int] = {}
@@ -34,7 +34,10 @@ async def scan_log_for_pulse_events(
     except OSError:
         return
 
-    last_pos = _file_positions.get(log_path, 0)
+    last_pos = _file_positions.get(log_path)
+    if last_pos is None:
+        # First scan: only read the last 256KB to avoid processing huge backlogs
+        last_pos = max(0, file_size - 256_000)
     if file_size <= last_pos:
         if file_size < last_pos:
             # File was truncated (e.g. restart), reset
