@@ -337,28 +337,42 @@
         display: none !important;
     }
 
-    /* Goal: show text but hide action buttons */
+    /* Goal: show text but hide action buttons, compact font */
     .session-title #session-summary .goal-action-btn {
         display: none !important;
     }
 
-    /* Compact title: wrap goal below name row */
-    .session-title {
-        margin-bottom: 0 !important;
-        gap: 4px !important;
-        flex-wrap: wrap;
+    .session-title #session-summary .goal-label {
+        font-size: 12px;
     }
 
-    /* Goal spans full width on its own line */
+    .session-title #session-summary .summary-text {
+        font-size: 12px;
+    }
+
+    /* Compact title: everything on one line, goal truncates */
+    .session-title {
+        margin-bottom: 0 !important;
+        gap: 6px !important;
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+
+    /* Goal fills remaining space and truncates */
     .session-title #session-summary {
-        width: 100%;
-        order: 10;
-        margin: 0;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
     }
 
     /* Hide the separate Attach and Restart buttons, keep only the overflow menu */
     .session-title-actions .btn-icon-label {
         display: none !important;
+    }
+
+    .session-title-actions {
+        flex-shrink: 0;
     }
 
     /* Show Attach/Restart inside the overflow menu on mobile */
@@ -405,16 +419,13 @@
     }
 
     /* Goal/summary: single truncated line on mobile */
-    .summary-line.summary-inline {
-        max-width: 100%;
-        overflow: hidden;
-    }
-
     .summary-line .summary-text {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: calc(100vw - 120px);
+        display: inline-block;
+        max-width: calc(100% - 40px);
+        vertical-align: middle;
     }
 
     /* Scheduler view mobile */
