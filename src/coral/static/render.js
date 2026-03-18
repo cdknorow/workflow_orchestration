@@ -5,6 +5,7 @@ import { escapeHtml, showToast, escapeAttr } from './utils.js';
 import { renderSidebarTagDots } from './tags.js';
 import { getFolderTags, renderFolderTagPills } from './folder_tags.js';
 import { updateSectionVisibility } from './sidebar.js';
+import { syncMobileAgentList } from './mobile.js';
 
 function formatShortTime(isoStr) {
     const d = new Date(isoStr);
@@ -384,6 +385,9 @@ export function renderLiveSessions(sessions) {
 
     // Attach drag-and-drop listeners for reordering
     _attachDragListeners(list);
+
+    // Sync mobile agent list
+    syncMobileAgentList();
 }
 
 function _attachDragListeners(list) {

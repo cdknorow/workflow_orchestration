@@ -34,6 +34,7 @@ import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
 import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js';
 import { initMessageBoard, selectBoardProject, showMessageBoardProjects, postBoardMessage, deleteMessageBoardProject, toggleBoardPause, deleteBoardMessage } from './message_board.js';
 import { loadAllFolderTags, showFolderTagDropdown, hideFolderTagDropdown, addFolderTag, removeFolderTag, createAndAddFolderTag } from './folder_tags.js';
+import { initMobile, syncMobileAgentList } from './mobile.js';
 
 import { checkForUpdates, dismissUpdateToast } from './update_check.js';
 
@@ -301,6 +302,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initScheduler();
     initLiveJobs();
     initMessageBoard();
+    initMobile();
 
     // ── Filter event wiring ─────────────────────────────────────────────
 

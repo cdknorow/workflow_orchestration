@@ -1,0 +1,305 @@
+/* ============================================================
+   Mobile — Responsive styles for tablet and mobile viewports
+   ============================================================ */
+
+/* ── Mobile Bottom Tab Bar ────────────────────────────────── */
+
+.mobile-tab-bar {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+    padding: 0;
+    justify-content: space-around;
+    align-items: center;
+}
+
+.mobile-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex: 1;
+    font-size: 10px;
+    font-family: inherit;
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.5;
+}
+
+.mobile-tab.active {
+    color: var(--accent);
+}
+
+.mobile-tab:active {
+    color: var(--accent);
+}
+
+/* Badge on mobile tab */
+.mobile-tab-badge {
+    position: absolute;
+    top: 4px;
+    right: calc(50% - 16px);
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    padding: 0 3px;
+}
+
+/* ── Mobile Agent List (full screen) ──────────────────────── */
+
+.mobile-agent-list {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.mobile-agent-list .session-list {
+    padding-bottom: 60px; /* space for bottom tab bar */
+}
+
+/* ── Mobile Back Button ───────────────────────────────────── */
+
+.mobile-back-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 6px;
+    font-size: 18px;
+    line-height: 1;
+    margin-right: 4px;
+}
+
+/* ── Tablet: ≤ 1023px ─────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+    /* Hide agentic state panel on tablet */
+    .agentic-state-panel,
+    .task-bar-resize-handle {
+        display: none !important;
+    }
+
+    /* Sidebar narrower */
+    .sidebar {
+        width: 220px;
+        min-width: 120px;
+    }
+}
+
+/* ── Mobile: ≤ 767px ──────────────────────────────────────── */
+
+@media (max-width: 767px) {
+    /* Show bottom tab bar */
+    .mobile-tab-bar {
+        display: flex;
+    }
+
+    /* Hide desktop elements */
+    .sidebar,
+    .sidebar-resize-handle {
+        display: none !important;
+    }
+
+    .top-bar {
+        padding: 8px 12px;
+    }
+
+    .top-bar h1 {
+        font-size: 14px;
+    }
+
+    /* Adjust layout for bottom bar */
+    .layout {
+        height: calc(100vh - 49px - 56px); /* subtract top bar + bottom tab bar */
+    }
+
+    .main-content {
+        width: 100%;
+    }
+
+    /* Show mobile agent list view */
+    .mobile-agent-list {
+        display: flex;
+    }
+
+    /* Show mobile back button in session header */
+    .mobile-back-btn {
+        display: inline-flex;
+    }
+
+    /* Live session view adjustments */
+    .live-body {
+        flex-direction: column !important;
+    }
+
+    .agentic-state-panel,
+    .task-bar-resize-handle {
+        display: none !important;
+    }
+
+    /* Command pane adjustments */
+    .command-pane {
+        max-height: 40vh !important;
+        height: auto !important;
+        min-height: 60px !important;
+    }
+
+    .command-pane-resize-handle {
+        display: none !important;
+    }
+
+    /* Session header compact */
+    .session-header {
+        padding: 8px 12px !important;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .session-header h2 {
+        font-size: 14px !important;
+    }
+
+    /* Message board adjustments */
+    #mb-subscribers-panel {
+        display: none !important;
+    }
+
+    #mb-board {
+        padding-bottom: 0 !important;
+    }
+
+    /* Hide resize handles */
+    .sidebar-resize-handle,
+    .command-pane-resize-handle,
+    .task-bar-resize-handle,
+    .agentic-block-resize-handle {
+        display: none !important;
+    }
+
+    /* Welcome screen compact */
+    .welcome h2 {
+        font-size: 16px;
+    }
+
+    .welcome p {
+        font-size: 12px;
+    }
+
+    .welcome-actions {
+        gap: 8px;
+    }
+
+    .welcome-action-card {
+        width: 90px;
+        height: 80px;
+        padding: 12px;
+        font-size: 11px;
+    }
+
+    .welcome-action-card .material-icons {
+        font-size: 22px;
+    }
+
+    /* History tabs scrollable */
+    .history-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap !important;
+    }
+
+    /* Modal adjustments */
+    .modal-content,
+    .modal-content-wide,
+    .modal-content-extra-wide {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    /* Team columns stack vertically on mobile */
+    .team-columns {
+        flex-direction: column !important;
+    }
+
+    .team-col-left,
+    .team-col-right {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    /* Toolbar wrapping */
+    .command-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .command-toolbar .btn-label {
+        display: none;
+    }
+
+    /* Output container full width */
+    .output-container {
+        min-height: 200px;
+    }
+
+    /* Waiting banner compact */
+    .waiting-banner {
+        font-size: 12px !important;
+        padding: 8px 12px !important;
+    }
+
+    /* View body for message board */
+    .view-body {
+        flex-direction: column !important;
+    }
+}
+
+/* ── Touch-friendly adjustments ───────────────────────────── */
+
+@media (hover: none) and (pointer: coarse) {
+    /* Larger touch targets */
+    .session-list li {
+        min-height: 52px;
+    }
+
+    /* Always show kebab buttons (no hover on touch) */
+    .sidebar-kebab-btn {
+        opacity: 0.5 !important;
+    }
+
+    .mb-delete-msg-btn {
+        opacity: 0.4 !important;
+    }
+
+    /* Larger buttons */
+    .btn-small {
+        min-height: 36px;
+        padding: 6px 14px;
+    }
+}
