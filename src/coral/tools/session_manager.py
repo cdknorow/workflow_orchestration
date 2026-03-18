@@ -124,8 +124,16 @@ def strip_ansi(text: str) -> str:
 
 
 def clean_match(text: str) -> str:
-    """Collapse whitespace runs into a single space and strip."""
-    return " ".join(text.split())
+    """Collapse whitespace runs into a single space and strip.
+
+    Returns empty string for template/instruction text that contains
+    angle-bracket placeholders (e.g. ``<your current goal>``).
+    """
+    cleaned = " ".join(text.split())
+    # Skip protocol instruction echoes like "Emit a ||PULSE:SUMMARY <your current goal>||"
+    if "<" in cleaned and ">" in cleaned:
+        return ""
+    return cleaned
 
 
 def _rejoin_pulse_lines(lines: list[str]) -> list[str]:
