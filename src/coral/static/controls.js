@@ -157,7 +157,7 @@ export function renderQuickActions() {
     const macros = getMacros();
 
     const modeButtons = `
-        <button class="btn-nav btn-mode" onclick="sendModeToggle('plan')" data-tooltip="Cycles between plan ↔ code mode. In plan mode Claude researches and plans without editing files. In code mode Claude can read, write, and execute."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><line x1="6" y1="5" x2="10" y2="5"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="11" x2="8" y2="11"/></svg><span class="btn-label">Mode</span></button>
+        <button class="btn-nav btn-mode" onclick="cycleModeToggle()" data-tooltip="Cycles through Default → Plan → Accept Edits modes (Shift+Tab). Each click advances one step."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><line x1="6" y1="5" x2="10" y2="5"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="11" x2="8" y2="11"/></svg><span class="btn-label">Mode</span></button>
         <button class="btn-nav btn-mode" onclick="sendQuickCommand('!')" data-tooltip="Prefixes your input with ! so Claude runs it as a shell command instead of a prompt."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><polyline points="4 7 6 9 4 11"/><line x1="8" y1="11" x2="12" y2="11"/></svg><span class="btn-label">Bash</span></button>
         <button class="btn-nav btn-mode" onclick="sendRawKeys(['Escape','Escape'])" data-tooltip="Sends two Escape keys to Claude. Interrupts the current response, rejects a pending tool call, or backs out of a permission prompt."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 8l8 5"/><line x1="4" y1="3" x2="4" y2="13"/></svg><span class="btn-label">Rewind</span></button>
     `;
@@ -214,7 +214,7 @@ const _KEY_TO_SEQ = {
     "PageDown": "\x1b[6~",
 };
 
-export async function sendRawKeys(keys) {
+export async function sendRawKeys(keys, { silent = false } = {}) {
     if (!state.currentSession || state.currentSession.type !== "live") {
         showToast("No live session selected", true);
         return;
@@ -226,7 +226,7 @@ export async function sendRawKeys(keys) {
     if (allMapped && xterm.sendTerminalInputWs) {
         const seq = keys.map(k => _KEY_TO_SEQ[k]).join("");
         if (xterm.sendTerminalInputWs(seq)) {
-            showToast(`Sent: ${keys.join(" + ")}`);
+            if (!silent) showToast(`Sent: ${keys.join(" + ")}`);
             return;
         }
     }
@@ -242,7 +242,7 @@ export async function sendRawKeys(keys) {
         if (result.error) {
             showToast(result.error, true);
         } else {
-            showToast(`Sent: ${keys.join(" + ")}`);
+            if (!silent) showToast(`Sent: ${keys.join(" + ")}`);
         }
     } catch (e) {
         showToast("Failed to send keys", true);
@@ -466,7 +466,7 @@ export function requestGoal(name, agentType, sessionId) {
 
 // Claude Code modes cycle via Shift+Tab (BTab in tmux).
 // Order: default -> plan -> auto-accept -> default
-const MODE_CYCLE = ["default", "plan", "auto"];
+const MODE_CYCLE = ["default", "auto", "plan"];
 
 function detectCurrentMode() {
     const el = document.getElementById("pane-capture");
@@ -490,6 +490,16 @@ export function sendModeToggle(targetMode) {
 
     const keys = Array(presses).fill("BTab");
     sendRawKeys(keys);
+}
+
+const MODE_LABELS = { default: "Default", plan: "Plan", auto: "Accept Edits" };
+
+export function cycleModeToggle() {
+    const current = detectCurrentMode();
+    const currentIdx = MODE_CYCLE.indexOf(current);
+    const nextMode = MODE_CYCLE[(currentIdx + 1) % MODE_CYCLE.length];
+    showToast(`Switching to ${MODE_LABELS[nextMode]} mode`);
+    sendRawKeys(["BTab"], { silent: true });
 }
 
 export function sendQuickCommand(command) {
