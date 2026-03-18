@@ -215,24 +215,6 @@
                             <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('team-flags','--chrome')">--chrome</button>
                             <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('team-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
                         </div>
-                        <!-- Subgent Server (optional, collapsible) -->
-                        <div class="subgent-section">
-                            <button type="button" class="subgent-toggle-btn" onclick="window._toggleSubgentSection()">
-                                <svg class="subgent-chevron" id="subgent-chevron" width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg>
-                                Subgent Server <span style="color:var(--text-muted);font-weight:normal">(optional)</span>
-                            </button>
-                            <div id="subgent-fields" style="display:none">
-                                <label>Admin URL:
-                                    <input type="text" id="team-subgent-url" placeholder="http://subgent.io:8421">
-                                </label>
-                                <label>Admin Key:
-                                    <input type="password" id="team-subgent-key" placeholder="cb_live_..." autocomplete="off">
-                                </label>
-                                <label>Org ID:
-                                    <input type="text" id="team-subgent-org" placeholder="default" value="default">
-                                </label>
-                            </div>
-                        </div>
                     </div>
                     <div class="team-col-right">
                         <div class="team-agents-container">
@@ -320,8 +302,6 @@
                 <dd id="info-prompt" style="display:none"></dd>
                 <dt id="info-board-label" style="display:none">Message Board</dt>
                 <dd id="info-board" style="display:none"></dd>
-                <dt id="info-subgent-label" style="display:none">Board Server</dt>
-                <dd id="info-subgent" style="display:none"></dd>
             </dl>
             <div class="modal-actions">
                 <button class="btn" onclick="hideInfoModal()">Close</button>
