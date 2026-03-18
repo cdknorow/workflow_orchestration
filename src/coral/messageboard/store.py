@@ -197,7 +197,7 @@ class MessageBoardStore:
         return messages
 
     async def list_messages(
-        self, project: str, limit: int = 200
+        self, project: str, limit: int = 200, offset: int = 0
     ) -> list[dict[str, Any]]:
         """Return recent messages for a project (no cursor, no side effects)."""
         conn = await self._get_conn()
@@ -207,10 +207,19 @@ class MessageBoardStore:
                FROM board_messages m
                LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
                WHERE m.project = ?
-               ORDER BY m.id ASC LIMIT ?""",
-            (project, limit),
+               ORDER BY m.id ASC LIMIT ? OFFSET ?""",
+            (project, limit, offset),
         )
         return [dict(r) for r in rows]
+
+    async def count_messages(self, project: str) -> int:
+        """Return total message count for a project."""
+        conn = await self._get_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT COUNT(*) as cnt FROM board_messages WHERE project = ?",
+            (project,),
+        )
+        return rows[0]["cnt"] if rows else 0
 
     async def check_unread(self, project: str, session_id: str) -> int:
         """Return count of unread messages that mention this agent.

@@ -98,8 +98,10 @@ async def check_unread(project: str, session_id: str):
 
 
 @router.get("/{project}/messages/all")
-async def list_messages(project: str, limit: int = 200):
-    return await store.list_messages(project, limit)
+async def list_messages(project: str, limit: int = 200, offset: int = 0):
+    messages = await store.list_messages(project, limit, offset)
+    total = await store.count_messages(project)
+    return {"messages": messages, "total": total, "limit": limit, "offset": offset}
 
 
 @router.delete("/{project}/messages/{message_id}")

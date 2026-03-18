@@ -5,6 +5,10 @@ import { escapeHtml } from './utils.js';
 let currentProject = null;
 let pollTimer = null;
 let isPaused = false;
+const PAGE_SIZE = 50;
+let _allMessages = [];
+let _totalMessages = 0;
+let _loadedOffset = 0;
 
 // ── API helpers ──────────────────────────────────────────────────────────
 
@@ -13,10 +17,14 @@ async function fetchProjects() {
     return await resp.json();
 }
 
-async function fetchMessages(project) {
-    const resp = await fetch(`/api/board/${encodeURIComponent(project)}/messages/all?limit=500`);
+async function fetchMessages(project, limit = PAGE_SIZE, offset = 0) {
+    const resp = await fetch(`/api/board/${encodeURIComponent(project)}/messages/all?limit=${limit}&offset=${offset}`);
     const data = await resp.json();
-    return Array.isArray(data) ? data : [];
+    // Support both old format (array) and new format ({messages, total})
+    if (Array.isArray(data)) {
+        return { messages: data, total: data.length, offset: 0 };
+    }
+    return { messages: data.messages || [], total: data.total || 0, offset: data.offset || 0 };
 }
 
 async function fetchSubscribers(project) {
@@ -143,14 +151,43 @@ async function loadBoardProjectList() {
 
 // ── Messages ─────────────────────────────────────────────────────────────
 
-async function loadBoardMessages(project) {
+async function loadBoardMessages(project, loadAll = false) {
     try {
-        const messages = await fetchMessages(project);
-        renderMessages(messages);
+        if (loadAll) {
+            // Load everything (for polling refresh after initial load)
+            const result = await fetchMessages(project, 10000, 0);
+            _allMessages = result.messages;
+            _totalMessages = result.total;
+            _loadedOffset = 0;
+        } else {
+            // Load the latest page — calculate offset to get the last PAGE_SIZE messages
+            const countResult = await fetchMessages(project, 1, 0);
+            _totalMessages = countResult.total;
+            const startOffset = Math.max(0, _totalMessages - PAGE_SIZE);
+            const result = await fetchMessages(project, PAGE_SIZE, startOffset);
+            _allMessages = result.messages;
+            _loadedOffset = startOffset;
+        }
+        renderMessages(_allMessages);
     } catch (e) {
         console.error('Failed to load board messages:', e);
     }
 }
+
+async function loadEarlierMessages() {
+    if (!currentProject || _loadedOffset <= 0) return;
+    try {
+        const newOffset = Math.max(0, _loadedOffset - PAGE_SIZE);
+        const fetchCount = _loadedOffset - newOffset;
+        const result = await fetchMessages(currentProject, fetchCount, newOffset);
+        _allMessages = [...result.messages, ..._allMessages];
+        _loadedOffset = newOffset;
+        renderMessages(_allMessages);
+    } catch (e) {
+        console.error('Failed to load earlier messages:', e);
+    }
+}
+window.loadEarlierMessages = loadEarlierMessages;
 
 // Agent color palette for bubble accents
 const _agentColors = [
@@ -195,7 +232,23 @@ function renderMessages(messages) {
     const prevScrollTop = container.scrollTop;
     const wasAtBottom = (container.scrollHeight - prevScrollTop - container.clientHeight) < 50;
 
-    container.innerHTML = messages.map(m => {
+    // "Load Earlier" button if there are older messages
+    let loadEarlierHtml = '';
+    if (_loadedOffset > 0) {
+        const remaining = _loadedOffset;
+        loadEarlierHtml = `<div style="text-align:center;padding:8px 0 12px">
+            <button class="btn btn-small" onclick="loadEarlierMessages()" style="font-size:12px;color:var(--text-muted)">
+                Load ${Math.min(remaining, PAGE_SIZE)} earlier messages (${remaining} remaining)
+            </button>
+        </div>`;
+    }
+
+    // Message count indicator
+    const countHtml = `<div style="text-align:center;font-size:10px;color:var(--text-muted);padding:4px 0 8px">
+        Showing ${messages.length} of ${_totalMessages} messages
+    </div>`;
+
+    container.innerHTML = loadEarlierHtml + countHtml + messages.map(m => {
         const color = _getAgentColor(m.job_title || 'Unknown');
         return `
         <div class="mb-message" style="background:${color.bg};border:1px solid ${color.border};border-radius:10px;padding:10px 14px;margin-bottom:10px;position:relative">
@@ -279,8 +332,8 @@ export async function postBoardMessage() {
             return;
         }
         input.value = '';
-        // Re-fetch and render all messages so the new one appears immediately
-        await loadBoardMessages(currentProject);
+        // Fetch new messages since our last known total
+        await _pollNewMessages();
     } catch (e) {
         console.error('Failed to post message:', e);
     }
@@ -339,7 +392,10 @@ export async function deleteBoardMessage(messageId) {
             console.error('Delete message failed:', resp.status);
             return;
         }
-        await loadBoardMessages(currentProject);
+        // Remove locally and re-render
+        _allMessages = _allMessages.filter(m => m.id !== messageId);
+        _totalMessages = Math.max(0, _totalMessages - 1);
+        renderMessages(_allMessages);
     } catch (e) {
         console.error('Failed to delete message:', e);
     }
@@ -361,11 +417,30 @@ export async function deleteMessageBoardProject() {
 
 // ── Polling ──────────────────────────────────────────────────────────────
 
+async function _pollNewMessages() {
+    if (!currentProject || isPaused) return;
+    try {
+        // Fetch just the count to see if there are new messages
+        const result = await fetchMessages(currentProject, 1, 0);
+        const newTotal = result.total;
+        if (newTotal > _totalMessages) {
+            // Fetch only the new messages
+            const newCount = newTotal - _totalMessages;
+            const newResult = await fetchMessages(currentProject, newCount, _totalMessages);
+            _allMessages = [..._allMessages, ...newResult.messages];
+            _totalMessages = newTotal;
+            renderMessages(_allMessages);
+        }
+    } catch (e) {
+        // Silent fail on poll
+    }
+}
+
 function startBoardPoll() {
     stopBoardPoll();
     pollTimer = setInterval(() => {
         if (currentProject) {
-            loadBoardMessages(currentProject);
+            _pollNewMessages();
             loadBoardSubscribers(currentProject);
         }
     }, 5000);

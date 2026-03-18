@@ -250,7 +250,8 @@ def cmd_read(args: argparse.Namespace) -> None:
 
     if args.last:
         # Fetch enough messages and show only the last N (no cursor advancement)
-        messages = _api("GET", f"/{project}/messages/all?limit=200")
+        result = _api("GET", f"/{project}/messages/all?limit=200")
+        messages = result.get("messages", result) if isinstance(result, dict) else result
         if not messages:
             print("No messages on this board.")
             return
