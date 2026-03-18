@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 3.1.1 — 2026-03-18
+
+### Added
+- **System tray support** — `pip install agent-coral[tray]` installs the `coral-tray` macOS menu bar app with dashboard launch, update checker, and agent shutdown
+
+### Fixed
+- **Tray shutdown error** — Fixed `RuntimeError: Event loop is closed` on quit by joining the server thread before exit
+
 ## 3.1.0 — 2026-03-18
 
 ### Added
