@@ -266,6 +266,48 @@ export async function shareAgentTeam(boardName) {
     showToast(`Exported team "${boardName}" (${agents.length} agents)`);
 }
 
+export async function saveTeamFromSidebar(boardName) {
+    const boardSessions = (state.liveSessions || []).filter(s => s.board_project === boardName);
+    if (!boardSessions.length) {
+        showToast("No agents found on this board", "error");
+        return;
+    }
+
+    const templateName = window.prompt("Template name:", boardName);
+    if (!templateName) return;
+
+    // Fetch each agent's prompt from session info
+    const agents = [];
+    for (const s of boardSessions) {
+        let agentPrompt = "";
+        try {
+            const resp = await fetch(`/api/sessions/live/${encodeURIComponent(s.name)}/info?session_id=${encodeURIComponent(s.session_id || "")}`);
+            const info = await resp.json();
+            agentPrompt = info.prompt || "";
+        } catch { /* use empty prompt */ }
+        agents.push({
+            name: s.display_name || s.board_job_title || s.name,
+            prompt: agentPrompt,
+        });
+    }
+
+    // Save to user_settings via the settings API
+    let existing = [];
+    try {
+        existing = JSON.parse(state.settings.saved_team_templates || "[]");
+    } catch { /* ignore */ }
+    const idx = existing.findIndex(t => t.name === templateName);
+    const entry = { name: templateName, agents, flags: "" };
+    if (idx >= 0) existing[idx] = entry; else existing.push(entry);
+    state.settings.saved_team_templates = JSON.stringify(existing);
+    await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saved_team_templates: state.settings.saved_team_templates }),
+    });
+    showToast(`Saved template "${templateName}" (${agents.length} agents)`);
+}
+
 // Drag-and-drop state
 let _draggedSid = null;
 
@@ -412,6 +454,10 @@ export function renderLiveSessions(sessions) {
                         <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showAddAgentToBoard('${escapeAttr(boardName)}', '${escapeAttr(boardWorkDir)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
                             Add Agent
+                        </button>
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); saveTeamFromSidebar('${escapeAttr(boardName)}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h8l2 2v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M6 3v3h4V3"/><rect x="5" y="9" width="6" height="3"/></svg>
+                            Save as Template
                         </button>
                         <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); shareAgentTeam('${escapeAttr(boardName)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v1a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1"/><polyline points="8 3 8 10"/><polyline points="5 6 8 3 11 6"/></svg>
