@@ -758,6 +758,15 @@ function _onTeamBoardChange() {
 }
 window._onTeamBoardChange = _onTeamBoardChange;
 
+function _toggleSubgentSection() {
+    const fields = document.getElementById("subgent-fields");
+    const chevron = document.getElementById("subgent-chevron");
+    const isOpen = fields.style.display !== "none";
+    fields.style.display = isOpen ? "none" : "";
+    chevron.classList.toggle("open", !isOpen);
+}
+window._toggleSubgentSection = _toggleSubgentSection;
+
 async function launchTeam() {
     // Collect board name
     const boardSelect = document.getElementById("team-board-select");
@@ -809,6 +818,18 @@ async function launchTeam() {
         agents,
     };
     if (boardServer) payload.board_server = boardServer;
+
+    // Subgent server config (optional)
+    const subgentUrl = document.getElementById("team-subgent-url")?.value.trim();
+    const subgentKey = document.getElementById("team-subgent-key")?.value.trim();
+    const subgentOrg = document.getElementById("team-subgent-org")?.value.trim() || "default";
+    if (subgentUrl && subgentKey) {
+        payload.subgent = {
+            admin_url: subgentUrl,
+            admin_key: subgentKey,
+            org_id: subgentOrg,
+        };
+    }
 
     try {
         const resp = await fetch("/api/sessions/launch-team", {
@@ -897,6 +918,18 @@ export async function showInfoModal() {
         } else {
             boardLabel.style.display = "none";
             boardVal.style.display = "none";
+        }
+
+        // Subgent server status
+        const subgentLabel = document.getElementById("info-subgent-label");
+        const subgentVal = document.getElementById("info-subgent");
+        if (info.subgent_admin_url) {
+            subgentLabel.style.display = "";
+            subgentVal.style.display = "";
+            subgentVal.innerHTML = `<span class="info-subgent-badge">Subgent</span> ${escapeHtml(info.subgent_admin_url)}`;
+        } else {
+            subgentLabel.style.display = "none";
+            subgentVal.style.display = "none";
         }
 
         document.getElementById("info-modal").style.display = "flex";

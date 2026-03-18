@@ -1489,3 +1489,60 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ── Subgent Server Section ───────────────────────────────── */
+
+.subgent-section {
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+}
+
+.subgent-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+}
+
+.subgent-toggle-btn:hover {
+    color: var(--text-primary);
+}
+
+.subgent-chevron {
+    transition: transform 0.15s;
+}
+
+.subgent-chevron.open {
+    transform: rotate(90deg);
+}
+
+#subgent-fields {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#subgent-fields label {
+    font-size: 13px;
+}
+
+.info-subgent-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(31, 111, 235, 0.1);
+    color: var(--accent);
+}
