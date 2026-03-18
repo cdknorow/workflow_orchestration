@@ -198,18 +198,188 @@ function _onAgentBoardChange() {
 }
 window._onAgentBoardChange = _onAgentBoardChange;
 
-// ── Agent Preset Selector (single-agent modal) ───────────────────────────
+// ── Saved Personas & Team Templates ──────────────────────────────────────
 
-function _initAgentPresets() {
-    const container = document.getElementById("agent-preset-selector");
+function _getSavedPersonas() {
+    try { return JSON.parse(state.settings.saved_personas || "[]"); }
+    catch { return []; }
+}
+
+async function _setSavedPersonas(personas) {
+    state.settings.saved_personas = JSON.stringify(personas);
+    await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saved_personas: state.settings.saved_personas }),
+    });
+}
+
+function _getSavedTeamTemplates() {
+    try { return JSON.parse(state.settings.saved_team_templates || "[]"); }
+    catch { return []; }
+}
+
+async function _setSavedTeamTemplates(templates) {
+    state.settings.saved_team_templates = JSON.stringify(templates);
+    await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saved_team_templates: state.settings.saved_team_templates }),
+    });
+}
+
+/** Render preset buttons (built-in + saved) into a container. */
+function _renderPresetButtons(containerId, onClickFn, opts = {}) {
+    const container = document.getElementById(containerId);
     if (!container) return;
+    const saved = _getSavedPersonas();
 
     let html = '';
     for (const preset of AGENT_PRESETS) {
-        html += `<button class="agent-preset-btn" data-preset="${escapeAttr(preset.name)}" onclick="window._selectAgentPreset('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
+        html += `<button class="agent-preset-btn" data-preset="${escapeAttr(preset.name)}" onclick="${onClickFn}('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
     }
-    html += `<button class="agent-preset-btn agent-preset-custom" data-preset="" onclick="window._selectAgentPreset('')">Custom</button>`;
+    if (saved.length > 0) {
+        for (const p of saved) {
+            html += `<button class="agent-preset-btn agent-preset-saved" data-preset="${escapeAttr(p.name)}" onclick="${onClickFn}('${escapeAttr(p.name)}')">${escapeHtml(p.name)}<span class="agent-preset-delete" onclick="event.stopPropagation(); window._deletePersona('${escapeAttr(p.name)}')">×</span></button>`;
+        }
+    }
+    html += `<button class="agent-preset-btn agent-preset-custom" data-preset="" onclick="${onClickFn}('')">Custom</button>`;
     container.innerHTML = html;
+}
+
+/** Find a persona by name in built-in + saved lists. */
+function _findPersona(name) {
+    return AGENT_PRESETS.find(p => p.name === name) || _getSavedPersonas().find(p => p.name === name);
+}
+
+async function _saveCurrentPersona(nameInputId, promptInputId, flagsInputId) {
+    const name = document.getElementById(nameInputId).value.trim();
+    const prompt = document.getElementById(promptInputId).value.trim();
+    const flags = flagsInputId ? document.getElementById(flagsInputId).value.trim() : "";
+    if (!name) { showToast("Enter a name before saving", "error"); return; }
+    if (AGENT_PRESETS.find(p => p.name === name)) { showToast("Can't overwrite a built-in preset", "error"); return; }
+
+    const saved = _getSavedPersonas();
+    const idx = saved.findIndex(p => p.name === name);
+    const entry = { name, prompt, flags };
+    if (idx >= 0) saved[idx] = entry; else saved.push(entry);
+    await _setSavedPersonas(saved);
+    showToast(`Saved persona "${name}"`);
+
+    // Re-render all preset containers
+    _renderPresetButtons("agent-preset-selector", "window._selectAgentPreset");
+    _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
+}
+window._saveCurrentPersona = _saveCurrentPersona;
+
+async function _deletePersona(name) {
+    const saved = _getSavedPersonas().filter(p => p.name !== name);
+    await _setSavedPersonas(saved);
+    showToast(`Deleted persona "${name}"`);
+    _renderPresetButtons("agent-preset-selector", "window._selectAgentPreset");
+    _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
+}
+window._deletePersona = _deletePersona;
+
+// ── Export / Import (Personas & Team Templates) ──────────────────────────
+
+function _downloadJson(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function _openFilePicker() {
+    return new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.onchange = () => {
+            const file = input.files[0];
+            if (!file) { resolve(null); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                try { resolve(JSON.parse(reader.result)); }
+                catch { showToast("Invalid JSON file", "error"); resolve(null); }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    });
+}
+
+export function exportPersonas() {
+    const saved = _getSavedPersonas();
+    if (saved.length === 0) { showToast("No saved personas to export", "error"); return; }
+    _downloadJson({ version: 1, type: "coral-personas", personas: saved }, "coral-personas.json");
+    showToast(`Exported ${saved.length} persona(s)`);
+}
+
+export async function importPersonas() {
+    const data = await _openFilePicker();
+    if (!data) return;
+    const personas = data.personas || (Array.isArray(data) ? data : null);
+    if (!personas || !Array.isArray(personas)) { showToast("Invalid persona file format", "error"); return; }
+
+    const existing = _getSavedPersonas();
+    const existingNames = new Set(existing.map(p => p.name));
+    let added = 0;
+    for (const p of personas) {
+        if (!p.name) continue;
+        if (AGENT_PRESETS.find(bp => bp.name === p.name)) continue;
+        if (existingNames.has(p.name)) {
+            const idx = existing.findIndex(e => e.name === p.name);
+            existing[idx] = { name: p.name, prompt: p.prompt || "", flags: p.flags || "" };
+        } else {
+            existing.push({ name: p.name, prompt: p.prompt || "", flags: p.flags || "" });
+        }
+        added++;
+    }
+    await _setSavedPersonas(existing);
+    showToast(`Imported ${added} persona(s)`);
+    _renderPresetButtons("agent-preset-selector", "window._selectAgentPreset");
+    _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
+}
+
+export function exportTeamTemplates() {
+    const templates = _getSavedTeamTemplates();
+    if (templates.length === 0) { showToast("No saved templates to export", "error"); return; }
+    _downloadJson({ version: 1, type: "coral-team-templates", templates }, "coral-team-templates.json");
+    showToast(`Exported ${templates.length} template(s)`);
+}
+
+export async function importTeamTemplates() {
+    const data = await _openFilePicker();
+    if (!data) return;
+    const templates = data.templates || (Array.isArray(data) ? data : null);
+    if (!templates || !Array.isArray(templates)) { showToast("Invalid template file format", "error"); return; }
+
+    const existing = _getSavedTeamTemplates();
+    const existingNames = new Set(existing.map(t => t.name));
+    let added = 0;
+    for (const t of templates) {
+        if (!t.name || !Array.isArray(t.agents)) continue;
+        if (existingNames.has(t.name)) {
+            const idx = existing.findIndex(e => e.name === t.name);
+            existing[idx] = t;
+        } else {
+            existing.push(t);
+        }
+        added++;
+    }
+    await _setSavedTeamTemplates(existing);
+    showToast(`Imported ${added} template(s)`);
+    _renderTeamTemplateSelector();
+}
+
+// ── Agent Preset Selector (single-agent modal) ───────────────────────────
+
+function _initAgentPresets() {
+    _renderPresetButtons("agent-preset-selector", "window._selectAgentPreset");
 }
 
 function _selectAgentPreset(name) {
@@ -217,17 +387,16 @@ function _selectAgentPreset(name) {
     const promptInput = document.getElementById("launch-agent-prompt");
 
     if (name) {
-        const preset = AGENT_PRESETS.find(p => p.name === name);
-        if (preset) {
-            nameInput.value = preset.name;
-            promptInput.value = preset.prompt;
+        const persona = _findPersona(name);
+        if (persona) {
+            nameInput.value = persona.name;
+            promptInput.value = persona.prompt;
         }
     } else {
         nameInput.value = "";
         promptInput.value = "";
     }
 
-    // Update active state on buttons
     document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.preset === name);
     });
@@ -247,14 +416,7 @@ export function showAddAgentToBoard(boardName, workDir) {
     document.getElementById("add-agent-board-prompt").value = "";
     document.getElementById("add-agent-board-flags").value = "";
 
-    // Build preset buttons
-    const container = document.getElementById("add-agent-board-presets");
-    let html = '';
-    for (const preset of AGENT_PRESETS) {
-        html += `<button class="agent-preset-btn" data-preset="${escapeAttr(preset.name)}" onclick="window._selectBoardAgentPreset('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
-    }
-    html += `<button class="agent-preset-btn agent-preset-custom" data-preset="" onclick="window._selectBoardAgentPreset('')">Custom</button>`;
-    container.innerHTML = html;
+    _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
 
     modal.style.display = "flex";
 }
@@ -268,10 +430,10 @@ function _selectBoardAgentPreset(name) {
     const promptInput = document.getElementById("add-agent-board-prompt");
 
     if (name) {
-        const preset = AGENT_PRESETS.find(p => p.name === name);
-        if (preset) {
-            nameInput.value = preset.name;
-            promptInput.value = preset.prompt;
+        const persona = _findPersona(name);
+        if (persona) {
+            nameInput.value = persona.name;
+            promptInput.value = persona.prompt;
         }
     } else {
         nameInput.value = "";
@@ -401,6 +563,9 @@ async function _initTeamForm() {
     // Show new board name input
     document.getElementById("team-new-board-row").style.display = "";
 
+    // Render team template selector
+    _renderTeamTemplateSelector();
+
     // Add three default agents
     for (const preset of DEFAULT_TEAM_PRESETS) {
         _addTeamAgent(preset.name, preset.prompt);
@@ -408,6 +573,79 @@ async function _initTeamForm() {
 
     document.getElementById("team-board-name").focus();
 }
+
+function _renderTeamTemplateSelector() {
+    const container = document.getElementById("team-template-selector");
+    if (!container) return;
+    const templates = _getSavedTeamTemplates();
+    if (templates.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '<div class="team-template-row">';
+    html += '<span class="team-template-label">Templates:</span>';
+    for (const t of templates) {
+        html += `<button class="agent-preset-btn agent-preset-saved" onclick="window._loadTeamTemplate('${escapeAttr(t.name)}')">${escapeHtml(t.name)} <span class="team-template-count">${t.agents.length}</span><span class="agent-preset-delete" onclick="event.stopPropagation(); window._deleteTeamTemplate('${escapeAttr(t.name)}')">×</span></button>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function _loadTeamTemplate(name) {
+    const templates = _getSavedTeamTemplates();
+    const tmpl = templates.find(t => t.name === name);
+    if (!tmpl) return;
+
+    // Clear current agents and load from template
+    _teamAgentCounter = 0;
+    document.getElementById("team-agents-list").innerHTML = "";
+
+    for (const agent of tmpl.agents) {
+        _addTeamAgent(agent.name, agent.prompt);
+    }
+    if (tmpl.flags) {
+        document.getElementById("team-flags").value = tmpl.flags;
+        _syncFlagButtons("team-flags");
+    }
+    showToast(`Loaded template "${name}"`);
+}
+window._loadTeamTemplate = _loadTeamTemplate;
+
+async function _saveTeamTemplate() {
+    // Collect current agents
+    const rows = document.querySelectorAll("#team-agents-list .team-agent-row");
+    if (rows.length === 0) { showToast("Add agents before saving", "error"); return; }
+
+    const agents = [];
+    for (const row of rows) {
+        const name = row.querySelector(".team-agent-name").value.trim();
+        const prompt = row.querySelector(".team-agent-prompt").value.trim();
+        if (name) agents.push({ name, prompt });
+    }
+    if (agents.length === 0) { showToast("At least one agent needs a name", "error"); return; }
+
+    const templateName = prompt("Template name:");
+    if (!templateName) return;
+
+    const flags = document.getElementById("team-flags").value.trim();
+    const templates = _getSavedTeamTemplates();
+    const idx = templates.findIndex(t => t.name === templateName);
+    const entry = { name: templateName, agents, flags };
+    if (idx >= 0) templates[idx] = entry; else templates.push(entry);
+    await _setSavedTeamTemplates(templates);
+    showToast(`Saved template "${templateName}"`);
+    _renderTeamTemplateSelector();
+}
+window._saveTeamTemplate = _saveTeamTemplate;
+
+async function _deleteTeamTemplate(name) {
+    const templates = _getSavedTeamTemplates().filter(t => t.name !== name);
+    await _setSavedTeamTemplates(templates);
+    showToast(`Deleted template "${name}"`);
+    _renderTeamTemplateSelector();
+}
+window._deleteTeamTemplate = _deleteTeamTemplate;
 
 function _truncatePrompt(text, maxLen) {
     if (!text || text.length <= maxLen) return text || "";
@@ -1052,6 +1290,8 @@ document.addEventListener("click", (e) => {
     }
     const webhookModal = document.getElementById("webhook-modal");
     if (e.target === webhookModal) window.hideWebhookModal?.();
+    const confirmModal = document.getElementById("confirm-modal");
+    if (e.target === confirmModal) window.hideConfirmModal?.();
 });
 
 // Close modals on Escape

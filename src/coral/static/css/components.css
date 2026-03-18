@@ -305,7 +305,8 @@
 }
 
 .modal-content input,
-.modal-content select {
+.modal-content select,
+.modal-content textarea {
     display: block;
     width: 100%;
     margin-top: 4px;
@@ -315,11 +316,13 @@
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 13px;
+    font-family: var(--font-sans);
     outline: none;
 }
 
 .modal-content input:focus,
-.modal-content select:focus {
+.modal-content select:focus,
+.modal-content textarea:focus {
     border-color: var(--accent);
 }
 
@@ -1376,6 +1379,86 @@
 
 .agent-preset-custom {
     font-style: italic;
+}
+
+.agent-preset-saved {
+    background: transparent;
+    border-style: dashed;
+}
+
+.agent-preset-saved.active {
+    background: var(--accent);
+    border-style: solid;
+}
+
+.agent-preset-delete {
+    margin-left: 4px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.agent-preset-btn:hover .agent-preset-delete {
+    opacity: 0.7;
+}
+
+.agent-preset-delete:hover {
+    opacity: 1 !important;
+    color: var(--error);
+}
+
+.btn-save-persona {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+    font-size: 12px;
+}
+
+.btn-save-persona:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.team-template-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0 0 10px 0;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 10px;
+}
+
+.team-template-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-right: 4px;
+}
+
+.team-template-count {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 4px;
+}
+
+.import-export-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.btn-subtle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 3px 10px;
+}
+
+.btn-subtle:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
 }
 
 .add-agent-board-subtitle {

@@ -106,6 +106,10 @@
                                 <p class="team-agents-desc">Choose a preset role or configure a custom agent.</p>
                             </div>
                             <div id="agent-preset-selector" class="agent-preset-selector"></div>
+                            <div class="import-export-row">
+                                <button class="btn btn-small btn-subtle" onclick="exportPersonas()" title="Export saved personas">Export</button>
+                                <button class="btn btn-small btn-subtle" onclick="importPersonas()" title="Import personas from file">Import</button>
+                            </div>
                             <div class="team-agents-scroll">
                                 <div class="team-agent-row">
                                     <div class="team-agent-card editing">
@@ -125,6 +129,7 @@
                 </div>
                 <div class="modal-actions">
                     <button class="btn" onclick="hideLaunchModal()">Cancel</button>
+                    <button class="btn btn-save-persona" onclick="window._saveCurrentPersona('launch-agent-name','launch-agent-prompt','launch-flags')" title="Save as reusable persona">Save Persona</button>
                     <button class="btn btn-primary" onclick="launchSession()">Launch</button>
                 </div>
             </div>
@@ -217,6 +222,10 @@
                                 <strong style="font-size:14px">Team Agents</strong>
                                 <p class="team-agents-desc">These agents will launch together on the shared message board, each in its own session.</p>
                             </div>
+                            <div id="team-template-selector"></div>
+                            <div class="import-export-row">
+                                <button class="btn btn-small btn-subtle" onclick="importTeamTemplates()" title="Import team templates from file">Import</button>
+                            </div>
                             <div id="team-agents-list" class="team-agents-scroll"></div>
                             <div class="team-agents-footer" style="position:relative">
                                 <button class="btn btn-small btn-primary team-add-agent-btn" onclick="window._showAddAgentPicker()">+ Add Agent</button>
@@ -227,8 +236,21 @@
                 </div>
                 <div class="modal-actions">
                     <button class="btn" onclick="hideLaunchModal()">Cancel</button>
+                    <button class="btn btn-save-persona" onclick="window._saveTeamTemplate()" title="Save team configuration as reusable template">Save Template</button>
                     <button class="btn btn-primary" onclick="window.launchTeam()">Launch Team</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal (reusable) -->
+    <div id="confirm-modal" class="modal" style="display:none">
+        <div class="modal-content" style="width:420px">
+            <h3 id="confirm-modal-title">Are you sure?</h3>
+            <p id="confirm-modal-message" style="color:var(--text-secondary);font-size:13px;margin:8px 0 16px"></p>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideConfirmModal()">Cancel</button>
+                <button id="confirm-modal-yes" class="btn btn-danger">Yes</button>
             </div>
         </div>
     </div>
@@ -533,6 +555,7 @@
             </div>
             <div class="modal-actions">
                 <button class="btn" onclick="hideAddAgentBoardModal()">Cancel</button>
+                <button class="btn btn-save-persona" onclick="window._saveCurrentPersona('add-agent-board-agent-name','add-agent-board-prompt','add-agent-board-flags')" title="Save as reusable persona">Save Persona</button>
                 <button class="btn btn-primary" onclick="launchAgentToBoard()">Launch</button>
             </div>
         </div>

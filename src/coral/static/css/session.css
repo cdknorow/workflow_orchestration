@@ -182,6 +182,19 @@
     margin-top: 3px;
 }
 
+.generate-goal-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 11px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.generate-goal-link:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
 /* ── Sidebar Kebab Menu ───────────────────────────────────── */
 
 .sidebar-kebab-wrapper {

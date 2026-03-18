@@ -178,26 +178,92 @@ export async function restartDirect(name, agentType, sessionId) {
     restartSession();
 }
 
+// ── Confirm Modal ────────────────────────────────────────────────────
+
+export function showConfirmModal(title, message, onConfirm) {
+    document.getElementById("confirm-modal-title").textContent = title;
+    document.getElementById("confirm-modal-message").textContent = message;
+    const yesBtn = document.getElementById("confirm-modal-yes");
+    const newBtn = yesBtn.cloneNode(true);
+    yesBtn.parentNode.replaceChild(newBtn, yesBtn);
+    newBtn.addEventListener("click", () => {
+        hideConfirmModal();
+        onConfirm();
+    });
+    document.getElementById("confirm-modal").style.display = "flex";
+}
+
+export function hideConfirmModal() {
+    document.getElementById("confirm-modal").style.display = "none";
+}
+
 export async function killGroup(groupName) {
     const groupSessions = state.liveSessions.filter(s => (s.name || 'unknown') === groupName);
     if (!groupSessions.length) return;
-    if (!confirm(`Kill all ${groupSessions.length} agent(s) in "${groupName}"? This will terminate them.`)) return;
 
-    for (const s of groupSessions) {
-        try {
-            await fetch(`/api/sessions/live/${encodeURIComponent(s.name)}/kill`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ agent_type: s.agent_type, session_id: s.session_id }),
-            });
-        } catch (e) {
-            console.error(`Failed to kill ${s.name}:`, e);
+    showConfirmModal(
+        "Kill All Agents",
+        `Kill all ${groupSessions.length} agent(s) in "${groupName}"? This will terminate them.`,
+        async () => {
+            for (const s of groupSessions) {
+                try {
+                    await fetch(`/api/sessions/live/${encodeURIComponent(s.name)}/kill`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ agent_type: s.agent_type, session_id: s.session_id }),
+                    });
+                } catch (e) {
+                    console.error(`Failed to kill ${s.name}:`, e);
+                }
+            }
+            const killedIds = new Set(groupSessions.map(s => s.session_id));
+            state.liveSessions = state.liveSessions.filter(s => !killedIds.has(s.session_id));
+            renderLiveSessions(state.liveSessions);
         }
+    );
+}
+
+export async function shareAgentTeam(boardName) {
+    // Find all sessions on this board
+    const boardSessions = (state.liveSessions || []).filter(s => s.board_project === boardName);
+    if (!boardSessions.length) {
+        showToast("No agents found on this board", "error");
+        return;
     }
-    // Remove from cached list and re-render
-    const killedIds = new Set(groupSessions.map(s => s.session_id));
-    state.liveSessions = state.liveSessions.filter(s => !killedIds.has(s.session_id));
-    renderLiveSessions(state.liveSessions);
+
+    // Fetch each agent's prompt from session info
+    const agents = [];
+    for (const s of boardSessions) {
+        let agentPrompt = "";
+        try {
+            const resp = await fetch(`/api/sessions/live/${encodeURIComponent(s.name)}/info?session_id=${encodeURIComponent(s.session_id || "")}`);
+            const info = await resp.json();
+            agentPrompt = info.prompt || "";
+        } catch { /* use empty prompt */ }
+        agents.push({
+            name: s.display_name || s.board_job_title || s.name,
+            prompt: agentPrompt,
+        });
+    }
+
+    const template = {
+        version: 1,
+        type: "coral-team-templates",
+        templates: [{
+            name: boardName,
+            agents,
+            flags: "",
+        }],
+    };
+
+    const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `coral-team-${boardName.replace(/[^a-zA-Z0-9-_]/g, "_")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported team "${boardName}" (${agents.length} agents)`);
 }
 
 // Drag-and-drop state
@@ -214,10 +280,11 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
             ? ' <span class="badge done-badge">Done</span>'
             : ' <span class="badge waiting-badge">Needs input</span>')
         : '';
-    const goal = s.summary ? escapeHtml(s.summary) : "No goal set";
     const isTerminal = s.agent_type === "terminal";
-    const displayLabel = s.display_name || (isCompact && s.board_job_title) || (isTerminal ? "Terminal" : "Agent");
     const sid = s.session_id ? escapeHtml(s.session_id) : "";
+    const goalText = s.summary ? escapeHtml(s.summary) : null;
+    const goal = goalText || (isTerminal ? "" : `<a href="#" class="generate-goal-link" onclick="event.preventDefault(); event.stopPropagation(); requestGoal('${escapeHtml(s.name)}', '${escapeHtml(s.agent_type)}', '${sid}')" title="Ask agent to set a goal">Generate Goal</a>`);
+    const displayLabel = s.display_name || (isCompact && s.board_job_title) || (isTerminal ? "Terminal" : "Agent");
     const kebabMenu = `<div class="sidebar-kebab-wrapper">
         <button class="sidebar-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="More actions">&#x22EE;</button>
         <div class="sidebar-kebab-menu" style="display:none">
@@ -345,6 +412,10 @@ export function renderLiveSessions(sessions) {
                         <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showAddAgentToBoard('${escapeAttr(boardName)}', '${escapeAttr(boardWorkDir)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
                             Add Agent
+                        </button>
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); shareAgentTeam('${escapeAttr(boardName)}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v1a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1"/><polyline points="8 3 8 10"/><polyline points="5 6 8 3 11 6"/></svg>
+                            Share Team
                         </button>
                         <hr class="overflow-menu-divider">
                         <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('${escapeHtml(groupName)}')">

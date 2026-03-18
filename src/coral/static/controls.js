@@ -447,6 +447,23 @@ export function refreshGoal() {
     });
 }
 
+export function requestGoal(name, agentType, sessionId) {
+    const msg = 'Emit a ||PULSE:SUMMARY <your current goal>|| line now to update the dashboard with your current goal.';
+    fetch(`/api/sessions/live/${encodeURIComponent(name)}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            command: msg,
+            agent_type: agentType,
+            session_id: sessionId,
+        }),
+    }).then(() => {
+        showToast("Asked agent to update goal");
+    }).catch(() => {
+        showToast("Failed to send refresh request", true);
+    });
+}
+
 // Claude Code modes cycle via Shift+Tab (BTab in tmux).
 // Order: default -> plan -> auto-accept -> default
 const MODE_CYCLE = ["default", "plan", "auto"];
