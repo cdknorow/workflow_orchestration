@@ -330,18 +330,30 @@
         font-size: 14px !important;
     }
 
-    /* Hide Goal, branch, status, Attach/Restart — all in overflow menu */
-    .session-title #session-summary,
+    /* Hide branch, badge, status — keep Goal as single truncated line */
     .session-title #session-branch,
     .session-title #session-type-badge,
     .session-meta {
         display: none !important;
     }
 
-    /* Keep back + name + overflow menu only */
+    /* Goal: show text but hide action buttons */
+    .session-title #session-summary .goal-action-btn {
+        display: none !important;
+    }
+
+    /* Compact title: wrap goal below name row */
     .session-title {
         margin-bottom: 0 !important;
-        gap: 6px !important;
+        gap: 4px !important;
+        flex-wrap: wrap;
+    }
+
+    /* Goal spans full width on its own line */
+    .session-title #session-summary {
+        width: 100%;
+        order: 10;
+        margin: 0;
     }
 
     /* Hide the separate Attach and Restart buttons, keep only the overflow menu */
@@ -383,9 +395,26 @@
         padding: 8px 10px !important;
     }
 
-    /* Board input area */
+    /* Board input area — lift above bottom tab bar */
+    #mb-board {
+        padding-bottom: 60px !important;
+    }
+
     #mb-post-input {
         font-size: 16px !important; /* prevent iOS zoom on focus */
+    }
+
+    /* Goal/summary: single truncated line on mobile */
+    .summary-line.summary-inline {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .summary-line .summary-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: calc(100vw - 120px);
     }
 
     /* Scheduler view mobile */
