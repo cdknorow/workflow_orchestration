@@ -1,6 +1,4 @@
-<img width="1024" height="250" alt="image" src="https://github.com/user-attachments/assets/8b7b1467-ecba-4b63-9151-137f2d2243ec" />
-
----
+<img width="1299" height="336" alt="Screenshot 2026-03-15 at 4 31 41 PM" src="https://github.com/user-attachments/assets/4fb16dff-fa46-4189-837f-cc88b610849b" />
 
 ## The Pitch
 
