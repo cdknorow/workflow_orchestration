@@ -73,8 +73,12 @@ function switchMobileTab(tab) {
             if (window.showSettingsModal) {
                 window.showSettingsModal();
             }
-            // Show welcome screen as fallback
-            if (welcomeScreen) welcomeScreen.style.display = 'flex';
+            // Re-activate the agents tab (settings is a modal, not a view)
+            _currentMobileTab = 'agents';
+            document.querySelectorAll('.mobile-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tab === 'agents');
+            });
+            if (agentList) agentList.style.display = 'flex';
             break;
     }
 }
@@ -94,7 +98,7 @@ function _showMobileHistory(agentList) {
 
     // Move the sidebar's history section body content into mobile view
     // We reference the actual sidebar elements so search/filters work
-    const historySection = document.getElementById('sidebar-history');
+    const historySection = document.querySelector('[data-section="history"]');
     if (historySection) {
         const body = historySection.querySelector('.sidebar-section-body');
         if (body) {
@@ -158,7 +162,7 @@ export function syncMobileAgentList() {
     if (!agentList || agentList.dataset.mode === 'history') return;
 
     // Copy the live sessions list from sidebar
-    const sidebarList = document.getElementById('live-session-list');
+    const sidebarList = document.getElementById('live-sessions-list');
     if (sidebarList && agentList) {
         // Clear and clone
         agentList.innerHTML = '';

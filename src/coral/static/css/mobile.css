@@ -184,9 +184,11 @@
         display: flex;
     }
 
-    /* Hide desktop elements */
+    /* Hide desktop/tablet elements */
     .sidebar,
-    .sidebar-resize-handle {
+    .sidebar-resize-handle,
+    .tablet-sidebar-toggle,
+    .tablet-sidebar-backdrop {
         display: none !important;
     }
 
