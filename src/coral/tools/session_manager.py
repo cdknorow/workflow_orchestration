@@ -758,6 +758,16 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
 
         await asyncio.sleep(0.3)
 
+        # Write board state file BEFORE launching the agent so coral-board CLI
+        # is pre-configured when the agent starts (prevents joining wrong board)
+        if board_name and not is_terminal:
+            try:
+                _write_board_state(session_name, board_name,
+                                   display_name or agent_type,
+                                   server_url=board_server)
+            except Exception:
+                pass
+
         if not is_terminal:
             # Launch the agent
             script_dir = Path(__file__).parent.parent
