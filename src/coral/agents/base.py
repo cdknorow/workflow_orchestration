@@ -70,11 +70,11 @@ class BaseAgent(ABC):
             parts.append(prompt)
         if board_name:
             is_orchestrator = role and "orchestrator" in role.lower()
+            role_label = f" Your role is: {role}." if role else ""
             board_intro = (
-                f"You are part of an Agent Team and can communicate with your teammates using the coral-board CLI. "
-                f"You have already been subscribed to message board \"{board_name}\"."
-                + (f" Your role is: {role}." if role else "")
-                + "\n\nUse the coral-board CLI to communicate with your teammates:\n"
+                f"You were automatically joined to message board \"{board_name}\".{role_label} "
+                f"Do NOT run coral-board join — you are already subscribed.\n\n"
+                "Use the coral-board CLI to communicate with your teammates:\n"
                 "  coral-board read          — read new messages from teammates\n"
                 "  coral-board post \"msg\"    — post a message to the board\n"
                 "  coral-board read --last 5 — see the 5 most recent messages\n"
@@ -83,12 +83,13 @@ class BaseAgent(ABC):
             )
             if is_orchestrator:
                 board_intro += (
-                    "Introduce yourself by posting to the message board, then discuss your proposed plan "
-                    "with the operator (the human user) before posting assignments to the team."
+                    f"Post a message with coral-board post \"<your introduction>\" that introduces yourself, "
+                    f"then discuss your proposed plan with the operator (the human user) before posting assignments to the team."
                 )
             else:
                 board_intro += (
-                    "Introduce yourself by posting to the message board, then wait for instructions from the Orchestrator."
+                    f"Post a message with coral-board post \"<your introduction>\" that introduces yourself, "
+                    f"then wait for instructions from the Orchestrator."
                 )
             parts.append(board_intro)
         return "\n\n".join(parts)

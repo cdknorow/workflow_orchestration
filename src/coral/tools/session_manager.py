@@ -119,14 +119,18 @@ async def setup_board_and_prompt(
         is_orchestrator = role and "orchestrator" in role.lower()
         if is_orchestrator:
             prompt += (
-                "\n\nIMPORTANT: Introduce yourself by posting to the message board, "
+                f"\n\nIMPORTANT: You were automatically joined to message board \"{board_name}\". "
+                "Do NOT run coral-board join. "
+                "Post a message with coral-board post \"<your introduction>\" that introduces yourself, "
                 "then discuss your proposed plan with the operator (the human user) "
                 "before posting assignments. Periodically check for new messages."
             )
         else:
             prompt += (
-                "\n\nIMPORTANT: Do not start any actions until you receive instructions "
-                "from the Orchestrator on the message board. Introduce yourself, "
+                f"\n\nIMPORTANT: You were automatically joined to message board \"{board_name}\". "
+                "Do NOT run coral-board join. Do not start any actions until you receive instructions "
+                "from the Orchestrator on the message board. "
+                "Post a message with coral-board post \"<your introduction>\" that introduces yourself, "
                 "then periodically check for new messages."
             )
     if prompt:
