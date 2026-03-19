@@ -136,6 +136,40 @@ async def setup_board_and_prompt(
     if prompt:
         from coral.tools.tmux_manager import send_to_tmux, capture_pane
 
+        # Before sending the prompt, wait for Claude Code to be ready.
+        # It may be showing a trust/acceptance prompt that blocks input.
+        _ACCEPTANCE_PHRASES = [
+            "do you trust",
+            "trust the files",
+            "yes, proceed",
+            "allow access",
+            "(y)",
+            "y/n",
+            "press enter to",
+            "to trust",
+        ]
+        for _wait in range(5):
+            await asyncio.sleep(1)
+            try:
+                pane_text = await capture_pane(agent_type, session_id=session_id)
+            except Exception:
+                continue
+            if not pane_text:
+                continue
+            pane_lower = pane_text.lower()
+            # Check if Claude Code is showing a trust/acceptance prompt
+            if any(phrase in pane_lower for phrase in _ACCEPTANCE_PHRASES):
+                log.info("Detected acceptance prompt in session %s, sending 'y'", session_id[:8])
+                try:
+                    await run_cmd("tmux", "send-keys", "-t", session_name, "y", "Enter")
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+                continue
+            # Check if the CLI is ready (shows the input prompt ">" or "❯")
+            if ">" in pane_text or "❯" in pane_text or "..." in pane_text:
+                break
+
         max_attempts = 3
         for attempt in range(max_attempts):
             await asyncio.sleep(3)
