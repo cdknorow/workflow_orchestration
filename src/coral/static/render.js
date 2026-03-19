@@ -351,8 +351,6 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
     const branchTag = "";
     const waitingBadge = s.waiting_for_input
         ? ' <span class="badge waiting-badge">Needs input</span>'
-        : s.done
-        ? ' <span class="badge done-badge">Done</span>'
         : '';
     const isTerminal = s.agent_type === "terminal";
     const sid = s.session_id ? escapeAttr(s.session_id) : "";
