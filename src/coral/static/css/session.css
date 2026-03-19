@@ -320,7 +320,7 @@
     font-size: 9px;
     font-weight: 500;
     color: var(--text-muted);
-    padding: 6px 16px 2px !important;
+    padding: 4px 16px !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     cursor: pointer;
@@ -370,6 +370,11 @@
     font-size: 13px;
     padding: 1px 3px;
     opacity: 0;
+    align-self: center;
+}
+
+.group-kebab {
+    align-self: center;
 }
 
 .session-group-header:hover .group-kebab .sidebar-kebab-btn {
@@ -420,25 +425,27 @@
     flex: 1;
 }
 
-.folder-tag-btn {
+.folder-copy-btn {
     display: none;
-    font-size: 11px;
     cursor: pointer;
     color: var(--text-muted);
-    padding: 0 4px;
+    padding: 2px 4px;
     border-radius: 3px;
     background: none;
     border: none;
     line-height: 1;
+    flex-shrink: 0;
+    align-self: center;
 }
 
-.folder-tag-btn:hover {
+.folder-copy-btn:hover {
     color: var(--text-primary);
     background: var(--bg-hover);
 }
 
-.session-group-header:hover .folder-tag-btn {
-    display: inline-block;
+.session-group-header:hover .folder-copy-btn {
+    display: inline-flex;
+    align-items: center;
 }
 
 .session-group-item {

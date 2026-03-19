@@ -196,6 +196,13 @@ export function hideConfirmModal() {
     document.getElementById("confirm-modal").style.display = "none";
 }
 
+export function copyFolderPath(path) {
+    if (!path) return;
+    navigator.clipboard.writeText(path).then(() => {
+        showToast("Copied path to clipboard");
+    });
+}
+
 export async function killGroup(groupName) {
     const groupSessions = state.liveSessions.filter(s => (s.name || 'unknown') === groupName);
     if (!groupSessions.length) return;
@@ -216,6 +223,32 @@ export async function killGroup(groupName) {
                 }
             }
             const killedIds = new Set(groupSessions.map(s => s.session_id));
+            state.liveSessions = state.liveSessions.filter(s => !killedIds.has(s.session_id));
+            renderLiveSessions(state.liveSessions);
+        }
+    );
+}
+
+export async function killBoard(boardName) {
+    const boardSessions = state.liveSessions.filter(s => s.board_project === boardName);
+    if (!boardSessions.length) return;
+
+    showConfirmModal(
+        "Kill Team",
+        `Kill all ${boardSessions.length} agent(s) on board "${boardName}"? This will terminate them.`,
+        async () => {
+            for (const s of boardSessions) {
+                try {
+                    await fetch(`/api/sessions/live/${encodeURIComponent(s.name)}/kill`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ agent_type: s.agent_type, session_id: s.session_id }),
+                    });
+                } catch (e) {
+                    console.error(`Failed to kill ${s.name}:`, e);
+                }
+            }
+            const killedIds = new Set(boardSessions.map(s => s.session_id));
             state.liveSessions = state.liveSessions.filter(s => !killedIds.has(s.session_id));
             renderLiveSessions(state.liveSessions);
         }
@@ -411,6 +444,10 @@ export function renderLiveSessions(sessions) {
         const groupKebab = `<div class="sidebar-kebab-wrapper group-kebab">
             <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
             <div class="sidebar-kebab-menu" style="display:none">
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showFolderTagDropdown('${escapeAttr(groupName)}', this.closest('.session-group-header'))">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5V3a1 1 0 0 1 1-1h5.5l5.5 5.5-5.5 5.5L2 8.5z"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg>
+                    Manage Tags
+                </button>
                 <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('${escapeHtml(groupName)}')">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
                     Kill All
@@ -421,9 +458,10 @@ export function renderLiveSessions(sessions) {
         const groupBranchLine = groupBranch ? `<div class="group-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</div>` : "";
         const fTags = getFolderTags(groupName);
         const tagDots = renderFolderTagPills(fTags);
-        const tagBtn = `<button class="folder-tag-btn" onclick="event.stopPropagation(); showFolderTagDropdown('${escapeAttr(groupName)}', this.closest('.session-group-header'))" title="Manage tags">+</button>`;
+        const groupWorkDir = sorted[0]?.working_directory || '';
+        const copyBtn = `<button class="folder-copy-btn" onclick="event.stopPropagation(); copyFolderPath('${escapeAttr(groupWorkDir)}')" title="Copy path"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M5.5 10.5h-1a1.5 1.5 0 0 1-1.5-1.5v-5a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5v1"/></svg></button>`;
         html += `<li class="session-group-header" data-group-name="${escapeHtml(groupName)}" onclick="toggleGroupCollapse('${escapeHtml(groupName)}')">
-            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${tagBtn}${groupKebab}</li>`;
+            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${copyBtn}${groupKebab}</li>`;
 
         if (collapsed) {
             // Skip rendering items when collapsed
@@ -463,7 +501,7 @@ export function renderLiveSessions(sessions) {
                             Share Team
                         </button>
                         <hr class="overflow-menu-divider">
-                        <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('${escapeHtml(groupName)}')">
+                        <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killBoard('${escapeAttr(boardName)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
                             Kill All
                         </button>

@@ -1127,6 +1127,60 @@
     line-height: 1.4;
 }
 
+.agent-three-columns {
+    display: grid;
+    grid-template-columns: 1fr 180px 1fr;
+    gap: 20px;
+    margin-bottom: 12px;
+}
+
+.agent-col-presets {
+    min-width: 0;
+}
+
+.agent-col-config,
+.agent-col-fields {
+    min-width: 0;
+}
+
+.agent-col-fields {
+    display: flex;
+    flex-direction: column;
+}
+
+.agent-prompt-label {
+    margin-bottom: 4px !important;
+}
+
+.agent-col-fields textarea {
+    flex: 1;
+    min-height: 120px;
+    resize: vertical;
+}
+
+.agent-preset-vertical {
+    flex-direction: column;
+    align-items: stretch;
+    border-bottom: none;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.agent-preset-vertical .agent-preset-btn {
+    text-align: left;
+}
+
+.modal-content-agent-wide {
+    width: 1050px;
+}
+
+/* Locked preset fields */
+.preset-locked {
+    opacity: 0.6;
+    background: var(--bg-primary) !important;
+    cursor: default;
+}
+
 .team-columns {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1384,6 +1438,9 @@
 .agent-preset-saved {
     background: transparent;
     border-style: dashed;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .agent-preset-saved.active {
@@ -1392,7 +1449,8 @@
 }
 
 .agent-preset-delete {
-    margin-left: 4px;
+    margin-left: auto;
+    padding-left: 8px;
     font-size: 14px;
     opacity: 0;
     transition: opacity 0.15s;

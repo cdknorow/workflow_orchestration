@@ -3,6 +3,7 @@
 import { state } from './state.js';
 import { showToast, escapeHtml, escapeAttr } from './utils.js';
 import { loadLiveSessions } from './api.js';
+import { loadBoardProjects } from './message_board.js';
 import { getEngineNames, getEngineName, setRendererOverride } from './renderers.js';
 import { renderCaptureText, syncPaneWidth } from './capture.js';
 import { hideRestartModal } from './controls.js';
@@ -31,12 +32,12 @@ function _showLaunchStep(step) {
     document.getElementById("launch-step-agent").style.display = step === "agent" ? "" : "none";
     document.getElementById("launch-step-terminal").style.display = step === "terminal" ? "" : "none";
     document.getElementById("launch-step-team").style.display = step === "team" ? "" : "none";
-    // Widen the modal for two-column layouts (agent and team forms)
+    // Widen the modal for multi-column layouts
     const content = document.querySelector("#launch-modal .modal-content");
     if (content) {
-        const wide = step === "team" || step === "agent";
-        content.classList.toggle("modal-content-extra-wide", wide);
-        content.classList.toggle("modal-content-wide", !wide);
+        content.classList.toggle("modal-content-agent-wide", step === "agent");
+        content.classList.toggle("modal-content-extra-wide", step === "team");
+        content.classList.toggle("modal-content-wide", step !== "team" && step !== "agent");
     }
 }
 
@@ -75,8 +76,16 @@ export function showLaunchModal() {
     document.getElementById("launch-new-board-row").style.display = "none";
     document.getElementById("launch-board-server-row").style.display = "none";
     _syncFlagButtons("launch-flags");
-    // Clear preset selection
+    // Clear preset selection and unlock fields
     document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => btn.classList.remove("active"));
+    const agentNameInput = document.getElementById("launch-agent-name");
+    const agentPromptInput = document.getElementById("launch-agent-prompt");
+    agentNameInput.readOnly = false;
+    agentPromptInput.readOnly = false;
+    agentNameInput.classList.remove("preset-locked");
+    agentPromptInput.classList.remove("preset-locked");
+    const savePersonaBtn = document.getElementById("agent-save-persona-btn");
+    if (savePersonaBtn) savePersonaBtn.style.display = "";
 
     // Reset terminal form
     document.getElementById("launch-terminal-name").value = "";
@@ -385,6 +394,7 @@ function _initAgentPresets() {
 function _selectAgentPreset(name) {
     const nameInput = document.getElementById("launch-agent-name");
     const promptInput = document.getElementById("launch-agent-prompt");
+    const saveBtn = document.getElementById("agent-save-persona-btn");
 
     if (name) {
         const persona = _findPersona(name);
@@ -397,11 +407,19 @@ function _selectAgentPreset(name) {
         promptInput.value = "";
     }
 
+    // Lock fields for built-in presets (they can't be saved/overwritten)
+    const isBuiltIn = !!AGENT_PRESETS.find(p => p.name === name);
+    nameInput.readOnly = isBuiltIn;
+    promptInput.readOnly = isBuiltIn;
+    nameInput.classList.toggle("preset-locked", isBuiltIn);
+    promptInput.classList.toggle("preset-locked", isBuiltIn);
+    if (saveBtn) saveBtn.style.display = isBuiltIn ? "none" : "";
+
     document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.preset === name);
     });
 
-    nameInput.focus();
+    if (!isBuiltIn) nameInput.focus();
 }
 window._selectAgentPreset = _selectAgentPreset;
 
@@ -712,12 +730,19 @@ function _showAddAgentPicker() {
 
     // Build picker items: presets not already in the list
     const available = AGENT_PRESETS.filter(p => !existingNames.has(p.name.toLowerCase()));
+    const savedAvailable = _getSavedPersonas().filter(p => !existingNames.has(p.name.toLowerCase()));
 
     let html = '';
     for (const preset of available) {
         html += `<button class="agent-picker-item" onclick="window._addPresetAgent('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
     }
-    if (available.length > 0) {
+    if (savedAvailable.length > 0) {
+        if (available.length > 0) html += '<div class="agent-picker-divider"></div>';
+        for (const persona of savedAvailable) {
+            html += `<button class="agent-picker-item agent-preset-saved" onclick="window._addPresetAgent('${escapeAttr(persona.name)}')">${escapeHtml(persona.name)}</button>`;
+        }
+    }
+    if (available.length > 0 || savedAvailable.length > 0) {
         html += '<div class="agent-picker-divider"></div>';
     }
     html += `<button class="agent-picker-item agent-picker-custom" onclick="window._addTeamAgent()">+ Create Custom</button>`;
@@ -737,9 +762,9 @@ function _showAddAgentPicker() {
 window._showAddAgentPicker = _showAddAgentPicker;
 
 function _addPresetAgent(name) {
-    const preset = AGENT_PRESETS.find(p => p.name === name);
-    if (preset) {
-        _addTeamAgent(preset.name, preset.prompt);
+    const persona = _findPersona(name);
+    if (persona) {
+        _addTeamAgent(persona.name, persona.prompt);
     }
     const picker = document.getElementById("team-agent-picker");
     if (picker) picker.style.display = "none";
@@ -823,6 +848,7 @@ async function launchTeam() {
             showToast(`Launched team: ${agents.length} agents on "${boardName}"`);
             hideLaunchModal();
             setTimeout(loadLiveSessions, 2000);
+            setTimeout(loadBoardProjects, 4000);
         }
     } catch (e) {
         showToast("Failed to launch team", true);
