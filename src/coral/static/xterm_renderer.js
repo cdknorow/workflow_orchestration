@@ -72,11 +72,37 @@ export function setRestarting(value) {
 
 function _setSessionEndedOverlay(visible) {
     const overlay = document.getElementById("session-ended-overlay");
-    if (overlay) overlay.style.display = visible ? "" : "none";
-    const defaultContent = document.getElementById("session-ended-default");
-    const restartingContent = document.getElementById("session-restarting");
-    if (defaultContent) defaultContent.style.display = (visible && !_restarting) ? "" : "none";
-    if (restartingContent) restartingContent.style.display = (visible && _restarting) ? "" : "none";
+    if (!overlay) return;
+
+    if (visible && !_restarting) {
+        // Before showing "Session ended", check if we can reach the server.
+        // If we can't, show "Lost connection" instead of "Restart Agent".
+        fetch("/api/sessions", { method: "GET", signal: AbortSignal.timeout(3000) })
+            .then(() => {
+                overlay.style.display = "";
+                const defaultContent = document.getElementById("session-ended-default");
+                const lostConn = document.getElementById("session-lost-connection");
+                if (defaultContent) defaultContent.style.display = "";
+                if (lostConn) lostConn.style.display = "none";
+            })
+            .catch(() => {
+                overlay.style.display = "";
+                const defaultContent = document.getElementById("session-ended-default");
+                const lostConn = document.getElementById("session-lost-connection");
+                if (defaultContent) defaultContent.style.display = "none";
+                if (lostConn) lostConn.style.display = "";
+            });
+    } else if (visible && _restarting) {
+        overlay.style.display = "";
+        const defaultContent = document.getElementById("session-ended-default");
+        const restartingContent = document.getElementById("session-restarting");
+        const lostConn = document.getElementById("session-lost-connection");
+        if (defaultContent) defaultContent.style.display = "none";
+        if (restartingContent) restartingContent.style.display = "";
+        if (lostConn) lostConn.style.display = "none";
+    } else {
+        overlay.style.display = "none";
+    }
 }
 
 function _setDisconnectedBadge(visible) {
