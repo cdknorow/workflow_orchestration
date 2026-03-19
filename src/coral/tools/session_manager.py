@@ -58,16 +58,26 @@ def _build_board_prompt(prompt: str, board_name: str | None, role: str) -> str:
     """Build a prompt string with board instructions appended if applicable."""
     if not board_name:
         return prompt
-    return prompt + (
-        f"\n\nYou are subscribed to message board \"{board_name}\". "
+    is_orchestrator = role and "orchestrator" in role.lower()
+    board_text = (
+        f"\n\nYou are part of an Agent Team and can communicate with your teammates using the coral-board CLI. "
+        f"You have already been subscribed to message board \"{board_name}\". "
         f"Your role is: {role}. "
-        f"Use the coral-board CLI to communicate with your teammates:\n"
+        f"Use the coral-board CLI to communicate:\n"
         f"  coral-board read          — read new messages from teammates\n"
         f"  coral-board post \"msg\"    — post a message to the board\n"
         f"  coral-board read --last 5 — see the 5 most recent messages\n"
         f"  coral-board subscribers   — see who is on the board\n"
-        f"Check the board periodically for updates from your teammates."
+        f"Check the board periodically for updates from your teammates.\n\n"
     )
+    if is_orchestrator:
+        board_text += (
+            "Introduce yourself by posting to the message board, then discuss your proposed plan "
+            "with the operator (the human user) before posting assignments to the team."
+        )
+    else:
+        board_text += "Introduce yourself by posting to the message board, then wait for instructions from the Orchestrator."
+    return prompt + board_text
 
 
 async def setup_board_and_prompt(
@@ -103,6 +113,22 @@ async def setup_board_and_prompt(
 
     # Behavior prompt + board instructions are injected via systemPrompt in the
     # settings file. But Claude needs an initial user message to start working.
+    # When on a board, append action instructions so the agent knows what to do
+    # immediately — this is the last thing the agent sees before it starts.
+    if prompt and board_name:
+        is_orchestrator = role and "orchestrator" in role.lower()
+        if is_orchestrator:
+            prompt += (
+                "\n\nIMPORTANT: Introduce yourself by posting to the message board, "
+                "then discuss your proposed plan with the operator (the human user) "
+                "before posting assignments. Periodically check for new messages."
+            )
+        else:
+            prompt += (
+                "\n\nIMPORTANT: Do not start any actions until you receive instructions "
+                "from the Orchestrator on the message board. Introduce yourself, "
+                "then periodically check for new messages."
+            )
     if prompt:
         from coral.tools.tmux_manager import send_to_tmux, capture_pane
 
