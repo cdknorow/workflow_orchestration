@@ -993,16 +993,21 @@ async def ws_terminal(websocket: WebSocket, name: str):
             cursor_x = cursor_y = None
             if target:
                 try:
-                    content = await capture_pane_raw_target(target, visible_only=True)
-                    # Get cursor position so the frontend can restore it
+                    # Query cursor position and alternate screen mode in one call
                     from coral.tools.utils import run_cmd as _run_cmd
-                    rc, pos_out, _ = await _run_cmd(
+                    rc, info_out, _ = await _run_cmd(
                         "tmux", "display-message", "-t", target,
-                        "-p", "#{cursor_x},#{cursor_y}",
+                        "-p", "#{cursor_x},#{cursor_y},#{alternate_on}",
                     )
-                    if rc == 0 and "," in pos_out:
-                        parts = pos_out.strip().split(",")
-                        cursor_x, cursor_y = int(parts[0]), int(parts[1])
+                    alt_screen = False
+                    if rc == 0 and "," in info_out:
+                        parts = info_out.strip().split(",")
+                        if len(parts) >= 3:
+                            cursor_x, cursor_y = int(parts[0]), int(parts[1])
+                            alt_screen = parts[2] == "1"
+                    # Use visible-only capture when a TUI app (vim, nano, htop)
+                    # is using the alternate screen buffer; otherwise include scrollback
+                    content = await capture_pane_raw_target(target, visible_only=alt_screen)
                 except Exception:
                     target = None
 
