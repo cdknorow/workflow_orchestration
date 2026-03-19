@@ -190,9 +190,13 @@ def cmd_join(args: argparse.Namespace) -> None:
     """Subscribe to a project's message board."""
     sid = _session_id()
 
-    # Error if already joined to a project
+    # If already joined to the same board, silently succeed
     current = _load_state()
     if current:
+        if current["project"] == args.project:
+            print(f"Already joined '{current['project']}' as '{current['job_title']}'.")
+            return
+        # Different board — must leave first
         print(
             f"Already joined '{current['project']}' as '{current['job_title']}'. "
             f"Run 'coral-board leave' first.",
