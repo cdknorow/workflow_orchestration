@@ -973,9 +973,11 @@ async def ws_terminal(websocket: WebSocket, name: str):
         last_capture_time = 0.0
         min_capture_interval = 0.015
 
+        last_cursor = (None, None)
+
         async def _do_capture():
-            """Capture pane and send update if content changed."""
-            nonlocal last_content, pane_gone_notified, target, last_capture_time
+            """Capture pane and send update if content or cursor changed."""
+            nonlocal last_content, last_cursor, pane_gone_notified, target, last_capture_time
 
             now = _time.monotonic()
             if now - last_capture_time < min_capture_interval:
@@ -1006,7 +1008,8 @@ async def ws_terminal(websocket: WebSocket, name: str):
 
             if content is not None:
                 pane_gone_notified = False
-                if content != last_content:
+                new_cursor = (cursor_x, cursor_y)
+                if content != last_content or new_cursor != last_cursor:
                     msg = {
                         "type": "terminal_update",
                         "content": content,
@@ -1016,6 +1019,7 @@ async def ws_terminal(websocket: WebSocket, name: str):
                         msg["cursor_y"] = cursor_y
                     await websocket.send_json(msg)
                     last_content = content
+                    last_cursor = new_cursor
             elif not pane_gone_notified:
                 await websocket.send_json({"type": "terminal_closed"})
                 pane_gone_notified = True
