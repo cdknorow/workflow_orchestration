@@ -59,6 +59,7 @@ let _userScrolledUp = false;
 // and a generation counter to suppress stale onclose reconnects.
 let _connectedSessionId = null;
 let _wsGeneration = 0;
+let _paneClosed = false;  // true when server reports pane is gone
 
 function _setDisconnectedBadge(visible) {
     const badge = document.getElementById("xterm-disconnected-badge");
@@ -271,6 +272,7 @@ export function connectTerminalWs(name, agentType, sessionId) {
     // Bump generation so any pending onclose from the old WS is suppressed
     const myGeneration = ++_wsGeneration;
     _connectedSessionId = sessionId;
+    _paneClosed = false;
 
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const params = new URLSearchParams();
@@ -297,7 +299,18 @@ export function connectTerminalWs(name, agentType, sessionId) {
 
     terminalWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        if (data.type === "terminal_closed") {
+            // Server reports the tmux pane is gone (agent killed/done).
+            // Show a session-ended state instead of the reconnect banner.
+            _paneClosed = true;
+            _setDisconnectedBadge(false);
+            if (terminal) {
+                terminal.write('\r\n\x1b[90m--- Session ended ---\x1b[0m\r\n');
+            }
+            return;
+        }
         if (data.type === "terminal_update" && terminal) {
+            _paneClosed = false;
             // Buffer the update if user has text selected or scrolled up
             if (_xtermSelecting || _userScrolledUp) {
                 _pendingContent = data.content;
@@ -313,6 +326,9 @@ export function connectTerminalWs(name, agentType, sessionId) {
     };
 
     terminalWs.onclose = () => {
+        // Don't reconnect if the server told us the pane is gone.
+        if (_paneClosed) return;
+
         // Only reconnect if this WS is still the current generation.
         // If disconnectTerminalWs() was called (intentional close) or
         // connectTerminalWs() was called for a different session, the

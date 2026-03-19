@@ -922,11 +922,14 @@ async def ws_terminal(websocket: WebSocket, name: str):
         """Poll tmux pane and push content to the client.
 
         Uses adaptive polling: 50ms after recent input, 300ms when idle.
+        When the pane disappears (agent killed/done), sends a terminal_closed
+        message and keeps the connection open to avoid triggering reconnect.
         """
         nonlocal last_content, closed, target
         idle_interval = 0.30
         active_interval = 0.05
         interval = idle_interval
+        pane_gone_notified = False
         try:
             while not closed:
                 # Re-resolve target if it was initially unavailable
@@ -934,13 +937,29 @@ async def ws_terminal(websocket: WebSocket, name: str):
                     target = await find_pane_target(
                         name, agent_type, session_id=session_id,
                     )
-                content = await capture_pane_raw_target(target) if target else None
-                if content is not None and content != last_content:
-                    await websocket.send_json({
-                        "type": "terminal_update",
-                        "content": content,
-                    })
-                    last_content = content
+
+                content = None
+                if target:
+                    try:
+                        content = await capture_pane_raw_target(target)
+                    except Exception:
+                        # Pane may have disappeared — try re-resolving
+                        target = None
+
+                if content is not None:
+                    pane_gone_notified = False
+                    if content != last_content:
+                        await websocket.send_json({
+                            "type": "terminal_update",
+                            "content": content,
+                        })
+                        last_content = content
+                elif not pane_gone_notified:
+                    # Pane is gone — notify client once, then idle
+                    await websocket.send_json({"type": "terminal_closed"})
+                    pane_gone_notified = True
+                    # Slow down polling since pane is gone
+                    interval = 3.0
 
                 # Wait for either the interval or an input event
                 input_event.clear()
@@ -949,8 +968,9 @@ async def ws_terminal(websocket: WebSocket, name: str):
                     # Input happened — use fast poll for the next few cycles
                     interval = active_interval
                 except asyncio.TimeoutError:
-                    # No input — drift back toward idle rate
-                    interval = min(interval + 0.05, idle_interval)
+                    if not pane_gone_notified:
+                        # No input — drift back toward idle rate
+                        interval = min(interval + 0.05, idle_interval)
         except WebSocketDisconnect:
             closed = True
         except Exception:
