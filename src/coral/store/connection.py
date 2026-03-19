@@ -263,6 +263,17 @@ class DatabaseManager:
 
             CREATE INDEX IF NOT EXISTS idx_git_changed_files_agent
                 ON git_changed_files(agent_name);
+
+            CREATE TABLE IF NOT EXISTS remote_board_subscriptions (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id           TEXT NOT NULL,
+                remote_server        TEXT NOT NULL,
+                project              TEXT NOT NULL,
+                job_title            TEXT NOT NULL,
+                last_notified_unread INTEGER NOT NULL DEFAULT 0,
+                created_at           TEXT NOT NULL,
+                UNIQUE(session_id, remote_server, project)
+            );
         """)
 
         # Migrations: add columns that may not exist in older schemas
