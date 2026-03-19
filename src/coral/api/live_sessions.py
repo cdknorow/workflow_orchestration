@@ -988,19 +988,32 @@ async def ws_terminal(websocket: WebSocket, name: str):
                 )
 
             content = None
+            cursor_x = cursor_y = None
             if target:
                 try:
                     content = await capture_pane_raw_target(target)
+                    # Get cursor position so the frontend can restore it
+                    rc, pos_out, _ = await run_cmd(
+                        "tmux", "display-message", "-t", target,
+                        "-p", "#{cursor_x},#{cursor_y}",
+                    )
+                    if rc == 0 and "," in pos_out:
+                        parts = pos_out.strip().split(",")
+                        cursor_x, cursor_y = int(parts[0]), int(parts[1])
                 except Exception:
                     target = None
 
             if content is not None:
                 pane_gone_notified = False
                 if content != last_content:
-                    await websocket.send_json({
+                    msg = {
                         "type": "terminal_update",
                         "content": content,
-                    })
+                    }
+                    if cursor_x is not None:
+                        msg["cursor_x"] = cursor_x
+                        msg["cursor_y"] = cursor_y
+                    await websocket.send_json(msg)
                     last_content = content
             elif not pane_gone_notified:
                 await websocket.send_json({"type": "terminal_closed"})
