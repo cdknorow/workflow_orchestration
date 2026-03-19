@@ -370,8 +370,18 @@ export function connectTerminalWs(name, agentType, sessionId) {
             // This avoids the flicker caused by reset() which visibly
             // clears the screen before the new content is drawn.
             const converted = data.content.replace(/\n/g, '\r\n');
-            terminal.write('\x1b[2J\x1b[H' + converted);
-            terminal.scrollToBottom();
+            // If server sent cursor position, restore it after writing content.
+            // This makes the cursor visible in vim, nano, and other TUI apps.
+            let cursorSeq = '';
+            if (data.cursor_x != null && data.cursor_y != null) {
+                // ANSI CSI cursor position: \x1b[row;colH (1-indexed)
+                cursorSeq = `\x1b[${data.cursor_y + 1};${data.cursor_x + 1}H`;
+            }
+            // \x1b[2J = clear visible screen, \x1b[3J = clear scrollback buffer,
+            // \x1b[H = cursor home. Clearing scrollback prevents duplication since
+            // the captured content already includes tmux scrollback history.
+            terminal.write('\x1b[2J\x1b[3J\x1b[H' + converted + cursorSeq);
+            if (!cursorSeq) terminal.scrollToBottom();
         }
     };
 

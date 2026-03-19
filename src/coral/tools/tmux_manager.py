@@ -299,12 +299,17 @@ async def capture_pane_raw(
     return await capture_pane_raw_target(target, lines)
 
 
-async def capture_pane_raw_target(target: str, lines: int = 200) -> str | None:
-    """Capture pane content by target address (skips pane lookup)."""
+async def capture_pane_raw_target(target: str, lines: int = 200, visible_only: bool = False) -> str | None:
+    """Capture pane content by target address (skips pane lookup).
+
+    If visible_only is True, capture only the visible viewport (no scrollback).
+    This is needed for TUI apps like vim that control the full screen.
+    """
     try:
-        rc, stdout, _ = await run_cmd(
-            "tmux", "capture-pane", "-t", target, "-p", "-e", f"-S-{lines}"
-        )
+        cmd = ["tmux", "capture-pane", "-t", target, "-p", "-e"]
+        if not visible_only:
+            cmd.append(f"-S-{lines}")
+        rc, stdout, _ = await run_cmd(*cmd)
         if rc != 0:
             return None
         return stdout
