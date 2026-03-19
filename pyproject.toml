@@ -75,7 +75,7 @@ coral-tray = "coral.tray:main"
 
 
 [tool.setuptools.package-data]
-coral = ["PROTOCOL.md", "launch_agents.sh", "messageboard/AGENT_GUIDE.md", "templates/*.html", "templates/includes/*.html", "templates/includes/views/*.html", "static/*.css", "static/css/*.css", "static/*.js", "static/*.png", "static/*.ico", "bundled_themes/*.json"]
+coral = ["PROTOCOL.md", "launch_agents.sh", "messageboard/AGENT_GUIDE.md", "templates/*.html", "templates/includes/*.html", "templates/includes/views/*.html", "static/*.css", "static/css/*.css", "static/*.js", "static/*.png", "static/*.svg", "static/*.ico", "bundled_themes/*.json"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
