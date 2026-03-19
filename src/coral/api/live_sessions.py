@@ -91,6 +91,20 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
     except Exception:
         board_subs = {}
 
+    # Fallback: fetch board_name from live_sessions DB for agents not yet
+    # subscribed (race condition during team launch — the async
+    # setup_board_and_prompt task may not have completed yet).
+    live_board_names: dict[str, tuple[str, str]] = {}
+    try:
+        conn = await store._get_conn()
+        rows = await (await conn.execute(
+            "SELECT session_id, board_name, display_name FROM live_sessions WHERE board_name IS NOT NULL"
+        )).fetchall()
+        for row in rows:
+            live_board_names[row["session_id"]] = (row["board_name"], row["display_name"] or "")
+    except Exception:
+        pass
+
     # Batch fetch all unread counts in one pass (eliminates N+1 queries)
     try:
         all_unread = await board_store.get_all_unread_counts()
@@ -149,6 +163,12 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
         board_sub = board_subs.get(tmux_name)
         board_unread = all_unread.get(tmux_name, 0) if board_sub else 0
 
+        # Fallback board info from live_sessions DB if subscription not yet active
+        board_project = board_sub["project"] if board_sub else None
+        board_job_title = board_sub["job_title"] if board_sub else None
+        if not board_project and sid and sid in live_board_names:
+            board_project, board_job_title = live_board_names[sid]
+
         entry = {
             "name": name,
             "agent_type": agent["agent_type"],
@@ -167,8 +187,8 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
             "waiting_reason": latest_ev if needs_input else None,
             "waiting_summary": ev_summary if needs_input else None,
             "changed_file_count": fc,
-            "board_project": board_sub["project"] if board_sub else None,
-            "board_job_title": board_sub["job_title"] if board_sub else None,
+            "board_project": board_project,
+            "board_job_title": board_job_title,
             "board_unread": board_unread,
         }
         if include_commands:
