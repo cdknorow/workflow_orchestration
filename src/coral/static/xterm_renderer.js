@@ -68,10 +68,15 @@ function _setDisconnectedBadge(visible) {
     }
 }
 
-function _setPauseBadge(visible) {
+function _setPauseBadge(visible, reason) {
     const badge = document.getElementById("selection-pause-badge");
     if (badge) {
         badge.style.display = visible ? "" : "none";
+        if (visible && reason) {
+            badge.textContent = reason === "scroll"
+                ? "Updates paused — scrolled up"
+                : "Updates paused — text selected";
+        }
         // Allow clicking the badge to resume
         badge.onclick = () => resumeScroll();
     }
@@ -129,7 +134,7 @@ export function createTerminal(containerEl) {
         const hasSelection = terminal.hasSelection();
         _xtermSelecting = hasSelection;
         state.isSelecting = hasSelection;
-        _setPauseBadge(hasSelection);
+        _setPauseBadge(hasSelection, "select");
         if (!hasSelection) {
             _flushPending();
         }
@@ -145,7 +150,7 @@ export function createTerminal(containerEl) {
             if (_scrollUpCount >= 2 && !_userScrolledUp) {
                 _userScrolledUp = true;
                 state.autoScroll = false;
-                _setPauseBadge(true);
+                _setPauseBadge(true, "scroll");
             }
         } else if (e.deltaY > 0 && _userScrolledUp && terminal) {
             // Scrolling down — only resume when user reaches the bottom of the buffer
