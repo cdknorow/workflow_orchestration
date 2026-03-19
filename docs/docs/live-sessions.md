@@ -36,6 +36,8 @@ Launch a single agent with an optional initial prompt and message board subscrip
     - **Prompt** (optional) — An initial instruction to send to the agent on launch
 2. Click **Launch**.
 
+![AI Agent launch modal with persona preset selector and configuration fields](images/launch-ai-agent-modal.png)
+
 #### Agent Team
 
 Launch multiple agents on a shared message board with per-agent roles and behavior prompts. See [Agent Teams & Message Board](agent-teams-message-board.md) for the full guide.
@@ -54,6 +56,8 @@ The new session appears in the sidebar. Click it to select.
 ## Session view
 
 When you select a live session, the main panel shows three areas: the **session header**, the **terminal area**, and the **command pane**.
+
+![Full session view showing terminal, command pane, and side panel](images/session-view-full.png)
 
 ### Session header
 

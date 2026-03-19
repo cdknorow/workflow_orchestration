@@ -55,6 +55,8 @@ For each file, the dashboard shows:
 
 The git poller computes changes by diffing against a smart base reference — typically `main` or `master` — so you see all changes on the feature branch, not just the latest commit.
 
+![Changed files panel showing per-file additions, deletions, and status](images/git-changed-files.png)
+
 !!! info
     Untracked files are included only if their modification time is after the base branch's latest commit, filtering out pre-existing files that aren't part of the agent's work.
 

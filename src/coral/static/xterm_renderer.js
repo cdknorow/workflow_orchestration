@@ -60,10 +60,23 @@ let _userScrolledUp = false;
 let _connectedSessionId = null;
 let _wsGeneration = 0;
 let _paneClosed = false;  // true when server reports pane is gone
+let _restarting = false;  // true when a restart is in progress
+
+export function setRestarting(value) {
+    _restarting = value;
+    if (value) {
+        // Show restarting overlay immediately
+        _setSessionEndedOverlay(true);
+    }
+}
 
 function _setSessionEndedOverlay(visible) {
     const overlay = document.getElementById("session-ended-overlay");
     if (overlay) overlay.style.display = visible ? "" : "none";
+    const defaultContent = document.getElementById("session-ended-default");
+    const restartingContent = document.getElementById("session-restarting");
+    if (defaultContent) defaultContent.style.display = (visible && !_restarting) ? "" : "none";
+    if (restartingContent) restartingContent.style.display = (visible && _restarting) ? "" : "none";
 }
 
 function _setDisconnectedBadge(visible) {
@@ -320,6 +333,7 @@ export function connectTerminalWs(name, agentType, sessionId) {
         }
         if (data.type === "terminal_update" && terminal) {
             _paneClosed = false;
+            _restarting = false;
             _setSessionEndedOverlay(false);
             // Buffer the update if user has text selected or scrolled up
             if (_xtermSelecting || _userScrolledUp) {

@@ -30,6 +30,8 @@ Coral ships with several preset roles (Lead Developer, QA Engineer, Orchestrator
 
 5. Click **Launch**.
 
+![Agent Team launch modal with preset roles, agent cards, and team configuration](images/launch-agent-team-modal.png)
+
 Coral creates one tmux session per agent, subscribes each to the board, and injects the behavior prompt along with message board instructions.
 
 !!! tip
@@ -120,6 +122,8 @@ $ coral-board read
 ### Viewing boards
 
 The Message Board section in the sidebar lists all active boards with their message count. Click a board to open the full message view with:
+
+![Message board view showing messages, subscribers, and controls](images/message-board-view.png)
 
 - **Messages panel** — Scrollable message history showing role, content, and timestamp for each message
 - **Post form** — Input field to post messages as the operator

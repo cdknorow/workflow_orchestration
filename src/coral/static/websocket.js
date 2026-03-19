@@ -62,14 +62,14 @@ export function connectCoralWs() {
                 }
                 state.prevWaitingState[id] = !!s.waiting_for_input;
 
-                // Detect goal (summary) changes
-                const prevSummary = state.prevSummaryState && state.prevSummaryState[id];
-                if (s.summary && s.summary !== prevSummary) {
-                    const goalLabel = s.display_name || s.board_job_title || s.name;
-                    showToast(`${goalLabel}: ${s.summary}`);
-                }
-                if (!state.prevSummaryState) state.prevSummaryState = {};
-                state.prevSummaryState[id] = s.summary || null;
+                // Detect goal (summary) changes — disabled for now, needs design polish
+                // const prevSummary = state.prevSummaryState && state.prevSummaryState[id];
+                // if (s.summary && s.summary !== prevSummary) {
+                //     const goalLabel = s.display_name || s.board_job_title || s.name;
+                //     showToast(`${goalLabel}: ${s.summary}`);
+                // }
+                // if (!state.prevSummaryState) state.prevSummaryState = {};
+                // state.prevSummaryState[id] = s.summary || null;
             }
 
             state.liveSessions = data.sessions;

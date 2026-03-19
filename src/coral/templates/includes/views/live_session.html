@@ -65,9 +65,13 @@
                                 <span class="xterm-focus-hint">Click to type &middot; Ctrl+Shift+Esc to unfocus</span>
                             </div>
                             <div id="session-ended-overlay" class="session-ended-overlay" style="display:none">
-                                <div class="session-ended-content">
+                                <div class="session-ended-content" id="session-ended-default">
                                     <p>Session ended</p>
                                     <button class="btn btn-primary" onclick="restartSession()">Restart Agent</button>
+                                </div>
+                                <div class="session-ended-content" id="session-restarting" style="display:none">
+                                    <span class="restart-spinner"></span>
+                                    <p>Agent is restarting...</p>
                                 </div>
                             </div>
                             <div id="selection-pause-badge" class="selection-pause-badge" style="display:none">Updates paused — text selected</div>

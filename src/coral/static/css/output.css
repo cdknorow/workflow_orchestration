@@ -202,6 +202,21 @@
     color: var(--text-secondary);
 }
 
+.restart-spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: skeleton-shimmer-spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes skeleton-shimmer-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* ── Capture Blocks ────────────────────────────────────────── */
 
 .capture-block {

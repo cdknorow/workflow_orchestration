@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 3.2.1 — 2026-03-19
+
+### Fixed
+- **Team sidebar grouping** — Agents now group correctly from the first WebSocket poll by falling back to the live_sessions DB when the board subscription hasn't completed yet
+- **README stale references** — Removed Base Mode/Bash Mode, updated action table, fixed tmux attach examples
+
+### Changed
+- **Documentation refresh** — All 22 screenshots replaced with current Coral UI, 5 new screenshots added, orphaned doc_features files removed, all pages verified by QA
+- **Session ended overlay** — Clean overlay with Restart button and spinner when session ends, replacing text-only message
+- **Built-in Demo Team template** — One-click 3-agent team (Orchestrator, Lead Dev, QA) in team template selector
+
 ## 3.2.0 — 2026-03-19
 
 ### Added

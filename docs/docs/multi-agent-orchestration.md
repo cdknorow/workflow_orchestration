@@ -66,7 +66,7 @@ curl -X POST http://localhost:8420/api/sessions/launch \
   -d '{"working_dir": "/path/to/worktree", "agent_type": "claude", "display_name": "Auth Feature"}'
 ```
 
-![Launch New Session modal with Agent Name, Working Directory, Agent Type, and Flags fields](images/launch-session-modal.png)
+![Launch New Session modal with agent type selection, working directory, and configuration fields](images/launch-session-modal.png)
 
 !!! tip
     Dashboard-launched sessions are not limited by `MAX_AGENTS` — you can add as many as your machine can handle.
@@ -191,6 +191,8 @@ Each session in the sidebar shows:
 | **Branch tag** | Current git branch |
 | **NEEDS INPUT badge** | Appears when the agent is waiting for a response |
 | **Tooltip** | Hover for full session details |
+
+![Session tooltip showing agent details on hover](images/session-tooltip.png)
 
 ![Sidebar showing sessions with different states: active (green), waiting for input (amber with NEEDS INPUT badge), and stale (gray)](images/sidebar-multi-agent.png)
 
