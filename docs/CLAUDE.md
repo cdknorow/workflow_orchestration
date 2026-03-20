@@ -24,7 +24,9 @@ The site is published at https://cdknorow.github.io/coral/.
 
 - **Home** (`index.md`)
 - **Multi-Agent Orchestration** (`multi-agent-orchestration.md`)
+- **Agent Teams & Message Board** (`agent-teams-message-board.md`)
 - **Live Sessions** (`live-sessions.md`)
+- **Git Integration** (`git-integration.md`)
 - **Button Macros** (`button-macros.md`)
 - **Agent Protocol (PULSE)** (`protocol.md`)
 - **Session History & Search** (`session-history-search.md`)
@@ -32,6 +34,7 @@ The site is published at https://cdknorow.github.io/coral/.
 - **Scheduled Jobs** (`scheduled-jobs.md`)
 - **One-Time Jobs** (`one-time-jobs.md`)
 - **Webhook Notifications** (`webhooks.md`)
+- **Themes & Customization** (`themes-customization.md`)
 - **API Reference:** Jobs (`api/jobs.md`), Webhooks (`api/webhooks.md`)
 
 Screenshots are stored in `docs/images/`.

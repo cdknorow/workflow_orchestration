@@ -8,15 +8,18 @@
   - `launch_agents.sh`: Bash script to discover worktrees, launch tmux sessions, and start the web server.
   - `launch.py`: Launcher entry point for the `launch-coral` CLI command.
   - `web_server.py`: FastAPI web dashboard (REST + WebSocket endpoints).
+  - `config.py`: Configuration constants and settings.
+  - `tray.py`: System tray application entry point (`coral-tray` command).
   - `PROTOCOL.md`: Protocol for agents to follow (status/summary reporting).
   - `agents/`: Agent implementations (`base.py`, `claude.py`, `gemini.py`).
-  - `api/`: REST API route modules (`live_sessions.py`, `history.py`, `system.py`, `tasks.py`, `schedule.py`, `uploads.py`, `webhooks.py`).
-  - `store/`: SQLite storage layer (`connection.py`, `sessions.py`, `git.py`, `tasks.py`, `schedule.py`, `webhooks.py`).
-  - `tools/`: Core utilities (`session_manager.py`, `tmux_manager.py`, `log_streamer.py`, `pulse_detector.py`, `jsonl_reader.py`, `cron_parser.py`, `run_callback.py`, `utils.py`).
-  - `background_tasks/`: Background services (`session_indexer.py`, `auto_summarizer.py`, `git_poller.py`, `idle_detector.py`, `scheduler.py`, `webhook_dispatcher.py`).
-  - `hooks/`: Claude Code integration hooks (`task_state.py`, `agentic_state.py`, `utils.py`).
+  - `api/`: REST API route modules (`live_sessions.py`, `history.py`, `system.py`, `tasks.py`, `schedule.py`, `uploads.py`, `webhooks.py`, `themes.py`, `board_remotes.py`).
+  - `store/`: SQLite storage layer (`connection.py`, `sessions.py`, `git.py`, `tasks.py`, `schedule.py`, `webhooks.py`, `remote_boards.py`).
+  - `tools/`: Core utilities (`session_manager.py`, `tmux_manager.py`, `log_streamer.py`, `pulse_detector.py`, `jsonl_reader.py`, `cron_parser.py`, `run_callback.py`, `update_checker.py`, `utils.py`).
+  - `background_tasks/`: Background services (`session_indexer.py`, `auto_summarizer.py`, `git_poller.py`, `idle_detector.py`, `scheduler.py`, `webhook_dispatcher.py`, `board_notifier.py`, `remote_board_poller.py`).
+  - `hooks/`: Claude Code integration hooks (`task_state.py`, `agentic_state.py`, `message_check.py`, `utils.py`).
   - `messageboard/`: Inter-agent message board (`store.py`, `api.py`, `app.py`, `cli.py`, `AGENT_GUIDE.md`).
-  - `templates/`: Jinja2 HTML templates (`index.html`, `diff.html`, `includes/`).
+  - `bundled_themes/`: Built-in theme JSON files for dashboard customization.
+  - `templates/`: Jinja2 HTML templates (`index.html`, `diff.html`, `includes/` with `modals.html`, `sidebar.html`, and `views/`).
   - `static/`: JavaScript, CSS, images, and favicon assets.
 - `tests/`: Test suite (Python and JavaScript tests).
 - `docs/`: MkDocs documentation site (Material theme), published at https://cdknorow.github.io/coral/.
@@ -125,7 +128,7 @@ for the full workflow.
 - **Dependencies:** `fastapi`, `uvicorn`, `jinja2`, `aiosqlite`, `httpx`, `python-multipart` (Python 3.8+).
 - **Database:** SQLite (`~/.coral/sessions.db`) using WAL mode.
 - **Logs:** Agents stream output to `/tmp/<agent_type>_coral_<folder_name>.log` via `tmux pipe-pane`.
-- **Entry Points:** `coral` / `coral-dashboard` (web server), `launch-coral` (agent launcher), `coral-hook-task-sync` (task sync hook), `coral-hook-agentic-state` (agentic state hook), `coral-board` (message board CLI).
+- **Entry Points:** `coral` / `coral-dashboard` (web server), `launch-coral` (agent launcher), `coral-hook-task-sync` (task sync hook), `coral-hook-agentic-state` (agentic state hook), `coral-hook-message-check` (message check hook), `coral-board` (message board CLI), `coral-tray` (system tray app).
 
 ## Documentation
 - Documentation uses MkDocs with Material theme, configured in `docs/mkdocs.yml`.
