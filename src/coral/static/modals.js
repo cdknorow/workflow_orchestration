@@ -773,6 +773,7 @@ function _showAddAgentPicker() {
         html += '<div class="agent-picker-divider"></div>';
     }
     html += `<button class="agent-picker-item agent-picker-custom" onclick="window._addTeamAgent()">+ Create Custom</button>`;
+    html += `<button class="agent-picker-item agent-picker-custom" onclick="document.getElementById('team-agent-picker').style.display='none'; browseAgentTemplatesNew()" title="Browse community agent templates from aitmpl.com">Browse Templates</button>`;
 
     picker.innerHTML = html;
     picker.style.display = "";
