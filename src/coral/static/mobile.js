@@ -51,15 +51,6 @@ function switchMobileTab(tab) {
         case 'agents':
             if (agentList) agentList.style.display = 'flex';
             break;
-        case 'board':
-            if (boardView) {
-                boardView.style.display = 'flex';
-                // Trigger board project list load if needed
-                if (window.showMessageBoardProjects) {
-                    window.showMessageBoardProjects();
-                }
-            }
-            break;
         case 'history':
             // Show the sidebar history section as a full-screen view
             _showMobileHistory(agentList);

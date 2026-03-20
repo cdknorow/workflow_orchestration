@@ -690,6 +690,23 @@ export function renderHistorySessions(sessions, total, page, pageSize) {
     }
 
     list.innerHTML = sessions.map(s => {
+        const isGroup = s.type === 'group' || (s.session_id && s.session_id.startsWith('board:'));
+        if (isGroup) {
+            const projectName = s.title || s.session_id.replace(/^board:/, '');
+            const label = projectName;
+            const truncated = label.length > 40 ? label.substring(0, 40) + "..." : label;
+            const isActive = state.currentSession && state.currentSession.type === "board" && state.currentSession.name === projectName;
+            const timeStr = s.updated_at ? formatShortTime(s.updated_at) : "";
+            const timeTag = timeStr ? `<span class="session-time">${escapeHtml(timeStr)}</span>` : "";
+            const countInfo = s.message_count != null ? `${s.message_count} msgs` : "";
+            const subsInfo = s.subscriber_count != null ? `${s.subscriber_count} members` : "";
+            const meta = [countInfo, subsInfo].filter(Boolean).join(' · ');
+            return `<li class="${isActive ? 'active' : ''}" onclick="selectBoardProject('${escapeAttr(projectName)}')">
+                <div class="session-row-top">${timeTag}<span class="badge board-badge">Group</span></div>
+                <div class="session-row-mid"><span class="session-label" title="${escapeHtml(label)}">${escapeHtml(truncated)}</span></div>
+                ${meta ? `<div class="session-row-bottom"><span class="session-meta">${escapeHtml(meta)}</span></div>` : ""}
+            </li>`;
+        }
         const label = s.summary_title || s.summary || s.session_id;
         const truncated = label.length > 40 ? label.substring(0, 40) + "..." : label;
         const isActive = state.currentSession && state.currentSession.type === "history" && state.currentSession.name === s.session_id;

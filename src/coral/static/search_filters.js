@@ -3,6 +3,7 @@
 export const filterState = {
     q: '',
     ftsMode: 'and',       // 'phrase' | 'and' | 'or'
+    chatType: 'all',         // 'all' | 'agent' | 'group'
     tagIds: [],              // array of int
     tagLogic: 'AND',         // 'AND' | 'OR'
     sourceTypes: [],         // array of string; empty = all
@@ -14,6 +15,8 @@ export const filterState = {
 
 export function buildApiParams(page, pageSize) {
     const p = new URLSearchParams({ page, page_size: pageSize });
+    if (filterState.chatType && filterState.chatType !== 'all')
+        p.set('type', filterState.chatType);
     if (filterState.q)
         p.set('q', filterState.q);
     if (filterState.q && filterState.ftsMode !== 'and')
@@ -45,6 +48,8 @@ export function serializeToUrl(page) {
 export function deserializeFromUrl() {
     const p = new URLSearchParams(window.location.search);
     filterState.q = p.get('q') || '';
+    filterState.chatType = ['all', 'agent', 'group'].includes(p.get('type'))
+        ? p.get('type') : 'all';
     filterState.ftsMode = ['phrase', 'and', 'or'].includes(p.get('fts_mode'))
         ? p.get('fts_mode') : 'and';
     filterState.tagIds = (p.get('tag_ids') || '')
@@ -66,6 +71,7 @@ export function deserializeFromUrl() {
 
 export function resetFilters() {
     filterState.q = '';
+    filterState.chatType = 'all';
     filterState.ftsMode = 'and';
     filterState.tagIds = [];
     filterState.tagLogic = 'AND';
@@ -77,7 +83,8 @@ export function resetFilters() {
 }
 
 export function hasActiveFilters() {
-    return filterState.tagIds.length > 0
+    return (filterState.chatType && filterState.chatType !== 'all')
+        || filterState.tagIds.length > 0
         || filterState.sourceTypes.length > 0
         || !!filterState.dateFrom
         || !!filterState.dateTo
@@ -87,6 +94,7 @@ export function hasActiveFilters() {
 
 export function countActiveFilters() {
     let n = 0;
+    if (filterState.chatType && filterState.chatType !== 'all') n++;
     if (filterState.tagIds.length) n++;
     if (filterState.sourceTypes.length) n++;
     if (filterState.dateFrom || filterState.dateTo) n++;

@@ -41,25 +41,11 @@
                     </div>
                 </div>
             </section>
-            <section class="sidebar-section" data-section="messageboard">
-                <div class="sidebar-section-header" data-collapse-toggle>
-                    <div class="sidebar-section-title">
-                        <svg class="collapse-chevron" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg>
-                        <h2>Message Board</h2>
-                        <span class="section-count-badge" id="messageboard-count">0</span>
-                    </div>
-                </div>
-                <div class="sidebar-section-body">
-                    <ul id="messageboard-sidebar-list" class="session-list">
-                        <li class="empty-state">No projects</li>
-                    </ul>
-                </div>
-            </section>
             <section class="sidebar-section" data-section="history">
                 <div class="sidebar-section-header" data-collapse-toggle>
                     <div class="sidebar-section-title">
                         <svg class="collapse-chevron" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg>
-                        <h2>History</h2>
+                        <h2>Chat History</h2>
                         <span class="section-count-badge" id="history-count">0</span>
                     </div>
                 </div>
@@ -67,7 +53,7 @@
                     <div class="history-filters">
                         <!-- Row 1: Text search + advanced toggle -->
                         <div class="hf-search-row">
-                            <input id="history-search" type="search" placeholder="Search sessions...">
+                            <input id="history-search" type="search" placeholder="Search chats...">
                             <button id="hf-adv-toggle" class="btn btn-small hf-adv-btn"
                                     title="Advanced filters">
                                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
@@ -91,6 +77,16 @@
                                     <button class="hf-toggle" data-mode="phrase">Phrase</button>
                                     <button class="hf-toggle active" data-mode="and">All words</button>
                                     <button class="hf-toggle" data-mode="or">Any word</button>
+                                </div>
+                            </div>
+
+                            <!-- Type filter -->
+                            <div class="hf-row">
+                                <label class="hf-label">Type</label>
+                                <div class="hf-toggle-group">
+                                    <button class="hf-toggle active" data-chat-type="all">All</button>
+                                    <button class="hf-toggle" data-chat-type="agent">Agent Chats</button>
+                                    <button class="hf-toggle" data-chat-type="group">Group Chats</button>
                                 </div>
                             </div>
 

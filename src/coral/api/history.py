@@ -41,6 +41,8 @@ async def get_history_sessions(
     date_to: Optional[str] = Query(None),
     min_duration_sec: Optional[int] = Query(None, ge=0),
     max_duration_sec: Optional[int] = Query(None, ge=0),
+    # Chat type filter: all, agent, group
+    type: str = Query("all"),
 ):
     """Paginated history sessions with advanced search filters."""
     import re as _re
@@ -91,50 +93,138 @@ async def get_history_sessions(
         max_duration_sec=max_duration_sec,
     )
 
-    result = await store.list_sessions_paged(page, page_size, q, **advanced_kwargs)
+    # Normalize type param
+    if type not in ("all", "agent", "group"):
+        type = "all"
 
-    # Cold-start fallback
-    has_any_filter = (
-        q or resolved_tag_ids or resolved_source_types
-        or date_from or date_to
-        or min_duration_sec is not None or max_duration_sec is not None
-    )
+    # ── Agent sessions ────────────────────────────────────────────────
+    agent_sessions: list[dict] = []
+    agent_total = 0
+    if type in ("all", "agent"):
+        result = await store.list_sessions_paged(page, page_size, q, **advanced_kwargs)
 
-    if result["total"] == 0 and not has_any_filter:
-        indexer = (
-            getattr(_app, "state", None)
-            and getattr(_app.state, "indexer", None)
-            if _app else None
+        # Cold-start fallback
+        has_any_filter = (
+            q or resolved_tag_ids or resolved_source_types
+            or date_from or date_to
+            or min_duration_sec is not None or max_duration_sec is not None
         )
-        if indexer:
-            try:
-                await indexer.run_once()
-                result = await store.list_sessions_paged(
-                    page, page_size, q, **advanced_kwargs
-                )
-            except Exception:
-                pass
 
-        # If still empty, fall back to old file-scan method
-        if result["total"] == 0:
-            sessions = load_history_sessions()
-            metadata = await store.get_all_session_metadata()
-            for s in sessions:
-                meta = metadata.get(s["session_id"])
-                if meta:
-                    s["tags"] = meta["tags"]
-                    s["has_notes"] = meta["has_notes"]
-                else:
-                    s["tags"] = []
-                    s["has_notes"] = False
-            return {
-                "sessions": sessions,
-                "total": len(sessions),
-                "page": 1,
-                "page_size": len(sessions),
-            }
+        if result["total"] == 0 and not has_any_filter:
+            indexer = (
+                getattr(_app, "state", None)
+                and getattr(_app.state, "indexer", None)
+                if _app else None
+            )
+            if indexer:
+                try:
+                    await indexer.run_once()
+                    result = await store.list_sessions_paged(
+                        page, page_size, q, **advanced_kwargs
+                    )
+                except Exception:
+                    pass
 
-    return result
+            # If still empty, fall back to old file-scan method
+            if result["total"] == 0:
+                sessions = load_history_sessions()
+                metadata = await store.get_all_session_metadata()
+                for s in sessions:
+                    meta = metadata.get(s["session_id"])
+                    if meta:
+                        s["tags"] = meta["tags"]
+                        s["has_notes"] = meta["has_notes"]
+                    else:
+                        s["tags"] = []
+                        s["has_notes"] = False
+                for s in sessions:
+                    s["type"] = "agent"
+                return {
+                    "sessions": sessions,
+                    "total": len(sessions),
+                    "page": 1,
+                    "page_size": len(sessions),
+                }
+
+        for s in result["sessions"]:
+            s["type"] = "agent"
+        agent_sessions = result["sessions"]
+        agent_total = result["total"]
+
+    # ── Group chats (board projects) ──────────────────────────────────
+    board_sessions: list[dict] = []
+    if type in ("all", "group"):
+        try:
+            from coral.messageboard.store import MessageBoardStore
+            board_store = MessageBoardStore()
+            projects = await board_store.list_projects_enriched()
+
+            # Filter by text search if provided
+            if q:
+                matching_projects = set(await board_store.search_messages(q))
+                # Also match project names
+                q_lower = q.lower()
+                projects = [
+                    p for p in projects
+                    if p["project"] in matching_projects or q_lower in p["project"].lower()
+                ]
+
+            # Filter by date if provided
+            if date_from:
+                projects = [p for p in projects if (p.get("last_message_at") or "") >= date_from]
+            if date_to:
+                projects = [p for p in projects if (p.get("first_message_at") or "") <= date_to + "T23:59:59"]
+
+            for p in projects:
+                board_sessions.append({
+                    "session_id": f"board:{p['project']}",
+                    "title": p["project"],
+                    "type": "group",
+                    "source_type": "board",
+                    "summary": f"{p['message_count']} messages, {p['subscriber_count']} participants",
+                    "first_timestamp": p.get("first_message_at"),
+                    "last_timestamp": p.get("last_message_at"),
+                    "message_count": p["message_count"],
+                    "subscriber_count": p["subscriber_count"],
+                    "participant_names": p.get("participant_names", ""),
+                    "tags": [],
+                    "has_notes": False,
+                })
+        except Exception:
+            log.warning("Failed to load board projects for history", exc_info=True)
+
+    # ── Merge and return ──────────────────────────────────────────────
+    if type == "agent":
+        return {
+            "sessions": agent_sessions,
+            "total": agent_total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    if type == "group":
+        # Simple pagination for group-only view
+        total = len(board_sessions)
+        start = (page - 1) * page_size
+        return {
+            "sessions": board_sessions[start:start + page_size],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    # type == "all": merge agent + board, sorted by last_timestamp desc
+    merged = agent_sessions + board_sessions
+    merged.sort(key=lambda s: s.get("last_timestamp") or "", reverse=True)
+    total = agent_total + len(board_sessions)
+    # Re-paginate the merged list (board items may interleave with agent items)
+    start = (page - 1) * page_size
+    return {
+        "sessions": merged[start:start + page_size],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.post("/api/indexer/refresh")

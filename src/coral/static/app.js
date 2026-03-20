@@ -284,6 +284,9 @@ function syncFilterDomToState() {
     if (durMax && filterState.maxDurationSec != null)
         durMax.value = String(Math.round(filterState.maxDurationSec / 60));
 
+    document.querySelectorAll('[data-chat-type]').forEach(b => {
+        b.classList.toggle('active', b.dataset.chatType === (filterState.chatType || 'all'));
+    });
     document.querySelectorAll('[data-source]').forEach(b => {
         if (b.dataset.source === 'all')
             b.classList.toggle('active', filterState.sourceTypes.length === 0);
@@ -408,6 +411,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    // Chat type toggle buttons
+    document.querySelectorAll('[data-chat-type]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterState.chatType = btn.dataset.chatType;
+            document.querySelectorAll('[data-chat-type]').forEach(b => {
+                b.classList.toggle('active', b.dataset.chatType === filterState.chatType);
+            });
+            historyPage = 1;
+            loadHistoryFiltered();
+        });
+    });
+
     // Tag add select
     const tagAddSel = document.getElementById('hf-tag-add');
     if (tagAddSel) {
@@ -475,6 +490,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (dateTo) dateTo.value = '';
             if (durMin) durMin.value = '';
             if (durMax) durMax.value = '';
+            document.querySelectorAll('[data-chat-type]')
+                .forEach(b => b.classList.toggle('active', b.dataset.chatType === 'all'));
             document.querySelectorAll('[data-source]')
                 .forEach(b => b.classList.toggle('active', b.dataset.source === 'all'));
             document.querySelectorAll('[data-logic]')

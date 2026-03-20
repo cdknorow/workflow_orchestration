@@ -491,6 +491,39 @@ class MessageBoardStore:
         )
         return [dict(r) for r in rows]
 
+    # ── Search ─────────────────────────────────────────────────────────
+
+    async def search_messages(self, query: str) -> list[str]:
+        """Return project names that have messages matching the query (LIKE search)."""
+        conn = await self._get_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT DISTINCT project FROM board_messages WHERE content LIKE ? COLLATE NOCASE",
+            (f"%{query}%",),
+        )
+        return [r["project"] for r in rows]
+
+    async def list_projects_enriched(self) -> list[dict[str, Any]]:
+        """Return board projects with timestamps, subscriber info, and message counts."""
+        conn = await self._get_conn()
+        rows = await conn.execute_fetchall(
+            """SELECT
+                   p.project,
+                   (SELECT COUNT(*) FROM board_subscribers s WHERE s.project = p.project) as subscriber_count,
+                   (SELECT COUNT(*) FROM board_messages m WHERE m.project = p.project) as message_count,
+                   (SELECT MIN(created_at) FROM board_messages m WHERE m.project = p.project) as first_message_at,
+                   (SELECT MAX(created_at) FROM board_messages m WHERE m.project = p.project) as last_message_at,
+                   (SELECT GROUP_CONCAT(s.job_title, ', ')
+                    FROM board_subscribers s WHERE s.project = p.project
+                    ORDER BY s.subscribed_at LIMIT 5) as participant_names
+               FROM (
+                   SELECT DISTINCT project FROM board_subscribers
+                   UNION
+                   SELECT DISTINCT project FROM board_messages
+               ) p
+               ORDER BY (SELECT MAX(created_at) FROM board_messages m WHERE m.project = p.project) DESC"""
+        )
+        return [dict(r) for r in rows]
+
     # ── Projects ─────────────────────────────────────────────────────────
 
     async def list_projects(self) -> list[dict[str, Any]]:
