@@ -38,13 +38,6 @@ Coral is an MIT-licensed multi-agent orchestration application built with tmux, 
 pip install agent-coral
 ```
 
-For the macOS menu bar app via pip:
-
-```bash
-pip install agent-coral[tray]
-coral-tray
-```
-
 ## Launch agents and web dashboard
 
 You can launch the web server directly using `coral` or `coral-dashboard`:
