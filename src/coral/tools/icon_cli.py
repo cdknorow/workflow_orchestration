@@ -21,7 +21,11 @@ from urllib.request import Request, urlopen
 
 
 def _session_name() -> str:
-    """Resolve session name from tmux session name, with hostname fallback."""
+    """Resolve session name from tmux session name, with hostname fallback.
+
+    Tmux session names have the format 'claude-<uuid>' or 'gemini-<uuid>'.
+    The DB stores just the UUID as session_id, so strip the agent prefix.
+    """
     if os.environ.get("TMUX"):
         try:
             result = subprocess.run(
@@ -30,6 +34,10 @@ def _session_name() -> str:
             )
             name = result.stdout.strip()
             if name:
+                # Strip agent type prefix (e.g. 'claude-', 'gemini-') to get the UUID
+                for prefix in ("claude-", "gemini-"):
+                    if name.startswith(prefix):
+                        return name[len(prefix):]
                 return name
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
