@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## 4.0.1 — 2026-03-20
+
+### Changed
+- **Rename Live Sessions to Workspace** — Sidebar section renamed for clarity
+- **Lowercase folder names** — Session group headers no longer uppercase
+- **Smaller branch text** — Branch names reduced to 8px for compact sidebar
+- **Command pane default height** — Reduced from 400px to 300px
+
 ## 4.0.0 — 2026-03-20
 
 ### Added
