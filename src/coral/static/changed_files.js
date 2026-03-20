@@ -69,27 +69,27 @@ export async function openFilePreview(filepath) {
     const left = Math.round((window.screen.width - width) / 2);
     const top = Math.round((window.screen.height - height) / 2);
 
-    const win = window.open('', 'coral-preview',
-        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`);
-    if (!win) { showToast('Popup blocked — allow popups for this site', true); return; }
-
-    // Show loading state
-    win.document.write('<html><body style="background:#0d1117;color:#8b949e;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">Loading...</body></html>');
-
+    // Fetch content first, then open popup synchronously after
+    let content;
     try {
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/file-content?${qs}`);
         const data = await resp.json();
         if (data.error) {
-            win.close();
             showToast(data.error, true);
             return;
         }
+        content = data.content || '';
+    } catch (e) {
+        showToast('Failed to load file', true);
+        return;
+    }
 
-        const content = data.content || '';
+    const rendered = _renderMarkdownBasic(content);
+    const win = window.open('', '_blank',
+        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`);
+    if (!win) { showToast('Popup blocked — allow popups for this site', true); return; }
 
-        // Render markdown-like content with basic HTML conversion
-        const rendered = _renderMarkdownBasic(content);
-        win.document.open();
+    {
 
         win.document.write(`<!DOCTYPE html>
 <html>
@@ -188,8 +188,6 @@ export async function openFilePreview(filepath) {
 </body>
 </html>`);
         win.document.close();
-    } catch (e) {
-        showToast('Failed to load file', true);
     }
 }
 
