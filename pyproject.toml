@@ -71,6 +71,7 @@ coral-hook-task-sync = "coral.hooks.task_state:main"
 coral-hook-agentic-state = "coral.hooks.agentic_state:main"
 coral-hook-message-check = "coral.hooks.message_check:main"
 coral-board = "coral.messageboard.cli:main"
+coral-agent-icon = "coral.tools.icon_cli:main"
 coral-tray = "coral.tray:main"
 
 

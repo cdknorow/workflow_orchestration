@@ -113,7 +113,7 @@ export async function sendCommandWithTeam() {
 const DEFAULT_MACROS = [
     { label: "/compact", command: "/compact" },
     { label: "/clear", command: "/clear" },
-    { label: "Reset", command: "/compact && /clear", danger: true },
+    { label: "🎨 Icon", command: "Pick an emoji that represents your role and set it with: coral-agent-icon set <emoji>" },
 ];
 
 export function getMacros() {
