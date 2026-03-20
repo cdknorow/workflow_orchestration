@@ -172,6 +172,19 @@ export async function selectHistorySession(sessionId) {
         resumeBtn.style.display = (historyEntry && historyEntry.source_type === "claude") ? "" : "none";
     }
 
+    // Show board link if session was part of a message board
+    const boardLink = document.getElementById("history-session-board-link");
+    if (boardLink) {
+        const boardName = historyEntry?.board_project || historyEntry?.board_name;
+        if (boardName) {
+            boardLink.textContent = boardName;
+            boardLink.onclick = () => { if (window.selectBoardProject) window.selectBoardProject(boardName); };
+            boardLink.style.display = "";
+        } else {
+            boardLink.style.display = "none";
+        }
+    }
+
     updateSidebarActive();
 
     // Reset to summary tab

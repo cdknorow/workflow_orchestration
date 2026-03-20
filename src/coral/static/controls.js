@@ -204,7 +204,7 @@ export function renderQuickActions() {
         <button class="btn-nav" onclick="sendRawKeys(['Right'])" title="Arrow Right" aria-label="Arrow Right">&rarr;</button>
         <button class="btn-nav" onclick="sendRawKeys(['Up'])" title="Arrow Up" aria-label="Arrow Up">&uarr;</button>
         <button class="btn-nav" onclick="sendRawKeys(['Down'])" title="Arrow Down" aria-label="Arrow Down">&darr;</button>
-        <button class="btn-nav btn-enter" onclick="sendRawKeys(['Enter'])" title="Enter" aria-label="Enter">&#9166;</button>
+        <button class="btn-nav btn-enter" onclick="sendRawKeys(['Enter'])" data-tooltip="Sends an Enter keypress to the terminal" aria-label="Enter">&#9166;</button>
     `;
 
     toolbar.innerHTML = `
@@ -220,7 +220,7 @@ export function renderQuickActions() {
         <div class="toolbar-group toolbar-group-nav">
             ${navButtons}
         </div>
-        <button class="btn-nav btn-send" onclick="sendCommand()" aria-label="Send command">Send</button>
+        <button class="btn-nav btn-send" onclick="sendCommand()" data-tooltip="Sends the text from the input box below to the terminal" aria-label="Send command">Send</button>
         <button class="btn-nav btn-team-send" onclick="sendCommandWithTeam()" aria-label="Send with team reminder" data-tooltip="Appends a team collaboration reminder to your message before sending. Uses orchestrator or worker reminder based on the session role.">+Team</button>
     `;
 }

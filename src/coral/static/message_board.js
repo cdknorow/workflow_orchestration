@@ -280,12 +280,13 @@ async function loadBoardSubscribers(project) {
             list.innerHTML = '<li style="font-size:12px;color:var(--text-muted)">No subscribers</li>';
             return;
         }
-        list.innerHTML = subs.map(s => `
-            <li style="padding:6px 0;border-bottom:1px solid var(--border)">
-                <div style="font-weight:600;font-size:12px">${escapeHtml(s.job_title)}</div>
+        list.innerHTML = subs.map(s => {
+            const sid = escapeAttr(s.session_id);
+            return `<li style="padding:6px 0;border-bottom:1px solid var(--border)">
+                <div style="font-weight:600;font-size:12px"><a href="javascript:void(0)" class="subscriber-history-link" onclick="selectHistorySession('${sid}')" title="View chat history">${escapeHtml(s.job_title)}</a></div>
                 <div style="font-size:10px;color:var(--text-muted)">${escapeHtml(s.session_id)}</div>
-            </li>
-        `).join('');
+            </li>`;
+        }).join('');
     } catch (e) {
         console.error('Failed to load subscribers:', e);
     }

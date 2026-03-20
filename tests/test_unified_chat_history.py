@@ -47,9 +47,10 @@ async def test_history_api_type_agent_excludes_boards():
         resp = await client.get("/api/sessions/history?type=agent")
         assert resp.status_code == 200
         data = resp.json()
-        # No items should have type='group'
         for session in data.get("sessions", []):
-            assert session.get("type") != "group"
+            # All items must have type='agent', no group items
+            assert session.get("type") == "agent", f"Expected type='agent', got '{session.get('type')}'"
+            assert not session["session_id"].startswith("board:")
 
 
 @pytest.mark.asyncio
@@ -59,10 +60,9 @@ async def test_history_api_type_group_excludes_agents():
         resp = await client.get("/api/sessions/history?type=group")
         assert resp.status_code == 200
         data = resp.json()
-        # All items should have type='group' — agent items must be filtered out
         for session in data.get("sessions", []):
-            if session.get("type"):
-                assert session["type"] == "group", f"Expected type='group', got '{session['type']}'"
+            assert session.get("type") == "group", f"Expected type='group', got '{session.get('type')}'"
+            assert session["session_id"].startswith("board:")
 
 
 @pytest.mark.asyncio

@@ -35,6 +35,15 @@ body {
     background: var(--border-light);
 }
 
+body.no-scrollbars ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+body.no-scrollbars {
+    scrollbar-width: none;
+}
+
 /* ── Focus-visible outlines for accessibility ──────────────── */
 
 button:focus-visible,

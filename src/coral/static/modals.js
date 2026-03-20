@@ -1055,7 +1055,17 @@ export async function loadSettings() {
         if (s.notify_needs_input === undefined) {
             s.notify_needs_input = true;
         }
+        // Coerce show_scrollbars
+        if (typeof s.show_scrollbars === "string") {
+            s.show_scrollbars = s.show_scrollbars === "True";
+        }
+        if (s.show_scrollbars === undefined) {
+            s.show_scrollbars = true;
+        }
         state.settings = s;
+
+        // Apply scrollbar visibility
+        document.body.classList.toggle('no-scrollbars', !s.show_scrollbars);
 
         // Apply theme from settings (default to GhostV3 if no theme configured)
         const themeName = s.custom_theme || "GhostV3";
@@ -1199,6 +1209,10 @@ export async function showSettingsModal() {
     const updateCheck = document.getElementById("settings-check-updates");
     if (updateCheck) updateCheck.checked = localStorage.getItem("coral-update-check-enabled") !== "false";
 
+    // Show Scrollbars (defaults to true)
+    const scrollbarsCheck = document.getElementById("settings-show-scrollbars");
+    if (scrollbarsCheck) scrollbarsCheck.checked = s.show_scrollbars !== false;
+
     document.getElementById("settings-modal").style.display = "flex";
 }
 
@@ -1216,6 +1230,7 @@ export async function applySettings() {
     const terminalScrollback = document.getElementById("settings-terminal-scrollback")?.value || "1000";
     const checkUpdates = document.getElementById("settings-check-updates")?.checked ?? true;
     localStorage.setItem("coral-update-check-enabled", checkUpdates ? "true" : "false");
+    const showScrollbars = document.getElementById("settings-show-scrollbars")?.checked ?? true;
 
     // Parse theme selection — "custom:<name>" or built-in "dark"/"light"/"system"
     let theme, customTheme;
@@ -1236,6 +1251,7 @@ export async function applySettings() {
         fit_pane_width: fitPaneWidth,
         notify_needs_input: notifyNeedsInput,
         terminal_scrollback: terminalScrollback,
+        show_scrollbars: showScrollbars,
     };
 
     try {
@@ -1275,6 +1291,9 @@ export async function applySettings() {
         if (term) {
             term.options.scrollback = parseInt(terminalScrollback, 10) || 1000;
         }
+
+        // Apply scrollbar visibility
+        document.body.classList.toggle('no-scrollbars', !showScrollbars);
 
         showToast("Settings saved");
     } catch (e) {
