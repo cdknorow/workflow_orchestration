@@ -64,7 +64,6 @@ export function openFilePreview(filepath) {
         agent: agentName,
         file: filepath,
     });
-    if (sessionId) qs.set('session_id', sessionId);
 
     const width = Math.min(900, Math.round(window.screen.width * 0.6));
     const height = Math.min(800, Math.round(window.screen.height * 0.75));
