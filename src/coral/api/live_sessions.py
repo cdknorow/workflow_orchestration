@@ -151,6 +151,9 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
         needs_input = latest_ev == "notification"
         done = latest_ev == "stop"
         working = latest_ev in ("tool_use", "prompt_submit")
+        # Detect sleep/polling loops — not real work
+        if working and ev_summary and ev_summary.startswith("Ran: sleep"):
+            working = False
         # If the last event was a tool_use but it was a long time ago,
         # the agent is idle, not "working" or "stuck".
         if working and (log_info["staleness_seconds"] or 999) > 420:
