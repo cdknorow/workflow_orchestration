@@ -660,7 +660,9 @@
     pointer-events: none;
 }
 
-.btn-team-send[data-tooltip]:hover::after {
+.btn-team-send[data-tooltip]:hover::after,
+.btn-send[data-tooltip]:hover::after,
+.btn-enter[data-tooltip]:hover::after {
     left: auto;
     right: 0;
 }
