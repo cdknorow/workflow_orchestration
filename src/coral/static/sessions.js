@@ -238,29 +238,122 @@ export async function renameAgent(name, agentType, sessionId) {
 }
 
 export async function setAgentIcon(name, agentType, sessionId) {
-    const current = state.liveSessions.find(s => s.session_id === sessionId);
-    const currentIcon = (current && current.icon) || "";
-    const newIcon = prompt("Enter an emoji icon for this agent (leave empty to remove):", currentIcon);
-    if (newIcon === null) return; // cancelled
-
-    try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}/icon`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ icon: newIcon.trim(), session_id: sessionId }),
-        });
-        const result = await resp.json();
-        if (result.error) {
-            showToast(result.error, true);
-            return;
+    showEmojiPicker(async (emoji) => {
+        try {
+            const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}/icon`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ icon: emoji, session_id: sessionId }),
+            });
+            const result = await resp.json();
+            if (result.error) {
+                showToast(result.error, true);
+                return;
+            }
+            const current = state.liveSessions.find(s => s.session_id === sessionId);
+            if (current) current.icon = emoji;
+            const { renderLiveSessions } = await import('./render.js');
+            renderLiveSessions(state.liveSessions);
+            showToast(emoji ? "Icon set" : "Icon removed");
+        } catch (e) {
+            showToast("Failed to set icon", true);
         }
-        if (current) current.icon = newIcon.trim();
-        const { renderLiveSessions } = await import('./render.js');
-        renderLiveSessions(state.liveSessions);
-        showToast(newIcon.trim() ? "Icon set" : "Icon removed");
-    } catch (e) {
-        showToast("Failed to set icon", true);
+    });
+}
+
+// ── Emoji Picker ─────────────────────────────────────────────────────
+
+const EMOJI_CATEGORIES = [
+    { name: "People", emojis: ["👨‍💻", "👩‍💻", "🧑‍🔬", "🕵️", "👷", "🧑‍🎨", "🧑‍💼", "🤖", "🧙", "🦸", "🥷", "👨‍🏫", "👩‍⚕️", "🧑‍🚀", "🧑‍🍳"] },
+    { name: "Animals", emojis: ["🐙", "🦊", "🐺", "🦅", "🐝", "🐬", "🦁", "🐻", "🐲", "🦄", "🐍", "🦉", "🐧", "🦈", "🐢"] },
+    { name: "Objects", emojis: ["⚡", "🔥", "💎", "🚀", "⭐", "🎯", "🛡️", "⚙️", "🔧", "💡", "🎨", "📡", "🔬", "💻", "🗡️"] },
+    { name: "Symbols", emojis: ["✨", "💫", "🌟", "❤️", "🏆", "👑", "🎪", "🎵", "🌈", "☀️", "🌙", "❄️", "🔮", "🎲", "♟️"] },
+];
+
+export function showEmojiPicker(onSelect) {
+    // Remove existing picker
+    const existing = document.getElementById("emoji-picker-popover");
+    if (existing) existing.remove();
+
+    const picker = document.createElement("div");
+    picker.id = "emoji-picker-popover";
+    picker.className = "emoji-picker";
+    picker.innerHTML = `
+        <div class="emoji-picker-header">
+            <input type="text" class="emoji-picker-search" placeholder="Search or paste emoji..." autofocus>
+            <button class="emoji-picker-clear" title="Clear icon">✕ Clear</button>
+        </div>
+        <div class="emoji-picker-grid">
+            ${EMOJI_CATEGORIES.map(cat => `
+                <div class="emoji-picker-category">${escapeHtml(cat.name)}</div>
+                <div class="emoji-picker-row">${cat.emojis.map(e => `<button class="emoji-picker-btn" data-emoji="${escapeAttr(e)}">${e}</button>`).join("")}</div>
+            `).join("")}
+        </div>
+    `;
+    document.body.appendChild(picker);
+
+    const searchInput = picker.querySelector(".emoji-picker-search");
+    const grid = picker.querySelector(".emoji-picker-grid");
+    const allEmojis = EMOJI_CATEGORIES.flatMap(c => c.emojis);
+
+    // Search/filter
+    searchInput.addEventListener("input", () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) {
+            grid.innerHTML = EMOJI_CATEGORIES.map(cat => `
+                <div class="emoji-picker-category">${escapeHtml(cat.name)}</div>
+                <div class="emoji-picker-row">${cat.emojis.map(e => `<button class="emoji-picker-btn" data-emoji="${escapeAttr(e)}">${e}</button>`).join("")}</div>
+            `).join("");
+        } else {
+            // Filter emojis or allow direct paste
+            const filtered = allEmojis.filter(e => e.includes(q));
+            grid.innerHTML = filtered.length
+                ? `<div class="emoji-picker-row">${filtered.map(e => `<button class="emoji-picker-btn" data-emoji="${escapeAttr(e)}">${e}</button>`).join("")}</div>`
+                : `<div class="emoji-picker-row"><button class="emoji-picker-btn" data-emoji="${escapeAttr(q)}">${escapeHtml(q)}</button></div>`;
+        }
+        // Re-attach click handlers
+        grid.querySelectorAll(".emoji-picker-btn").forEach(btn => {
+            btn.addEventListener("click", () => { selectEmoji(btn.dataset.emoji); });
+        });
+    });
+
+    // Enter to select typed emoji
+    searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const v = searchInput.value.trim();
+            if (v) selectEmoji(v);
+        } else if (e.key === "Escape") {
+            closePicker();
+        }
+    });
+
+    function selectEmoji(emoji) {
+        closePicker();
+        onSelect(emoji);
     }
+
+    function closePicker() {
+        picker.remove();
+        document.removeEventListener("click", outsideClick, true);
+    }
+
+    // Clear button
+    picker.querySelector(".emoji-picker-clear").addEventListener("click", () => {
+        closePicker();
+        onSelect("");
+    });
+
+    // Click on emoji buttons
+    picker.querySelectorAll(".emoji-picker-btn").forEach(btn => {
+        btn.addEventListener("click", () => { selectEmoji(btn.dataset.emoji); });
+    });
+
+    // Close on outside click (delayed to avoid immediate close)
+    function outsideClick(e) {
+        if (!picker.contains(e.target)) closePicker();
+    }
+    setTimeout(() => document.addEventListener("click", outsideClick, true), 100);
 }
 
 export function editAndResubmit(btn) {

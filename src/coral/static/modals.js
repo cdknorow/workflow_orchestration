@@ -718,9 +718,11 @@ function _addTeamAgent(defaultName, defaultPrompt) {
                         <input type="text" class="team-agent-name" placeholder="e.g. QA Engineer, Frontend Dev" value="${escapeAttr(defaultName || '')}"
                             oninput="const card=this.closest('.team-agent-row'); card.querySelector('.team-agent-role-name').textContent=this.value||'New Agent'">
                     </label>
-                    <label style="width:50px;flex-shrink:0">Icon:
-                        <input type="text" class="team-agent-icon" placeholder="🤖" maxlength="4" style="text-align:center;font-size:16px">
-                    </label>
+                    <div style="flex-shrink:0;text-align:center">
+                        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px">Icon</div>
+                        <button type="button" class="team-agent-icon-btn" onclick="openTeamIconPicker(this)" style="width:36px;height:36px;font-size:18px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);cursor:pointer" data-icon="">🤖</button>
+                        <input type="hidden" class="team-agent-icon" value="">
+                    </div>
                 </div>
                 <label>Behavior Prompt:
                     <textarea class="team-agent-prompt" rows="3" placeholder="Describe this agent's role and behavior..."
