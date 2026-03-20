@@ -728,7 +728,10 @@ function _addTeamAgent(defaultName, defaultPrompt) {
                     <textarea class="team-agent-prompt" rows="3" placeholder="Describe this agent's role and behavior..."
                         oninput="const card=this.closest('.team-agent-row'); card.querySelector('.team-agent-prompt-preview').textContent=this.value.substring(0,200)+(this.value.length>200?'\u2026':'')">${escapeHtml(defaultPrompt || '')}</textarea>
                 </label>
-                <button class="btn btn-small team-agent-done-btn" onclick="this.closest('.team-agent-card').classList.remove('editing')">Done</button>
+                <div style="display:flex;gap:6px">
+                    <button class="btn btn-small" onclick="browseAgentTemplates(this)">Browse Templates</button>
+                    <button class="btn btn-small team-agent-done-btn" onclick="this.closest('.team-agent-card').classList.remove('editing')">Done</button>
+                </div>
             </div>
         </div>
     `;

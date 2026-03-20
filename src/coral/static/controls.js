@@ -124,7 +124,7 @@ export function getMacros() {
     return [...DEFAULT_MACROS];
 }
 
-async function saveMacros(macros) {
+export async function saveMacros(macros) {
     state.settings.macros = JSON.stringify(macros);
     try {
         await fetch("/api/settings", {
@@ -215,6 +215,7 @@ export function renderQuickActions() {
         <div class="toolbar-group toolbar-group-macros">
             ${macroButtons}
             <button class="btn-nav btn-add-macro" onclick="showMacroModal()" title="Add macro" aria-label="Add macro">+</button>
+            <button class="btn-nav btn-add-macro" onclick="browseCommandTemplates()" title="Browse command templates" aria-label="Browse templates" style="font-size:11px">lib</button>
         </div>
         <span class="toolbar-spacer"></span>
         <div class="toolbar-group toolbar-group-nav">

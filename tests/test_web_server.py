@@ -17,5 +17,5 @@ async def test_index_renders_templates():
         
         # Verify some text that is included from the base layout or includes
         assert "Coral" in response.text
-        assert "Live Sessions" in response.text
-        assert "Session History" in response.text
+        assert "Workspace" in response.text
+        assert "Chat History" in response.text

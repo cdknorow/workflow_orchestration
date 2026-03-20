@@ -35,6 +35,7 @@ from coral.api import tasks as tasks_api
 from coral.api import uploads as uploads_api
 from coral.api import themes as themes_api
 from coral.api import board_remotes as board_remotes_api
+from coral.api import templates as templates_api
 
 from coral.tools.utils import get_package_dir
 
@@ -237,6 +238,7 @@ app.include_router(tasks_api.router)
 app.include_router(uploads_api.router)
 app.include_router(themes_api.router)
 app.include_router(board_remotes_api.router)
+app.include_router(templates_api.router)
 
 # Mount self-contained message board sub-app
 from coral.messageboard.app import create_app as create_board_app

@@ -17,6 +17,7 @@ import { fitTerminal } from './xterm_renderer.js';
 import { loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab } from './notes.js';
 import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag, loadAllTags } from './tags.js';
 import { loadSessionCommits } from './commits.js';
+import { showTemplateBrowser } from './template_browser.js';
 import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle } from './tasks.js';
 import { loadChangedFiles, openFileDiff, refreshChangedFiles } from './changed_files.js';
 import { initFileMention } from './file_mention.js';
@@ -78,6 +79,35 @@ window.openTeamIconPicker = function(btn) {
         btn.dataset.icon = emoji;
         const hiddenInput = btn.parentElement.querySelector('.team-agent-icon');
         if (hiddenInput) hiddenInput.value = emoji;
+    });
+};
+window.browseAgentTemplates = function(btn) {
+    showTemplateBrowser('agents', (template) => {
+        const row = btn.closest('.team-agent-row');
+        if (!row) return;
+        const promptEl = row.querySelector('.team-agent-prompt');
+        if (promptEl) {
+            promptEl.value = template.body || '';
+            promptEl.dispatchEvent(new Event('input'));
+        }
+        const nameEl = row.querySelector('.team-agent-name');
+        if (nameEl && template.name && !nameEl.value.trim()) {
+            nameEl.value = (template.name || '').replace(/-/g, ' ');
+            nameEl.dispatchEvent(new Event('input'));
+        }
+    });
+};
+window.browseCommandTemplates = async function() {
+    const { getMacros, saveMacros } = await import('./controls.js');
+    showTemplateBrowser('commands', async (template) => {
+        const label = template.description || template.name || 'Template';
+        const truncLabel = label.length > 20 ? label.substring(0, 20) + '...' : label;
+        const command = template.body || '';
+        const macros = getMacros();
+        macros.push({ label: truncLabel, command });
+        await saveMacros(macros);
+        const { renderQuickActions } = await import('./controls.js');
+        renderQuickActions();
     });
 };
 window.showLaunchModal = showLaunchModal;
@@ -199,6 +229,7 @@ window.exportPersonas = exportPersonas;
 window.importPersonas = importPersonas;
 window.exportTeamTemplates = exportTeamTemplates;
 window.importTeamTemplates = importTeamTemplates;
+window.showTemplateBrowser = showTemplateBrowser;
 window.killSessionDirect = killSessionDirect;
 window.showInfoDirect = showInfoDirect;
 window.attachDirect = attachDirect;
