@@ -293,6 +293,12 @@ async def diff_view(request: Request):
     return templates.TemplateResponse(request=request, name="diff.html")
 
 
+@app.get("/preview", response_class=HTMLResponse)
+async def preview_view(request: Request):
+    """Serve the standalone file preview page."""
+    return templates.TemplateResponse(request=request, name="preview.html")
+
+
 # ── Entry Point ──────────────────────────────────────────────────────────────
 
 
