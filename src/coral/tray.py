@@ -148,13 +148,17 @@ def _run_foreground(host: str, port: int, home_dir: str | None = None) -> None:
 
     # Check if tmux is installed
     import shutil
-    _tmux_available = shutil.which("tmux") is not None
-    if not _tmux_available:
-        rumps.notification(
-            "Coral",
-            "tmux not found",
-            "Agent management requires tmux. Install with: brew install tmux",
+    if not shutil.which("tmux"):
+        print(
+            "Error: tmux is not installed. Coral requires tmux for agent management.\n"
+            "\n"
+            "Install tmux:\n"
+            "  macOS:  brew install tmux\n"
+            "  Ubuntu: sudo apt install tmux\n"
+            "  Fedora: sudo dnf install tmux",
+            file=sys.stderr,
         )
+        sys.exit(1)
 
     # Start uvicorn in a background thread (not daemon — we join it on quit
     # so aiosqlite can finish its cleanup before the event loop closes)
