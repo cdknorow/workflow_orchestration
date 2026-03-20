@@ -322,21 +322,21 @@ class TestPidHelpers:
 
     def test_is_running_returns_none_no_file(self, tmp_path):
         from coral.tray import _is_running
-        with patch("coral.tray.PID_FILE", tmp_path / "nonexistent.pid"):
+        with patch("coral.tray.get_pid_file", return_value=tmp_path / "nonexistent.pid"):
             assert _is_running() is None
 
     def test_is_running_returns_pid_for_live_process(self, tmp_path):
         from coral.tray import _is_running
         pid_file = tmp_path / "tray.pid"
         pid_file.write_text(str(os.getpid()))  # current process is alive
-        with patch("coral.tray.PID_FILE", pid_file):
+        with patch("coral.tray.get_pid_file", return_value=pid_file):
             assert _is_running() == os.getpid()
 
     def test_is_running_cleans_stale_pid(self, tmp_path):
         from coral.tray import _is_running
         pid_file = tmp_path / "tray.pid"
         pid_file.write_text("999999999")  # unlikely to be a real PID
-        with patch("coral.tray.PID_FILE", pid_file):
+        with patch("coral.tray.get_pid_file", return_value=pid_file):
             assert _is_running() is None
 
 
