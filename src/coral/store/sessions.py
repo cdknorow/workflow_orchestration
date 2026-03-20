@@ -589,6 +589,7 @@ class SessionStore(DatabaseManager):
         prompt: str | None = None,
         board_name: str | None = None,
         board_server: str | None = None,
+        icon: str | None = None,
     ) -> None:
         import json as _json
         conn = await self._get_conn()
@@ -596,9 +597,9 @@ class SessionStore(DatabaseManager):
         flags_json = _json.dumps(flags) if flags else None
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), prompt, board_name, board_server, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, icon, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, int(is_job), prompt, board_name, board_server, icon, now),
         )
         await conn.commit()
 
@@ -609,6 +610,27 @@ class SessionStore(DatabaseManager):
             (display_name, session_id),
         )
         await conn.commit()
+
+    async def set_icon(self, session_id: str, icon: str | None) -> None:
+        """Set or clear the emoji icon for a live session."""
+        conn = await self._get_conn()
+        await conn.execute(
+            "UPDATE live_sessions SET icon = ? WHERE session_id = ?",
+            (icon, session_id),
+        )
+        await conn.commit()
+
+    async def get_icons(self, session_ids: list[str]) -> dict[str, str]:
+        """Return {session_id: icon} for sessions that have an icon set."""
+        if not session_ids:
+            return {}
+        conn = await self._get_conn()
+        placeholders = ",".join("?" for _ in session_ids)
+        rows = await (await conn.execute(
+            f"SELECT session_id, icon FROM live_sessions WHERE session_id IN ({placeholders}) AND icon IS NOT NULL AND icon != ''",
+            session_ids,
+        )).fetchall()
+        return {r["session_id"]: r["icon"] for r in rows}
 
     async def unregister_live_session(self, session_id: str) -> None:
         conn = await self._get_conn()
@@ -621,7 +643,7 @@ class SessionStore(DatabaseManager):
         now = datetime.now(timezone.utc).isoformat()
         # Carry forward flags, prompt, board_name, and board_server from old session
         old_row = await (await conn.execute(
-            "SELECT flags, prompt, board_name, board_server FROM live_sessions WHERE session_id = ?", (old_session_id,)
+            "SELECT flags, prompt, board_name, board_server, icon FROM live_sessions WHERE session_id = ?", (old_session_id,)
         )).fetchone()
         if flags is None:
             flags_json = old_row["flags"] if old_row and old_row["flags"] else None
@@ -630,12 +652,13 @@ class SessionStore(DatabaseManager):
         old_prompt = old_row["prompt"] if old_row else None
         old_board = old_row["board_name"] if old_row else None
         old_board_server = old_row["board_server"] if old_row else None
+        old_icon = old_row["icon"] if old_row and "icon" in old_row.keys() else None
         await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (old_session_id,))
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, old_board_server, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, old_board_server, old_icon, now),
         )
         await conn.commit()
 
@@ -661,7 +684,7 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         rows = await (await conn.execute(
-            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, created_at "
+            "SELECT session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, icon, created_at "
             "FROM live_sessions ORDER BY created_at"
         )).fetchall()
         results = []

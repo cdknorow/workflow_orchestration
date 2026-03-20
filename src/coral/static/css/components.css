@@ -256,10 +256,6 @@
     transform: translateY(-1px);
 }
 
-.btn-team-send[data-tooltip]:hover::after {
-    left: auto;
-    right: 0;
-}
 
 /* ── Badges ────────────────────────────────────────────────── */
 
@@ -644,10 +640,11 @@
 .btn-nav[data-tooltip]:hover::after,
 .macro-btn-wrap [data-tooltip]:hover::after {
     content: attr(data-tooltip);
-    position: absolute;
-    left: 0;
-    bottom: 100%;
-    margin-bottom: 6px;
+    position: fixed;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    transform: translateY(-100%) translateY(-6px);
     background: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border-light);
@@ -657,7 +654,7 @@
     line-height: 1.4;
     text-align: left;
     white-space: normal;
-    width: 280px;
+    max-width: 280px;
     word-break: break-word;
     z-index: 9999;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);

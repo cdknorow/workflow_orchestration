@@ -83,6 +83,7 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
     file_counts = await store.get_all_changed_file_counts()
     session_ids = [a["session_id"] for a in agents if a.get("session_id")]
     display_names = await store.get_display_names(session_ids)
+    icons = await store.get_icons(session_ids)
     latest_events = await store.get_latest_event_types(session_ids)
     latest_goals = await store.get_latest_goals(session_ids)
 
@@ -184,6 +185,7 @@ async def _build_session_list(include_commands: bool = False) -> list[dict]:
             "staleness_seconds": log_info["staleness_seconds"],
             "branch": git["branch"] if git else None,
             "display_name": display_names.get(sid) if sid else None,
+            "icon": icons.get(sid) if sid else None,
             "working_directory": agent.get("working_directory", ""),
             "waiting_for_input": needs_input,
             "done": done,
@@ -651,6 +653,17 @@ async def set_display_name(name: str, body: dict):
     return {"ok": True, "display_name": display_name}
 
 
+@router.put("/api/sessions/live/{name}/icon")
+async def set_session_icon(name: str, body: dict):
+    """Set or clear the emoji icon for a live session."""
+    session_id = body.get("session_id")
+    if not session_id:
+        return {"error": "session_id is required"}
+    icon = body.get("icon", "").strip() or None
+    await store.set_icon(session_id, icon)
+    return {"ok": True, "icon": icon}
+
+
 @router.post("/api/sessions/launch")
 async def launch_session(body: dict):
     """Launch a new Claude/Gemini session."""
@@ -711,6 +724,7 @@ async def launch_team(body: dict):
     for agent_def in agents:
         agent_name = agent_def.get("name", "").strip()
         agent_prompt = agent_def.get("prompt", "").strip()
+        agent_icon = agent_def.get("icon", "").strip() or None
         if not agent_name:
             continue
 
@@ -722,6 +736,7 @@ async def launch_team(body: dict):
             prompt=agent_prompt or None,
             board_name=board_name or None,
             board_server=board_server,
+            icon=agent_icon,
         )
         if result.get("error"):
             launched.append({"name": agent_name, "error": result["error"]})

@@ -782,7 +782,7 @@ async def restart_session(
         return {"error": str(e)}
 
 
-async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None, is_job: bool = False, prompt: str | None = None, board_name: str | None = None, board_server: str | None = None) -> dict[str, str]:
+async def launch_claude_session(working_dir: str, agent_type: str = "claude", display_name: str | None = None, resume_session_id: str | None = None, flags: list[str] | None = None, is_job: bool = False, prompt: str | None = None, board_name: str | None = None, board_server: str | None = None, icon: str | None = None) -> dict[str, str]:
     """Launch a new tmux session with a Claude/Gemini agent.
 
     Returns dict with session_name, session_id, log_file, and any error.
@@ -890,6 +890,7 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
                 prompt=prompt,
                 board_name=board_name,
                 board_server=board_server,
+                icon=icon,
             )
         except Exception:
             pass  # Non-critical

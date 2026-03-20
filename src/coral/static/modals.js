@@ -713,10 +713,15 @@ function _addTeamAgent(defaultName, defaultPrompt) {
                 </div>
             </div>
             <div class="team-agent-form">
-                <label>Name / Role:
-                    <input type="text" class="team-agent-name" placeholder="e.g. QA Engineer, Frontend Dev" value="${escapeAttr(defaultName || '')}"
-                        oninput="const card=this.closest('.team-agent-row'); card.querySelector('.team-agent-role-name').textContent=this.value||'New Agent'">
-                </label>
+                <div style="display:flex;gap:8px;align-items:end">
+                    <label style="flex:1">Name / Role:
+                        <input type="text" class="team-agent-name" placeholder="e.g. QA Engineer, Frontend Dev" value="${escapeAttr(defaultName || '')}"
+                            oninput="const card=this.closest('.team-agent-row'); card.querySelector('.team-agent-role-name').textContent=this.value||'New Agent'">
+                    </label>
+                    <label style="width:50px;flex-shrink:0">Icon:
+                        <input type="text" class="team-agent-icon" placeholder="🤖" maxlength="4" style="text-align:center;font-size:16px">
+                    </label>
+                </div>
                 <label>Behavior Prompt:
                     <textarea class="team-agent-prompt" rows="3" placeholder="Describe this agent's role and behavior..."
                         oninput="const card=this.closest('.team-agent-row'); card.querySelector('.team-agent-prompt-preview').textContent=this.value.substring(0,200)+(this.value.length>200?'\u2026':'')">${escapeHtml(defaultPrompt || '')}</textarea>
@@ -835,11 +840,14 @@ async function launchTeam() {
     for (const row of rows) {
         const name = row.querySelector(".team-agent-name").value.trim();
         const prompt = row.querySelector(".team-agent-prompt").value.trim();
+        const icon = row.querySelector(".team-agent-icon")?.value.trim() || "";
         if (!name) {
             showToast("Each agent needs a name", true);
             return;
         }
-        agents.push({ name, prompt });
+        const agent = { name, prompt };
+        if (icon) agent.icon = icon;
+        agents.push(agent);
     }
 
     const boardServer = document.getElementById("team-board-server").value.trim();

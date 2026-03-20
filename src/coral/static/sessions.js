@@ -237,6 +237,32 @@ export async function renameAgent(name, agentType, sessionId) {
     }
 }
 
+export async function setAgentIcon(name, agentType, sessionId) {
+    const current = state.liveSessions.find(s => s.session_id === sessionId);
+    const currentIcon = (current && current.icon) || "";
+    const newIcon = prompt("Enter an emoji icon for this agent (leave empty to remove):", currentIcon);
+    if (newIcon === null) return; // cancelled
+
+    try {
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}/icon`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ icon: newIcon.trim(), session_id: sessionId }),
+        });
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, true);
+            return;
+        }
+        if (current) current.icon = newIcon.trim();
+        const { renderLiveSessions } = await import('./render.js');
+        renderLiveSessions(state.liveSessions);
+        showToast(newIcon.trim() ? "Icon set" : "Icon removed");
+    } catch (e) {
+        showToast("Failed to set icon", true);
+    }
+}
+
 export function editAndResubmit(btn) {
     const bubble = btn.closest(".chat-bubble");
     const text = bubble.querySelector(".message-text").textContent;

@@ -7,7 +7,7 @@ import { filterState, deserializeFromUrl, serializeToUrl,
     from './search_filters.js';
 import { connectCoralWs } from './websocket.js';
 import { sendCommand, sendCommandWithTeam, sendRawKeys, sendModeToggle, cycleModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment, editGoal, refreshGoal, requestGoal } from './controls.js';
-import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent } from './sessions.js';
+import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent, setAgentIcon } from './sessions.js';
 import { toggleGroupCollapse, killGroup, killBoard, shareAgentTeam, saveTeamFromSidebar, killSessionDirect, showInfoDirect, attachDirect, restartDirect, showConfirmModal, hideConfirmModal, copyFolderPath, moveGroupUp, moveGroupDown } from './render.js';
 import { syncPaneWidth, refreshCapture } from './capture.js';
 import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag, showAddAgentToBoard, hideAddAgentBoardModal, launchAgentToBoard, exportPersonas, importPersonas, exportTeamTemplates, importTeamTemplates, showDefaultPromptsModal, hideDefaultPromptsModal, resetDefaultPrompt, saveDefaultPrompts } from './modals.js';
@@ -71,6 +71,7 @@ window.selectLiveSession = selectLiveSession;
 window.selectHistorySession = selectHistorySession;
 window.editAndResubmit = editAndResubmit;
 window.renameAgent = renameAgent;
+window.setAgentIcon = setAgentIcon;
 window.showLaunchModal = showLaunchModal;
 window.hideLaunchModal = hideLaunchModal;
 window.launchSession = launchSession;

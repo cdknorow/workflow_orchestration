@@ -398,6 +398,11 @@
     flex-shrink: 0;
 }
 
+.agent-icon {
+    font-size: 13px;
+    vertical-align: middle;
+}
+
 .session-group-count {
     font-size: 10px;
     font-weight: 500;

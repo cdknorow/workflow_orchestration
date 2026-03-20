@@ -245,7 +245,7 @@ function renderMessages(messages) {
         return `
         <div class="mb-message" style="background:${color.bg};border:1px solid ${color.border};border-radius:10px;padding:10px 14px;margin-bottom:10px;position:relative">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-                <span class="mb-agent-name" style="font-weight:600;font-size:13px;color:${color.name}">${escapeHtml(m.job_title || 'Unknown')}</span>
+                <span class="mb-agent-name" style="font-weight:600;font-size:13px;color:${color.name}">${m.icon ? escapeHtml(m.icon) + ' ' : ''}${escapeHtml(m.job_title || 'Unknown')}</span>
                 <div style="display:flex;align-items:center;gap:8px">
                     <span style="font-size:10px;color:var(--text-muted)">${formatTime(m.created_at)}</span>
                     <button class="mb-delete-msg-btn" onclick="deleteBoardMessage(${m.id})" title="Delete message">&times;</button>
@@ -282,8 +282,9 @@ async function loadBoardSubscribers(project) {
         }
         list.innerHTML = subs.map(s => {
             const sid = escapeAttr(s.session_id);
+            const icon = s.icon ? `<span class="agent-icon">${escapeHtml(s.icon)}</span> ` : '';
             return `<li style="padding:6px 0;border-bottom:1px solid var(--border)">
-                <div style="font-weight:600;font-size:12px"><a href="javascript:void(0)" class="subscriber-history-link" onclick="selectHistorySession('${sid}')" title="View chat history">${escapeHtml(s.job_title)}</a></div>
+                <div style="font-weight:600;font-size:12px">${icon}<a href="javascript:void(0)" class="subscriber-history-link" onclick="selectHistorySession('${sid}')" title="View chat history">${escapeHtml(s.job_title)}</a></div>
                 <div style="font-size:10px;color:var(--text-muted)">${escapeHtml(s.session_id)}</div>
             </li>`;
         }).join('');
