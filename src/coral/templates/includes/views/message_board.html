@@ -5,11 +5,14 @@
             <h2 id="messageboard-title">Message Board</h2>
             <span class="badge" id="messageboard-project-badge" style="display:none"></span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn btn-small" id="mb-back-btn" style="display:none" onclick="showMessageBoardProjects()">All Projects</button>
-            <button class="btn btn-small" id="mb-pause-btn" style="display:none" onclick="toggleBoardPause()">Pause Reads</button>
-            <button class="btn btn-small" id="mb-sleep-btn" style="display:none" onclick="toggleBoardSleep()">Sleep Team</button>
-            <button class="btn btn-small btn-danger" id="mb-delete-btn" style="display:none" onclick="deleteMessageBoardProject()">Delete Project</button>
+        <div class="mb-header-actions">
+            <button class="mb-action-btn" id="mb-back-btn" style="display:none" onclick="showMessageBoardProjects()">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+                All Projects
+            </button>
+            <button class="mb-action-btn" id="mb-pause-btn" style="display:none" onclick="toggleBoardPause()">Pause Reads</button>
+            <button class="mb-action-btn" id="mb-sleep-btn" style="display:none" onclick="toggleBoardSleep()">Sleep Team</button>
+            <button class="mb-action-btn mb-action-danger" id="mb-delete-btn" style="display:none" onclick="deleteMessageBoardProject()">Delete</button>
         </div>
     </div>
 

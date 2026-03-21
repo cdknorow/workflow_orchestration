@@ -110,6 +110,27 @@ export async function sendCommandWithTeam() {
     await sendCommand();
 }
 
+export async function resendInputPrompt() {
+    if (!state.currentSession || state.currentSession.type !== "live") {
+        showToast("No live session selected", true);
+        return;
+    }
+    const s = state.currentSession;
+    try {
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(s.name)}/info?session_id=${encodeURIComponent(s.session_id)}`);
+        const info = await resp.json();
+        if (!info.prompt) {
+            showToast("No prompt found for this session", true);
+            return;
+        }
+        const input = document.getElementById("command-input");
+        input.value = info.prompt;
+        await sendCommand();
+    } catch (err) {
+        showToast("Failed to fetch session prompt", true);
+    }
+}
+
 const DEFAULT_MACROS = [
     { label: "/compact", command: "/compact" },
     { label: "/clear", command: "/clear" },
@@ -187,7 +208,7 @@ export function renderQuickActions() {
     const modeButtons = `
         <button class="btn-nav btn-mode" onclick="cycleModeToggle()" data-tooltip="Cycles through Default → Plan → Accept Edits modes (Shift+Tab). Each click advances one step."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><line x1="6" y1="5" x2="10" y2="5"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="11" x2="8" y2="11"/></svg><span class="btn-label">Mode</span></button>
         <button class="btn-nav btn-mode" onclick="sendQuickCommand('!')" data-tooltip="Prefixes your input with ! so Claude runs it as a shell command instead of a prompt."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><polyline points="4 7 6 9 4 11"/><line x1="8" y1="11" x2="12" y2="11"/></svg><span class="btn-label">Bash</span></button>
-        <button class="btn-nav btn-mode" onclick="sendRawKeys(['Escape','Escape'])" data-tooltip="Sends two Escape keys to Claude. Interrupts the current response, rejects a pending tool call, or backs out of a permission prompt."><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 8l8 5"/><line x1="4" y1="3" x2="4" y2="13"/></svg><span class="btn-label">Rewind</span></button>
+        <button class="btn-nav btn-mode" onclick="sendRawKeys(['Escape','Escape'])" data-tooltip="Sends two Escape keys to Claude. Interrupts the current response, rejects a pending tool call, or backs out of a permission prompt."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span class="btn-label">Rewind</span></button>
     `;
 
     const macroButtons = macros.map((m, i) => {
@@ -233,6 +254,10 @@ export function renderQuickActions() {
                     <button class="send-menu-item" onclick="sendCommandWithTeam(); closeSendMenu()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 11a4 4 0 0 1 4 4v2"/></svg>
                         Send + Team Reminder
+                    </button>
+                    <button class="send-menu-item" onclick="resendInputPrompt(); closeSendMenu()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        Resend Prompt
                     </button>
                 </div>
             </div>

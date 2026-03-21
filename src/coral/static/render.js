@@ -555,6 +555,14 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
     </li>`;
 }
 
+export function toggleGroupByTeam() {
+    const current = localStorage.getItem('coral-group-by-team') !== 'false';
+    localStorage.setItem('coral-group-by-team', !current ? 'true' : 'false');
+    const check = document.getElementById('group-by-team-check');
+    if (check) check.style.visibility = !current ? 'visible' : 'hidden';
+    renderLiveSessions(state.liveSessions);
+}
+
 export function renderLiveSessions(sessions) {
     const list = document.getElementById("live-sessions-list");
 
@@ -565,6 +573,11 @@ export function renderLiveSessions(sessions) {
         return;
     }
 
+    // Sync the Group by Team checkmark
+    const groupByTeam = localStorage.getItem('coral-group-by-team') !== 'false';
+    const check = document.getElementById('group-by-team-check');
+    if (check) check.style.visibility = groupByTeam ? 'visible' : 'hidden';
+
     // Helper to generate a deterministic accent color from a string
     function _boardAccentColor(name) {
         let hash = 0;
@@ -573,7 +586,12 @@ export function renderLiveSessions(sessions) {
         return `hsl(${hue}, 60%, 55%)`;
     }
 
-    // ── Step 1: Separate into team (has board_project) vs standalone ──
+    let html = "";
+
+    if (groupByTeam) {
+    // ── Team-first mode: teams at top level, standalone by folder below ──
+
+    // Step 1: Separate into team (has board_project) vs standalone
     const teamGroups = {};
     const standaloneByFolder = {};
     for (const s of sessions) {
@@ -587,9 +605,7 @@ export function renderLiveSessions(sessions) {
         }
     }
 
-    let html = "";
-
-    // ── Step 2: Render team groups at top level ──
+    // Step 2: Render team groups at top level
     // Sort: active teams first, sleeping teams after
     const teamEntries = Object.entries(teamGroups).sort((a, b) => {
         const aAllSleeping = a[1].every(s => s.sleeping);
@@ -667,7 +683,7 @@ export function renderLiveSessions(sessions) {
         html += `</li>`;
     }
 
-    // ── Step 3: Render standalone agents grouped by folder ──
+    // Step 3: Render standalone agents grouped by folder
     const sortedFolders = _sortGroups(Object.entries(standaloneByFolder));
     for (const [groupName, groupSessions] of sortedFolders) {
         const sorted = _sortByOrder(groupSessions);
@@ -710,6 +726,117 @@ export function renderLiveSessions(sessions) {
                 html += _renderSessionItem(s, groupName, false);
             }
         }
+    }
+
+    } else {
+    // ── Folder-first mode: all sessions grouped by folder, boards nested inside ──
+
+    const folderGroups = {};
+    for (const s of sessions) {
+        const key = s.name || "unknown";
+        if (!folderGroups[key]) folderGroups[key] = [];
+        folderGroups[key].push(s);
+    }
+
+    const sortedFolders = _sortGroups(Object.entries(folderGroups));
+    for (const [groupName, groupSessions] of sortedFolders) {
+        const sorted = _sortByOrder(groupSessions);
+        const isMulti = sorted.length > 1;
+        const countBadge = isMulti ? ` <span class="session-group-count">${sorted.length}</span>` : "";
+        const collapsed = _isGroupCollapsed(groupName);
+        const chevron = collapsed ? '&#x25B8;' : '&#x25BE;';
+        const groupKebab = `<div class="sidebar-kebab-wrapper group-kebab">
+            <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
+            <div class="sidebar-kebab-menu" style="display:none">
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showFolderTagDropdown('${escapeAttr(groupName)}', this.closest('.session-group-header'))">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5V3a1 1 0 0 1 1-1h5.5l5.5 5.5-5.5 5.5L2 8.5z"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg>
+                    Manage Tags
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveGroupUp('${escapeAttr(groupName)}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10"/><path d="M4 7l4-4 4 4"/></svg>
+                    Move Up
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveGroupDown('${escapeAttr(groupName)}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3"/><path d="M4 9l4 4 4-4"/></svg>
+                    Move Down
+                </button>
+                <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('${escapeAttr(groupName)}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+                    Kill All
+                </button>
+            </div>
+        </div>`;
+        const groupBranch = sorted.find(s => s.branch)?.branch || "";
+        const groupBranchLine = groupBranch ? `<div class="group-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</div>` : "";
+        const fTags = getFolderTags(groupName);
+        const tagDots = renderFolderTagPills(fTags);
+        const groupWorkDir = sorted[0]?.working_directory || '';
+        const copyBtn = `<button class="folder-copy-btn" onclick="event.stopPropagation(); copyFolderPath('${escapeAttr(groupWorkDir)}')" title="Copy path"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M5.5 10.5h-1a1.5 1.5 0 0 1-1.5-1.5v-5a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5v1"/></svg></button>`;
+        html += `<li class="session-group-header" data-group-name="${escapeAttr(groupName)}" onclick="toggleGroupCollapse('${escapeAttr(groupName)}')">
+            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${copyBtn}${groupKebab}</li>`;
+
+        if (!collapsed) {
+            // Sub-group by board_project within this folder
+            const boardedByProject = {};
+            const unboarded = [];
+            for (const s of sorted) {
+                if (s.board_project) {
+                    if (!boardedByProject[s.board_project]) boardedByProject[s.board_project] = [];
+                    boardedByProject[s.board_project].push(s);
+                } else {
+                    unboarded.push(s);
+                }
+            }
+
+            // Render nested board cards
+            for (const [boardName, boardSessions] of Object.entries(boardedByProject)) {
+                const accentColor = _boardAccentColor(boardName);
+                const boardCollapsed = _isGroupCollapsed(boardName);
+                const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
+                const boardLink = `<button class="group-board-link" onclick="event.stopPropagation(); selectBoardProject('${escapeAttr(boardName)}')" title="View board: ${escapeAttr(boardName)}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H5l-3 3V3z"/></svg></button>`;
+                const boardIsSleeping = boardSessions.every(s => s.sleeping);
+                const boardSleepIcon = boardIsSleeping ? ' <span class="agent-icon" title="Team is sleeping">🌙</span>' : '';
+                const sleepLabel = boardIsSleeping ? 'Wake Team' : 'Sleep Team';
+                const sleepAction = boardIsSleeping ? 'wake' : 'sleep';
+                const boardWorkDir = boardSessions[0]?.working_directory || '';
+                const bKebab = `<div class="sidebar-kebab-wrapper group-kebab">
+                    <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
+                    <div class="sidebar-kebab-menu" style="display:none">
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showAddAgentToBoard('${escapeAttr(boardName)}', '${escapeAttr(boardWorkDir)}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+                            Add Agent
+                        </button>
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); toggleTeamSleep('${escapeAttr(boardName)}', '${sleepAction}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 0 10 5 5 0 0 1 0-10z"/></svg>
+                            ${sleepLabel}
+                        </button>
+                        <hr class="overflow-menu-divider">
+                        <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killBoard('${escapeAttr(boardName)}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+                            Kill All
+                        </button>
+                    </div>
+                </div>`;
+                const teamSubline = `<div class="board-card-subline"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 11a4 4 0 0 1 4 4v2"/></svg> Agent Team · ${boardSessions.length} agents</div>`;
+                const sleepingClass = boardIsSleeping ? ' team-sleeping' : '';
+                html += `<li class="session-board-card${sleepingClass}" style="border-left-color: ${accentColor}">
+                    <div class="session-group-header board-card-header" onclick="toggleGroupCollapse('${escapeAttr(boardName)}')">
+                        <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)}${boardSleepIcon}</div>${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
+                    </div>
+                    <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
+                for (const s of boardSessions) {
+                    html += _renderSessionItem(s, boardName, true);
+                }
+                html += `</ul></li>`;
+            }
+
+            // Render unboarded agents
+            for (const s of unboarded) {
+                html += _renderSessionItem(s, groupName, false);
+            }
+        }
+    }
+
     }
 
     list.innerHTML = html;

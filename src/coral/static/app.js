@@ -6,9 +6,9 @@ import { filterState, deserializeFromUrl, serializeToUrl,
          hasActiveFilters, countActiveFilters, resetFilters }
     from './search_filters.js';
 import { connectCoralWs } from './websocket.js';
-import { sendCommand, sendCommandWithTeam, sendRawKeys, sendModeToggle, cycleModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment, editGoal, refreshGoal, requestGoal } from './controls.js';
+import { sendCommand, sendCommandWithTeam, resendInputPrompt, sendRawKeys, sendModeToggle, cycleModeToggle, sendQuickCommand, executeMacro, addMacro, deleteMacro, showMacroModal, hideMacroModal, attachTerminal, killSession, restartSession, hideRestartModal, confirmRestart, initImageDrop, removeAttachment, editGoal, refreshGoal, requestGoal } from './controls.js';
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent, setAgentIcon, showEmojiPicker } from './sessions.js';
-import { toggleGroupCollapse, killGroup, killBoard, toggleTeamSleep, toggleAgentSleep, sleepAllAgents, wakeAllAgents, shareAgentTeam, saveTeamFromSidebar, killSessionDirect, showInfoDirect, attachDirect, restartDirect, showConfirmModal, hideConfirmModal, copyFolderPath, moveGroupUp, moveGroupDown } from './render.js';
+import { toggleGroupCollapse, killGroup, killBoard, toggleTeamSleep, toggleAgentSleep, sleepAllAgents, wakeAllAgents, shareAgentTeam, saveTeamFromSidebar, killSessionDirect, showInfoDirect, attachDirect, restartDirect, showConfirmModal, hideConfirmModal, copyFolderPath, moveGroupUp, moveGroupDown, toggleGroupByTeam } from './render.js';
 import { syncPaneWidth, refreshCapture } from './capture.js';
 import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag, showAddAgentToBoard, hideAddAgentBoardModal, launchAgentToBoard, exportPersonas, importPersonas, exportTeamTemplates, importTeamTemplates, showDefaultPromptsModal, hideDefaultPromptsModal, resetDefaultPrompt, saveDefaultPrompts } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
@@ -44,6 +44,7 @@ import { checkForUpdates, dismissUpdateToast } from './update_check.js';
 window._coralLoadLiveSessions = loadLiveSessions;
 window.sendCommand = sendCommand;
 window.sendCommandWithTeam = sendCommandWithTeam;
+window.resendInputPrompt = resendInputPrompt;
 window.toggleSendMenu = function(btn) {
     const menu = btn.parentElement.querySelector('.send-btn-menu');
     if (!menu) return;
@@ -292,6 +293,7 @@ window.sleepAllAgents = sleepAllAgents;
 window.wakeAllAgents = wakeAllAgents;
 window.shareAgentTeam = shareAgentTeam;
 window.saveTeamFromSidebar = saveTeamFromSidebar;
+window.toggleGroupByTeam = toggleGroupByTeam;
 window.showConfirmModal = showConfirmModal;
 window.hideConfirmModal = hideConfirmModal;
 window.showAddAgentToBoard = showAddAgentToBoard;

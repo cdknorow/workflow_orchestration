@@ -27,6 +27,10 @@ window.toggleTabletSidebar = toggleTabletSidebar;
 function switchMobileTab(tab) {
     _currentMobileTab = tab;
 
+    // Restore tab bar visibility when switching tabs
+    const tabBar = document.querySelector('.mobile-tab-bar');
+    if (tabBar) tabBar.style.display = 'flex';
+
     // Update tab active states
     document.querySelectorAll('.mobile-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
@@ -208,10 +212,12 @@ export function wrapSelectLiveSession() {
         // Call original
         orig(name, agentType, sessionId);
 
-        // On mobile, hide agent list and show the session view
+        // On mobile, hide agent list and tab bar to show full session view
         if (isMobile()) {
             const agentList = document.getElementById('mobile-agent-list');
             if (agentList) agentList.style.display = 'none';
+            const tabBar = document.querySelector('.mobile-tab-bar');
+            if (tabBar) tabBar.style.display = 'none';
         }
 
         // On tablet, close the sidebar overlay
