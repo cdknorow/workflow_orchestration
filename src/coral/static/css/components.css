@@ -81,9 +81,11 @@
     opacity: 0.5;
 }
 
-/* Message board — container spacing */
+/* Message board — container spacing and max-width */
 #mb-messages {
     padding-left: 20px !important;
+    max-width: 840px;
+    margin: 0 auto;
 }
 
 /* Message board — Slack-style thread layout */

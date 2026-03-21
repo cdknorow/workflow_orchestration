@@ -990,10 +990,9 @@ async def sleep_team(board_name: str):
     count = await store.set_board_sleeping(board_name, sleeping=True)
     if count == 0:
         return {"ok": False, "error": "No sessions found on that board"}
-    # Pause the board so agents don't get nudged about new messages
     from coral.messageboard.api import _paused_projects
     _paused_projects.add(board_name)
-    return {"ok": True, "sessions_affected": count, "board_paused": True}
+    return {"ok": True, "sleeping": True, "sessions_affected": count, "board_paused": True}
 
 
 @router.post("/api/sessions/live/team/{board_name}/wake")
@@ -1003,10 +1002,9 @@ async def wake_team(board_name: str):
     Sets is_sleeping=0 for all sessions on the board and unpauses the board.
     """
     count = await store.set_board_sleeping(board_name, sleeping=False)
-    # Unpause the board
     from coral.messageboard.api import _paused_projects
     _paused_projects.discard(board_name)
-    return {"ok": True, "sessions_affected": count, "board_paused": False}
+    return {"ok": True, "sleeping": False, "sessions_affected": count, "board_paused": False}
 
 
 # ── WebSocket Endpoints ─────────────────────────────────────────────────────

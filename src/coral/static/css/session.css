@@ -85,7 +85,7 @@
     margin-top: 5px;
 }
 
-.session-dot.stale   { background: var(--text-muted); }
+.session-dot.stale    { background: var(--text-muted); }
 .session-dot.sleeping { background: var(--warning); opacity: 0.5; }
 .session-dot.working {
     background: #3b82f6;
