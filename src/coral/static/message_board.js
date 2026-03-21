@@ -487,17 +487,15 @@ function updateSleepUI() {
         btn.textContent = isSleeping ? 'Wake Team' : 'Sleep Team';
         btn.classList.toggle('btn-warning', isSleeping);
     }
-    // Sleep banner
     const banner = document.getElementById('mb-sleep-banner');
     if (banner) {
         banner.style.display = isSleeping ? '' : 'none';
     }
-    // Disable input area when sleeping
     const input = document.getElementById('mb-post-input');
     const sendBtn = document.querySelector('#mb-board .btn-primary');
     if (input) {
         input.disabled = isSleeping;
-        input.placeholder = isSleeping ? 'Team is sleeping...' : 'Post a message as Developer...';
+        input.placeholder = isSleeping ? 'Team is sleeping...' : 'Post a message as Operator...';
     }
     if (sendBtn) {
         sendBtn.disabled = isSleeping;

@@ -641,9 +641,9 @@ class SessionStore(DatabaseManager):
         import json as _json
         conn = await self._get_conn()
         now = datetime.now(timezone.utc).isoformat()
-        # Carry forward flags, prompt, board_name, board_server, and is_sleeping from old session
+        # Carry forward flags, prompt, board_name, and board_server from old session
         old_row = await (await conn.execute(
-            "SELECT flags, prompt, board_name, board_server, icon, is_sleeping FROM live_sessions WHERE session_id = ?", (old_session_id,)
+            "SELECT flags, prompt, board_name, board_server, icon FROM live_sessions WHERE session_id = ?", (old_session_id,)
         )).fetchone()
         if flags is None:
             flags_json = old_row["flags"] if old_row and old_row["flags"] else None
@@ -653,13 +653,12 @@ class SessionStore(DatabaseManager):
         old_board = old_row["board_name"] if old_row else None
         old_board_server = old_row["board_server"] if old_row else None
         old_icon = old_row["icon"] if old_row and "icon" in old_row.keys() else None
-        old_sleeping = old_row["is_sleeping"] if old_row else 0
         await conn.execute("DELETE FROM live_sessions WHERE session_id = ?", (old_session_id,))
         await conn.execute(
             "INSERT OR REPLACE INTO live_sessions "
-            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, is_sleeping, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, old_board_server, old_icon, old_sleeping, now),
+            "(session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags_json, old_prompt, old_board, old_board_server, old_icon, now),
         )
         await conn.commit()
 
@@ -698,7 +697,6 @@ class SessionStore(DatabaseManager):
                     d["flags"] = _json.loads(d["flags"])
                 except (ValueError, TypeError):
                     d["flags"] = None
-            # Normalize is_sleeping to bool for consumers
             d["is_sleeping"] = bool(d.get("is_sleeping", 0))
             results.append(d)
         return results
