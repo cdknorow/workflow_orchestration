@@ -150,9 +150,6 @@
 .session-group-item.sleeping .session-info {
     opacity: 0.5;
 }
-.session-group-item.sleeping .sidebar-kebab-btn {
-    opacity: 0.5;
-}
 
 /* Message board — container spacing and max-width */
 #mb-messages {

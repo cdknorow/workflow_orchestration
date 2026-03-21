@@ -230,6 +230,9 @@
 .session-list li:hover .sidebar-kebab-btn {
     opacity: 1;
 }
+.session-list li.sleeping .sidebar-kebab-btn {
+    opacity: 0.5;
+}
 
 .sidebar-kebab-menu {
     position: fixed;
