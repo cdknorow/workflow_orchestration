@@ -358,8 +358,8 @@ async def kill_session(
         # Unregister from persistent live sessions
         if session_id:
             try:
-                from coral.store import CoralStore
-                _store = CoralStore()
+                from coral.store.registry import get_store
+                _store = get_store()
                 await _store.unregister_live_session(session_id)
             except Exception:
                 pass  # Non-critical

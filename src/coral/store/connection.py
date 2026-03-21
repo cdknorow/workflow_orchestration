@@ -42,6 +42,10 @@ class DatabaseManager:
             await conn.execute("PRAGMA journal_mode=WAL")
             await conn.execute(f"PRAGMA busy_timeout={DB_BUSY_TIMEOUT_MS}")
             await conn.execute("PRAGMA foreign_keys=ON")
+            # Performance pragmas — safe with WAL mode
+            await conn.execute("PRAGMA synchronous=NORMAL")
+            await conn.execute("PRAGMA temp_store=MEMORY")
+            await conn.execute("PRAGMA cache_size=-8000")  # 8 MB
             if not self._schema_ensured:
                 self._schema_ensured = True
                 await self._ensure_schema(conn)

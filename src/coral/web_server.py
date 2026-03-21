@@ -134,8 +134,11 @@ async def lifespan(app: FastAPI):
     dispatcher = WebhookDispatcher(store)
     idle_detector = IdleDetector(store)
 
-    from coral.messageboard.store import MessageBoardStore
-    board_store = MessageBoardStore()
+    from coral.store.registry import get_board_store, set_store, set_board_store
+    set_store(store)
+    board_store = get_board_store()
+    set_board_store(board_store)
+    live_sessions_api.board_store = board_store
     board_notifier = MessageBoardNotifier(board_store)
 
     from coral.config import (
@@ -175,6 +178,20 @@ async def lifespan(app: FastAPI):
 
     update_task = asyncio.create_task(_periodic_update_check())
 
+    # Periodic WAL checkpoint to keep the WAL file small during runtime
+    from coral.config import WAL_CHECKPOINT_INTERVAL_S
+
+    async def _periodic_wal_checkpoint():
+        while True:
+            await asyncio.sleep(WAL_CHECKPOINT_INTERVAL_S)
+            try:
+                conn = await store._get_conn()
+                await conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+            except Exception:
+                log.debug("WAL checkpoint skipped (connection busy)")
+
+    wal_task = asyncio.create_task(_periodic_wal_checkpoint())
+
     # Store indexer and git poller on app state so endpoints can trigger refresh
     app.state.indexer = indexer
     app.state.git_poller = git_poller
@@ -185,6 +202,7 @@ async def lifespan(app: FastAPI):
 
     startup_task.cancel()
     update_task.cancel()
+    wal_task.cancel()
     indexer_task.cancel()
     summarizer_task.cancel()
     git_task.cancel()

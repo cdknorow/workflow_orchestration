@@ -438,14 +438,13 @@ class JobScheduler:
     async def _tag_session(self, session_id: str, tag_name: str) -> None:
         """Ensure a tag exists and apply it to the session."""
         try:
-            from coral.store import CoralStore
-            store = CoralStore()
+            from coral.store.registry import get_store
+            store = get_store()
             tags = await store.list_tags()
             tag = next((t for t in tags if t["name"] == tag_name), None)
             if not tag:
                 tag = await store.create_tag(tag_name, "#f78166")
             await store.add_session_tag(session_id, tag["id"])
-            await store.close()
         except Exception:
             log.exception("Failed to tag session %s as '%s'", session_id, tag_name)
 

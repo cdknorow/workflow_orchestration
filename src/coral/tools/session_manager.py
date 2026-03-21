@@ -93,8 +93,8 @@ async def setup_board_and_prompt(
     # Board subscription (immediate — no delay needed)
     if board_name:
         try:
-            from coral.messageboard.store import MessageBoardStore
-            board_store = MessageBoardStore()
+            from coral.store.registry import get_board_store
+            board_store = get_board_store()
             # Preserve existing receive_mode on re-subscribe (e.g. restart);
             # only set the default if this is a new subscription.
             existing = await board_store.get_subscription(session_name)
@@ -448,8 +448,8 @@ async def _resume_single_session(store, rec, log) -> None:
         # so the agent doesn't re-read old messages.
         if board_name:
             try:
-                from coral.messageboard.store import MessageBoardStore
-                board_store = MessageBoardStore()
+                from coral.store.registry import get_board_store
+                board_store = get_board_store()
                 old_session_name = f"{agent_type}-{sid}"
                 if old_session_name and old_session_name != new_session_name:
                     await board_store.transfer_subscription(board_name, old_session_name, new_session_name)
@@ -661,8 +661,8 @@ async def restart_session(
         await asyncio.sleep(0.3)
 
         # 6. Load persisted flags, prompt, board_name, and board_server from the live session record
-        from coral.store import CoralStore
-        _store = CoralStore()
+        from coral.store.registry import get_store
+        _store = get_store()
         stored_flags = []
         stored_prompt = None
         stored_board = None
@@ -701,9 +701,8 @@ async def restart_session(
         _prompt_overrides = None
         if stored_board:
             try:
-                from coral.store.sessions import SessionStore
-                _ps = SessionStore()
-                _us = await _ps.get_settings()
+                from coral.store.registry import get_store as _get_store
+                _us = await _get_store().get_settings()
                 _prompt_overrides = {
                     k: v for k, v in _us.items()
                     if k in ("default_prompt_orchestrator", "default_prompt_worker")
@@ -848,9 +847,8 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
             _prompt_overrides = None
             if board_name:
                 try:
-                    from coral.store.sessions import SessionStore
-                    _ps = SessionStore()
-                    _us = await _ps.get_settings()
+                    from coral.store.registry import get_store as _get_store
+                    _us = await _get_store().get_settings()
                     _prompt_overrides = {
                         k: v for k, v in _us.items()
                         if k in ("default_prompt_orchestrator", "default_prompt_worker")
@@ -875,8 +873,8 @@ async def launch_claude_session(working_dir: str, agent_type: str = "claude", di
 
         # Store display_name and register live session
         try:
-            from coral.store import CoralStore
-            _store = CoralStore()
+            from coral.store.registry import get_store
+            _store = get_store()
             if display_name:
                 await _store.set_display_name(session_id, display_name)
             await _store.register_live_session(

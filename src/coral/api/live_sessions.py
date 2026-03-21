@@ -52,7 +52,7 @@ router = APIRouter()
 store: CoralStore = None  # type: ignore[assignment]
 jsonl_reader: JsonlSessionReader = None  # type: ignore[assignment]
 schedule_store: ScheduleStore = None  # type: ignore[assignment]
-board_store: MessageBoardStore = MessageBoardStore()
+board_store: MessageBoardStore = None  # type: ignore[assignment]  # set by web_server.py
 
 # Track last-known status/summary per session_id so we only emit events on change.
 _last_known: dict[str, dict[str, str | None]] = {}

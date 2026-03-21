@@ -155,8 +155,8 @@ async def get_history_sessions(
     board_sessions: list[dict] = []
     if type in ("all", "group"):
         try:
-            from coral.messageboard.store import MessageBoardStore
-            board_store = MessageBoardStore()
+            from coral.store.registry import get_board_store
+            board_store = get_board_store()
             projects = await board_store.list_projects_enriched()
 
             # Filter by text search if provided
