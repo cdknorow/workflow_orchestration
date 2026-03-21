@@ -984,27 +984,70 @@ async def get_sleep_status(board_name: str):
 async def sleep_team(board_name: str):
     """Put all agents on a board to sleep.
 
-    Sets is_sleeping=1 for all sessions on the board and pauses the board
-    so no messages are delivered to sleeping agents.
+    Sets is_sleeping=1 for all sessions on the board, pauses the board,
+    and kills the tmux sessions to free resources.  DB records are kept
+    so wake can relaunch them.
     """
-    count = await store.set_board_sleeping(board_name, sleeping=True)
-    if count == 0:
+    all_sessions = await store.get_all_live_sessions()
+    board_sessions = [s for s in all_sessions if s.get("board_name") == board_name]
+    if not board_sessions:
         return {"ok": False, "error": "No sessions found on that board"}
+
+    count = await store.set_board_sleeping(board_name, sleeping=True)
+
+    # Pause the board
     from coral.messageboard.api import _paused_projects
     _paused_projects.add(board_name)
-    return {"ok": True, "sleeping": True, "sessions_affected": count, "board_paused": True}
+
+    # Kill tmux sessions to free resources
+    killed = 0
+    for sess in board_sessions:
+        try:
+            err = await kill_session(
+                sess["agent_name"],
+                agent_type=sess.get("agent_type"),
+                session_id=sess["session_id"],
+            )
+            if not err:
+                killed += 1
+        except Exception:
+            log.debug("Failed to kill session %s during sleep", sess["session_id"][:8])
+
+    return {"ok": True, "sleeping": True, "sessions_affected": count, "sessions_killed": killed, "board_paused": True}
 
 
 @router.post("/api/sessions/live/team/{board_name}/wake")
 async def wake_team(board_name: str):
     """Wake all agents on a board.
 
-    Sets is_sleeping=0 for all sessions on the board and unpauses the board.
+    Relaunches sleeping sessions, sets is_sleeping=0, and unpauses the board.
     """
-    count = await store.set_board_sleeping(board_name, sleeping=False)
+    from coral.tools.session_manager import _resume_single_session
+
+    all_sessions = await store.get_all_live_sessions()
+    sleeping_sessions = [
+        s for s in all_sessions
+        if s.get("board_name") == board_name and s.get("is_sleeping")
+    ]
+
+    # Relaunch sleeping sessions concurrently
+    relaunched = 0
+    for sess in sleeping_sessions:
+        try:
+            # Override is_sleeping so _resume_single_session sends prompts
+            # and sets up board normally (it's being woken)
+            wake_rec = {**sess, "is_sleeping": False}
+            await _resume_single_session(store, wake_rec, log)
+            relaunched += 1
+        except Exception:
+            log.exception("Failed to wake session %s", sess["session_id"][:8])
+
+    # Clear sleeping state and unpause board
+    await store.set_board_sleeping(board_name, sleeping=False)
     from coral.messageboard.api import _paused_projects
     _paused_projects.discard(board_name)
-    return {"ok": True, "sleeping": False, "sessions_affected": count, "board_paused": False}
+
+    return {"ok": True, "sleeping": False, "sessions_relaunched": relaunched, "board_paused": False}
 
 
 # ── WebSocket Endpoints ─────────────────────────────────────────────────────

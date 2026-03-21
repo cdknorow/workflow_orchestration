@@ -314,6 +314,25 @@ export async function killBoard(boardName) {
     );
 }
 
+export async function toggleTeamSleep(boardName, action) {
+    if (action === 'sleep' && !confirm(`Put all agents on "${boardName}" to sleep?`)) return;
+    try {
+        const resp = await fetch(`/api/sessions/live/team/${encodeURIComponent(boardName)}/${action}`, {
+            method: 'POST',
+        });
+        const data = await resp.json();
+        // Update local state
+        const sleeping = !!data.sleeping;
+        for (const s of state.liveSessions) {
+            if (s.board_project === boardName) s.sleeping = sleeping;
+        }
+        renderLiveSessions(state.liveSessions);
+        showToast(sleeping ? `Team "${boardName}" is now sleeping` : `Team "${boardName}" is awake`);
+    } catch (e) {
+        showToast('Failed to toggle team sleep', true);
+    }
+}
+
 export async function shareAgentTeam(boardName) {
     // Find all sessions on this board
     const boardSessions = (state.liveSessions || []).filter(s => s.board_project === boardName);
@@ -560,6 +579,9 @@ export function renderLiveSessions(sessions) {
                 const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
                 const boardLink = `<button class="group-board-link" onclick="event.stopPropagation(); selectBoardProject('${escapeAttr(boardName)}')" title="View board: ${escapeAttr(boardName)}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H5l-3 3V3z"/></svg></button>`;
                 const boardWorkDir = boardSessions[0]?.working_directory || '';
+                const boardIsSleeping = boardSessions.some(s => s.sleeping);
+                const sleepLabel = boardIsSleeping ? 'Wake Team' : 'Sleep Team';
+                const sleepAction = boardIsSleeping ? 'wake' : 'sleep';
                 const bKebab = `<div class="sidebar-kebab-wrapper group-kebab">
                     <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
                     <div class="sidebar-kebab-menu" style="display:none">
@@ -574,6 +596,10 @@ export function renderLiveSessions(sessions) {
                         <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); shareAgentTeam('${escapeAttr(boardName)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v1a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1"/><polyline points="8 3 8 10"/><polyline points="5 6 8 3 11 6"/></svg>
                             Share Team
+                        </button>
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); toggleTeamSleep('${escapeAttr(boardName)}', '${sleepAction}')">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 0 10 5 5 0 0 1 0-10z"/></svg>
+                            ${sleepLabel}
                         </button>
                         <hr class="overflow-menu-divider">
                         <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killBoard('${escapeAttr(boardName)}')">

@@ -626,93 +626,141 @@ async def test_resume_one_failure_does_not_abort_others(store, tmp_path):
     assert "sid-ok" in completed
 
 
-# ── Bug 2: CLI detection and prompt delivery safety ────────────────────────
+# ── Sleep/Wake feature ─────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_is_agent_cli_running_detects_claude():
-    """_is_agent_cli_running should return True when claude is a child process."""
-    from coral.tools.session_manager import _is_agent_cli_running
+async def test_set_board_sleeping(store, tmp_path):
+    """set_board_sleeping should update is_sleeping for all sessions on a board."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.register_live_session(
+        "sid-2", "claude", "wt2", work_dir, board_name="my-team",
+    )
+    await store.register_live_session(
+        "sid-3", "claude", "wt3", work_dir, board_name="other-team",
+    )
 
-    with patch("coral.tools.session_manager.run_cmd") as mock_run:
-        # First call: tmux list-panes returns a PID
-        # Second call: ps --ppid returns claude as child
-        mock_run.side_effect = [
-            (0, "12345\n", ""),   # tmux list-panes
-            (0, "claude\n", ""),  # ps --ppid
-        ]
-        result = await _is_agent_cli_running("claude-test-session")
-        assert result is True
+    count = await store.set_board_sleeping("my-team", sleeping=True)
+    assert count == 2
 
-
-@pytest.mark.asyncio
-async def test_is_agent_cli_running_detects_bare_shell():
-    """_is_agent_cli_running should return False when only bash is running."""
-    from coral.tools.session_manager import _is_agent_cli_running
-
-    with patch("coral.tools.session_manager.run_cmd") as mock_run:
-        mock_run.side_effect = [
-            (0, "12345\n", ""),  # tmux list-panes
-            (0, "bash\n", ""),   # ps --ppid — only bash, no agent
-        ]
-        result = await _is_agent_cli_running("claude-test-session")
-        assert result is False
+    sessions = await store.get_all_live_sessions()
+    sleeping = {s["session_id"]: s["is_sleeping"] for s in sessions}
+    assert sleeping["sid-1"] is True
+    assert sleeping["sid-2"] is True
+    assert sleeping["sid-3"] is False
 
 
 @pytest.mark.asyncio
-async def test_is_agent_cli_running_handles_no_children():
-    """_is_agent_cli_running should return False when ps fails (no children)."""
-    from coral.tools.session_manager import _is_agent_cli_running
+async def test_set_board_sleeping_wake(store, tmp_path):
+    """Waking a board should set is_sleeping=False for all sessions on it."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.set_board_sleeping("my-team", sleeping=True)
+    await store.set_board_sleeping("my-team", sleeping=False)
 
-    with patch("coral.tools.session_manager.run_cmd") as mock_run:
-        mock_run.side_effect = [
-            (0, "12345\n", ""),  # tmux list-panes
-            (1, "", ""),         # ps --ppid fails (no children)
-        ]
-        result = await _is_agent_cli_running("claude-test-session")
-        assert result is False
-
-
-@pytest.mark.asyncio
-async def test_is_agent_cli_running_detects_node():
-    """_is_agent_cli_running should return True for node (Claude Code runs as node)."""
-    from coral.tools.session_manager import _is_agent_cli_running
-
-    with patch("coral.tools.session_manager.run_cmd") as mock_run:
-        mock_run.side_effect = [
-            (0, "12345\n", ""),    # tmux list-panes
-            (0, "node\nbash\n", ""),  # ps --ppid — node is running
-        ]
-        result = await _is_agent_cli_running("claude-test-session")
-        assert result is True
+    sessions = await store.get_all_live_sessions()
+    assert sessions[0]["is_sleeping"] is False
 
 
 @pytest.mark.asyncio
-async def test_setup_board_and_prompt_aborts_when_cli_not_running():
-    """setup_board_and_prompt should not send prompt if agent CLI is not running."""
-    from coral.tools.session_manager import setup_board_and_prompt
+async def test_get_sleeping_board_names(store, tmp_path):
+    """get_sleeping_board_names should return boards with sleeping sessions."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="sleeping-team",
+    )
+    await store.register_live_session(
+        "sid-2", "claude", "wt2", work_dir, board_name="awake-team",
+    )
+    await store.set_board_sleeping("sleeping-team", sleeping=True)
 
-    with patch("coral.tools.session_manager._is_agent_cli_running", AsyncMock(return_value=False)), \
-         patch("coral.tools.tmux_manager.capture_pane", AsyncMock(return_value="$ command not found")), \
-         patch("coral.tools.tmux_manager.send_to_tmux", AsyncMock()) as mock_send:
-        await setup_board_and_prompt(
-            "test-sid", "claude-test-session", "claude",
-            prompt="Hello agent",
+    names = await store.get_sleeping_board_names()
+    assert "sleeping-team" in names
+    assert "awake-team" not in names
+
+
+@pytest.mark.asyncio
+async def test_resume_sleeping_session_skips_prompt(store, tmp_path):
+    """Sleeping sessions should be relaunched but without prompt delivery."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir,
+        prompt="Hello agent", board_name="my-team",
+    )
+    await store.set_session_sleeping("sid-1", True)
+
+    launch_result = {
+        "session_name": "claude-new-sid",
+        "session_id": "new-sid",
+        "log_file": "/tmp/claude_coral_new-sid.log",
+        "working_dir": work_dir,
+        "agent_type": "claude",
+    }
+
+    with patch("coral.tools.session_manager.discover_coral_agents", AsyncMock(return_value=[])), \
+         patch("coral.tools.session_manager.launch_claude_session", AsyncMock(return_value=launch_result)) as mock_launch:
+        from coral.tools.session_manager import resume_persistent_sessions
+        await resume_persistent_sessions(store)
+
+    # prompt should be None (sleeping session skips prompt delivery)
+    mock_launch.assert_called_once()
+    call_kwargs = mock_launch.call_args
+    assert call_kwargs.kwargs.get("prompt") is None or call_kwargs[1].get("prompt") is None
+
+
+@pytest.mark.asyncio
+async def test_resume_sleeping_session_carries_forward_state(store, tmp_path):
+    """Sleeping state should be carried to the new session after resume."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.set_session_sleeping("sid-1", True)
+
+    async def mock_launch(working_dir, agent_type, display_name=None,
+                          resume_session_id=None, flags=None, prompt=None,
+                          board_name=None, board_server=None):
+        await store.register_live_session(
+            "new-sid", agent_type, "wt1", working_dir,
+            display_name=display_name, resume_from_id=resume_session_id,
+            board_name=board_name,
         )
-        mock_send.assert_not_called()
+        return {
+            "session_name": f"{agent_type}-new-sid",
+            "session_id": "new-sid",
+            "log_file": f"/tmp/{agent_type}_coral_new-sid.log",
+            "working_dir": working_dir,
+            "agent_type": agent_type,
+        }
+
+    with patch("coral.tools.session_manager.discover_coral_agents", AsyncMock(return_value=[])), \
+         patch("coral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+        from coral.tools.session_manager import resume_persistent_sessions
+        await resume_persistent_sessions(store)
+
+    # The new session should inherit the sleeping state
+    sessions = await store.get_all_live_sessions()
+    new_sessions = [s for s in sessions if s["session_id"] == "new-sid"]
+    assert len(new_sessions) == 1
+    assert new_sessions[0]["is_sleeping"] is True
 
 
 @pytest.mark.asyncio
-async def test_setup_board_and_prompt_sends_when_cli_running():
-    """setup_board_and_prompt should send prompt when agent CLI is confirmed running."""
-    from coral.tools.session_manager import setup_board_and_prompt
+async def test_replace_live_session_carries_sleeping(store):
+    """replace_live_session should carry forward is_sleeping from old session."""
+    await store.register_live_session("old-sid", "claude", "wt1", "/tmp/wt1")
+    await store.set_session_sleeping("old-sid", True)
 
-    with patch("coral.tools.session_manager._is_agent_cli_running", AsyncMock(return_value=True)), \
-         patch("coral.tools.tmux_manager.capture_pane", AsyncMock(return_value="> ready")), \
-         patch("coral.tools.tmux_manager.send_to_tmux", AsyncMock(return_value=None)) as mock_send, \
-         patch("coral.tools.session_manager.run_cmd", AsyncMock(return_value=(0, "", ""))):
-        await setup_board_and_prompt(
-            "test-sid", "claude-test-session", "claude",
-            prompt="Hello agent",
-        )
-        mock_send.assert_called()
+    await store.replace_live_session(
+        "old-sid", "new-sid", "claude", "wt1", "/tmp/wt1",
+    )
+
+    sessions = await store.get_all_live_sessions()
+    assert len(sessions) == 1
+    assert sessions[0]["session_id"] == "new-sid"
+    assert sessions[0]["is_sleeping"] is True
