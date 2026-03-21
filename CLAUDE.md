@@ -1,134 +1,100 @@
-# CLAUDE.md - Project Guide
+# CLAUDE.md - Coral Go Parity Project
 
-## Project Overview
-**Coral** is a multi-agent orchestration system for managing AI coding agents (Claude and Gemini) running in parallel git worktrees using tmux. It features a web dashboard, real-time logging, complete session history with FTS5 search, git state polling, task management, scheduled jobs, webhook notifications, agent notes, and event tracking.
+## Mission
 
-## Project Structure Highlights
-- `src/coral/`: Main package directory
-  - `launch_agents.sh`: Bash script to discover worktrees, launch tmux sessions, and start the web server.
-  - `launch.py`: Launcher entry point for the `launch-coral` CLI command.
-  - `web_server.py`: FastAPI web dashboard (REST + WebSocket endpoints).
-  - `PROTOCOL.md`: Protocol for agents to follow (status/summary reporting).
-  - `agents/`: Agent implementations (`base.py`, `claude.py`, `gemini.py`).
-  - `api/`: REST API route modules (`live_sessions.py`, `history.py`, `system.py`, `tasks.py`, `schedule.py`, `uploads.py`, `webhooks.py`).
-  - `store/`: SQLite storage layer (`connection.py`, `sessions.py`, `git.py`, `tasks.py`, `schedule.py`, `webhooks.py`).
-  - `tools/`: Core utilities (`session_manager.py`, `tmux_manager.py`, `log_streamer.py`, `pulse_detector.py`, `jsonl_reader.py`, `cron_parser.py`, `run_callback.py`, `utils.py`).
-  - `background_tasks/`: Background services (`session_indexer.py`, `auto_summarizer.py`, `git_poller.py`, `idle_detector.py`, `scheduler.py`, `webhook_dispatcher.py`).
-  - `hooks/`: Claude Code integration hooks (`task_state.py`, `agentic_state.py`, `utils.py`).
-  - `messageboard/`: Inter-agent message board (`store.py`, `api.py`, `app.py`, `cli.py`, `AGENT_GUIDE.md`).
-  - `templates/`: Jinja2 HTML templates (`index.html`, `diff.html`, `includes/`).
-  - `static/`: JavaScript, CSS, images, and favicon assets.
-- `tests/`: Test suite (Python and JavaScript tests).
-- `docs/`: MkDocs documentation site (Material theme), published at https://cdknorow.github.io/coral/.
-- `DEVELOP.md`: Detailed developer guide containing full project structure, API endpoints, and database schema.
-- `pyproject.toml`: Project configuration and dependencies.
+This repo's sole purpose is to bring `coral-go/` to **full feature parity** with the Python reference implementation in the `coral` submodule.
 
-## Key Commands
+**CRITICAL RULES:**
+1. **NEVER modify anything inside the `coral/` submodule.** It is the read-only source of truth.
+2. Only modify code under `coral-go/` and `tests/`.
+3. When in doubt about expected behavior, read the Python implementation in `coral/` — it is authoritative.
 
-### Setup & Installation
+## How to Validate Parity
+
+### Parity Test Harness
+The test harness spins up both Python and Go backends, runs identical API calls against each, and compares responses and database state.
+
 ```bash
-# Create a virtual env in the worktree and install
-python3 -m venv .venv
-.venv/bin/pip install -e .
-.venv/bin/pip install pytest pytest-asyncio httpx
+# Run the full parity harness (requires both Python and Go servers)
+python tests/parity_harness.py
+
+# Run just the API scenario tests against already-running servers
+python tests/parity/test_scenarios.py <py-port> <go-port>
 ```
 
-### Running Tests
+### DB Compare Tool
+Compares SQLite databases created by both backends after a test run.
+
 ```bash
-# Always use the worktree venv to run tests
-.venv/bin/python -m pytest tests/ -v
+cd coral-go && go build -o db-compare ./cmd/db-compare/
+./db-compare <python-db> <go-db> [board-py-db] [board-go-db]
 ```
 
-### Launching the Coral
+### Go Unit Tests
 ```bash
-# Launch Claude agents and web dashboard for worktrees in the current directory
-./src/coral/launch_agents.sh .
-
-# Launch Gemini agents from a specific path
-./src/coral/launch_agents.sh <path-to-root> gemini
-
-# Override the web dashboard port (default: 8420)
-CORAL_PORT=9000 ./src/coral/launch_agents.sh .
+cd coral-go && go test ./...
 ```
 
-### Running the Web Dashboard (standalone)
-```bash
-# Start the web dashboard (default: http://localhost:8420)
-coral
+## Project Structure
 
-# Custom host/port
-coral --host 127.0.0.1 --port 9000
+```
+coral/                  # Python reference implementation (SUBMODULE — DO NOT MODIFY)
+coral-go/               # Go rewrite (this is what you work on)
+  cmd/                  # CLI entry points (coral, launch-coral, coral-board, db-compare)
+  internal/             # Core packages
+    agent/              # Agent implementations (claude, gemini)
+    background/         # Background services (git poller, indexer, scheduler, etc.)
+    board/              # Message board store
+    config/             # Configuration
+    jsonl/              # JSONL log reader
+    license/            # License checking
+    pulse/              # Pulse event parser
+    ptymanager/         # PTY/tmux session management
+    server/             # HTTP server, routes, frontend assets
+    store/              # SQLite storage layer
+    tmux/               # Tmux client
+  go.mod / go.sum       # Go module dependencies
+tests/                  # Parity test harness
+  parity_harness.py     # Main harness — starts both servers, runs scenarios, compares DBs
+  parity/
+    test_scenarios.py   # API scenario tests (tags, settings, webhooks, board, etc.)
+Casks/                  # Homebrew Cask definition
+Formula/                # Homebrew Formula
+scripts/                # macOS build script
+icons/                  # App icons and screenshots
 ```
 
-### Managing Agents
-- **Attach to tmux (Claude):** `tmux attach -t claude-agent-1`
-- **Attach to tmux (Gemini):** `tmux attach -t gemini-agent-1`
-- **Attach to web server:** `tmux attach -t coral-web-server`
-- **Switch window:** `Ctrl+b n` (next) / `Ctrl+b p` (previous)
-- **Detach tmux:** `Ctrl+b d`
+## Workflow for Adding Parity
 
-## Agent Protocol
-All agent events use the `||PULSE:<EVENT_TYPE> <payload>||` format. The dashboard parses these from agent output in real time.
+1. Identify a feature or endpoint in `coral/` (the Python submodule) that is missing or differs in `coral-go/`.
+2. Read the Python implementation to understand expected behavior.
+3. Implement or fix the Go version under `coral-go/`.
+4. Add or update parity test scenarios in `tests/parity/test_scenarios.py`.
+5. Run the parity harness to confirm both backends behave identically.
+6. Run `go test ./...` in `coral-go/` to ensure no regressions.
 
-- `||PULSE:STATUS <Short Description>||`: Current task (emit before/after each subtask).
-- `||PULSE:SUMMARY <Goal Description>||`: High-level goal (emit once at start or when goal changes).
-- `||PULSE:CONFIDENCE <Low|High> <specific reason>||`: Flag uncertainty (`Low`) or non-obvious confidence (`High`) with a specific reason.
+## Key Reference Points in the Python Submodule
 
-## Message Board & Agent Teams
+When implementing Go parity, consult these files in `coral/`:
+- `coral/src/coral/web_server.py` — all API routes and their behavior
+- `coral/src/coral/api/` — route modules (the expected request/response contracts)
+- `coral/src/coral/store/` — SQLite schema and queries (the expected DB structure)
+- `coral/src/coral/background_tasks/` — background service behavior
+- `coral/src/coral/messageboard/` — message board store and API
+- `coral/src/coral/tools/` — core utilities
 
-Agents communicate via a shared **message board** scoped to a project. The `+New` modal offers three launch types:
+## Development
 
-- **Agent Team**: Launch multiple agents on a shared board with per-agent roles and behavior prompts.
-- **AI Agent**: Launch a single agent, optionally with an initial prompt and board subscription.
-- **Terminal**: Launch a plain shell session.
-
-### Message Board CLI (`coral-board`)
-Agents use the `coral-board` CLI (not raw HTTP) to communicate:
+### Building
 ```bash
-coral-board join myproject --as "Backend Dev"   # subscribe to a board
-coral-board read                                 # read new messages from teammates
-coral-board post "Auth middleware is done."      # post a message
-coral-board read --last 5                        # see 5 most recent messages
-coral-board subscribers                          # see who is on the board
-coral-board leave                                # leave the board
+cd coral-go && go build -o coral ./cmd/coral/
 ```
 
-See `src/coral/messageboard/AGENT_GUIDE.md` for the full agent guide.
+### Running
+```bash
+cd coral-go && go run ./cmd/coral/ --host 127.0.0.1 --port 8420
+```
 
-### Persistence
-- `prompt` and `board_name` are stored in the `live_sessions` DB table.
-- On session restart, the agent is re-subscribed to the board and re-sent its prompt.
-- The Info modal shows the prompt and a clickable link to the message board.
-
-### REST API (mounted at `/api/board`)
-- `GET /projects` — list all boards
-- `POST /{project}/subscribe` — subscribe a session
-- `POST /{project}/messages` — post a message
-- `GET /{project}/messages/all?limit=200` — list all messages (no cursor)
-- `GET /{project}/messages?session_id=X` — read new messages (cursor-based, for agents)
-
-## Releasing
-
-Use the `/release <version>` skill to publish a new version. It handles changelog updates,
-version bumping, testing, PyPI upload, and GitHub Release creation. See `.claude/skills/release.md`
-for the full workflow.
-
-**Release checklist (manual reference):**
-1. Update version in `pyproject.toml`
-2. Add release section to `CHANGELOG.md` (Keep a Changelog format)
-3. Commit, push, merge to main
-4. Create GitHub Release with tag `vX.Y.Z` — paste the CHANGELOG section as release notes
-5. GitHub Actions (`.github/workflows/publish.yml`) builds and publishes to PyPI automatically via trusted publishing
-
-## Development Guidelines
-- **Build System:** Setuptools with `pyproject.toml`.
-- **Dependencies:** `fastapi`, `uvicorn`, `jinja2`, `aiosqlite`, `httpx`, `python-multipart` (Python 3.8+).
-- **Database:** SQLite (`~/.coral/sessions.db`) using WAL mode.
-- **Logs:** Agents stream output to `/tmp/<agent_type>_coral_<folder_name>.log` via `tmux pipe-pane`.
-- **Entry Points:** `coral` / `coral-dashboard` (web server), `launch-coral` (agent launcher), `coral-hook-task-sync` (task sync hook), `coral-hook-agentic-state` (agentic state hook), `coral-board` (message board CLI).
-
-## Documentation
-- Documentation uses MkDocs with Material theme, configured in `docs/mkdocs.yml`.
-- Local preview: `cd docs && mkdocs serve`
-- Deploy to GitHub Pages: `cd docs && mkdocs gh-deploy`
-- Published at https://cdknorow.github.io/coral/
+### Database
+- SQLite with WAL mode, stored at `~/.coral/sessions.db` (matches Python)
+- Message board DB at `~/.coral/messageboard.db`
