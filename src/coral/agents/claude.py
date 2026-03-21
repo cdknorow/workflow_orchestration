@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from coral.agents.base import BaseAgent, ExtractedSession
+from coral.agents.base import BaseAgent, ExtractedSession, discover_skills
 from coral.hooks.utils import resolve_session_id, truncate
 from coral.tools.utils import HISTORY_PATH
 
@@ -141,6 +141,51 @@ class ClaudeAgent(BaseAgent):
     @property
     def history_glob_pattern(self) -> str:
         return "*.jsonl"
+
+    def available_commands(self, working_dir: str | None = None) -> list[dict[str, str]]:
+        builtins = [
+            {"name": "compact", "command": "/compact", "description": "Compress conversation history"},
+            {"name": "clear", "command": "/clear", "description": "Clear conversation and start fresh"},
+            {"name": "help", "command": "/help", "description": "Show available commands"},
+            {"name": "cost", "command": "/cost", "description": "Show token usage and cost"},
+            {"name": "review", "command": "/review", "description": "Review code changes"},
+            {"name": "bug", "command": "/bug", "description": "Report a bug"},
+            {"name": "init", "command": "/init", "description": "Initialize project CLAUDE.md"},
+            {"name": "memory", "command": "/memory", "description": "Edit CLAUDE.md memory files"},
+            {"name": "status", "command": "/status", "description": "Show account and session info"},
+            {"name": "doctor", "command": "/doctor", "description": "Check health of Claude Code"},
+            {"name": "config", "command": "/config", "description": "Open settings configuration"},
+            {"name": "permissions", "command": "/permissions", "description": "View or update permissions"},
+            {"name": "mcp", "command": "/mcp", "description": "Manage MCP server connections"},
+            {"name": "vim", "command": "/vim", "description": "Toggle vim keybindings"},
+            {"name": "terminal-setup", "command": "/terminal-setup", "description": "Install Shift+Enter terminal integration"},
+            {"name": "login", "command": "/login", "description": "Authenticate with Anthropic"},
+            {"name": "logout", "command": "/logout", "description": "Sign out of current account"},
+            {"name": "context", "command": "/context", "description": "Show context window usage"},
+            {"name": "model", "command": "/model", "description": "Switch AI model"},
+            {"name": "fast", "command": "/fast", "description": "Toggle fast output mode"},
+            {"name": "diff", "command": "/diff", "description": "View changes made in session"},
+            {"name": "plan", "command": "/plan", "description": "Enter plan mode"},
+            {"name": "effort", "command": "/effort", "description": "Set reasoning effort level"},
+            {"name": "theme", "command": "/theme", "description": "Change color theme"},
+            {"name": "resume", "command": "/resume", "description": "Resume a previous session"},
+            {"name": "export", "command": "/export", "description": "Export conversation as text"},
+            {"name": "copy", "command": "/copy", "description": "Copy last response to clipboard"},
+            {"name": "rename", "command": "/rename", "description": "Rename current session"},
+            {"name": "pr-comments", "command": "/pr-comments", "description": "Fetch GitHub PR comments"},
+            {"name": "hooks", "command": "/hooks", "description": "View hook configurations"},
+            {"name": "ide", "command": "/ide", "description": "Manage IDE integrations"},
+            {"name": "tasks", "command": "/tasks", "description": "List and manage background tasks"},
+            {"name": "skills", "command": "/skills", "description": "List available skills"},
+            {"name": "sandbox", "command": "/sandbox", "description": "Toggle sandbox mode"},
+            {"name": "usage", "command": "/usage", "description": "Show plan usage and rate limits"},
+            {"name": "rewind", "command": "/rewind", "description": "Rewind to earlier conversation point"},
+            {"name": "voice", "command": "/voice", "description": "Toggle voice dictation"},
+            {"name": "exit", "command": "/exit", "description": "Exit Claude Code"},
+        ]
+        skills = discover_skills(working_dir)
+        builtin_names = {c["name"] for c in builtins}
+        return builtins + [s for s in skills if s["name"] not in builtin_names]
 
     def build_launch_command(
         self,
