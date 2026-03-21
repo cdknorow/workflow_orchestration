@@ -1,0 +1,221 @@
+package routes
+
+import (
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/cdknorow/coral/internal/background"
+	"github.com/cdknorow/coral/internal/config"
+	"github.com/cdknorow/coral/internal/store"
+)
+
+// TasksHandler handles one-shot task run endpoints.
+type TasksHandler struct {
+	sched     *store.ScheduleStore
+	cfg       *config.Config
+	scheduler *background.JobScheduler
+}
+
+func NewTasksHandler(db *store.DB, cfg *config.Config) *TasksHandler {
+	return &TasksHandler{
+		sched: store.NewScheduleStore(db),
+		cfg:   cfg,
+	}
+}
+
+// SetScheduler injects the job scheduler for task launching/killing.
+func (h *TasksHandler) SetScheduler(s *background.JobScheduler) {
+	h.scheduler = s
+}
+
+// SubmitTask creates a one-shot task run.
+// POST /api/tasks/run
+func (h *TasksHandler) SubmitTask(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Prompt           string `json:"prompt"`
+		RepoPath         string `json:"repo_path"`
+		AgentType        string `json:"agent_type"`
+		BaseBranch       string `json:"base_branch"`
+		CreateWorktree   *bool  `json:"create_worktree"`
+		MaxDurationS     int    `json:"max_duration_s"`
+		CleanupWorktree  *bool  `json:"cleanup_worktree"`
+		Flags            string `json:"flags"`
+		DisplayName      string `json:"display_name"`
+		WebhookURL       string `json:"webhook_url"`
+		AutoAccept       bool   `json:"auto_accept"`
+		MaxAutoAccepts   int    `json:"max_auto_accepts"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if strings.TrimSpace(body.Prompt) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "'prompt' is required"})
+		return
+	}
+	if strings.TrimSpace(body.RepoPath) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "'repo_path' is required"})
+		return
+	}
+	if info, err := os.Stat(body.RepoPath); err != nil || !info.IsDir() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo_path '" + body.RepoPath + "' does not exist"})
+		return
+	}
+
+	// Apply defaults
+	if body.AgentType == "" {
+		body.AgentType = "claude"
+	}
+	if body.BaseBranch == "" {
+		body.BaseBranch = "main"
+	}
+	if body.MaxDurationS == 0 {
+		body.MaxDurationS = 3600
+	}
+	if body.MaxAutoAccepts == 0 {
+		body.MaxAutoAccepts = 10
+	}
+
+	// Auto-accept flag injection
+	flags := strings.TrimSpace(body.Flags)
+	if body.AutoAccept {
+		skipFlag := "--dangerously-skip-permissions"
+		if !strings.Contains(flags, skipFlag) {
+			flags = strings.TrimSpace(skipFlag + " " + flags)
+		}
+	}
+
+	createWT := true
+	if body.CreateWorktree != nil {
+		createWT = *body.CreateWorktree
+	}
+	cleanupWT := true
+	if body.CleanupWorktree != nil {
+		cleanupWT = *body.CleanupWorktree
+	}
+
+	launchConfig := map[string]interface{}{
+		"repo_path":        body.RepoPath,
+		"base_branch":      body.BaseBranch,
+		"agent_type":       body.AgentType,
+		"prompt":           body.Prompt,
+		"display_name":     body.DisplayName,
+		"flags":            flags,
+		"max_duration_s":   float64(body.MaxDurationS),
+		"cleanup_worktree": cleanupWT,
+		"create_worktree":  createWT,
+		"webhook_url":      body.WebhookURL,
+		"auto_accept":      body.AutoAccept,
+		"max_auto_accepts": float64(body.MaxAutoAccepts),
+	}
+
+	if h.scheduler != nil {
+		runID, err := h.scheduler.FireOneshot(r.Context(), launchConfig)
+		if err != nil {
+			if _, ok := err.(*background.ConcurrencyLimitError); ok {
+				writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "status": "pending"})
+		return
+	}
+
+	// Fallback: just create a DB record if no scheduler is wired
+	now := store.NowUTC()
+	var webhookURL, displayName *string
+	if body.WebhookURL != "" {
+		webhookURL = &body.WebhookURL
+	}
+	if body.DisplayName != "" {
+		displayName = &body.DisplayName
+	}
+	runID, err := h.sched.CreateOneshotRun(r.Context(), now, displayName, webhookURL)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "status": "pending"})
+}
+
+// GetTaskStatus returns the status of a one-shot run.
+// GET /api/tasks/runs/{runID}
+func (h *TasksHandler) GetTaskStatus(w http.ResponseWriter, r *http.Request) {
+	runID, _ := strconv.ParseInt(chi.URLParam(r, "runID"), 10, 64)
+	run, err := h.sched.GetScheduledRun(r.Context(), runID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "run not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
+// KillTask kills a running one-shot task.
+// POST /api/tasks/runs/{runID}/kill
+func (h *TasksHandler) KillTask(w http.ResponseWriter, r *http.Request) {
+	runID, _ := strconv.ParseInt(chi.URLParam(r, "runID"), 10, 64)
+
+	if h.scheduler != nil {
+		if !h.scheduler.KillRun(r.Context(), runID) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Run not found or not active"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+
+	// Fallback: just update DB
+	run, err := h.sched.GetScheduledRun(r.Context(), runID)
+	if err != nil || run == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Run not found or not active"})
+		return
+	}
+	h.sched.UpdateScheduledRun(r.Context(), runID, map[string]interface{}{
+		"status":      "killed",
+		"exit_reason": "user_cancelled",
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// ListTasks returns recent one-shot runs.
+// GET /api/tasks/runs
+func (h *TasksHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
+	limit := queryInt(r, "limit", 50)
+	if limit > 200 {
+		limit = 200
+	}
+	status := r.URL.Query().Get("status")
+	var statusPtr *string
+	if status != "" {
+		statusPtr = &status
+	}
+	runs, err := h.sched.ListOneshotRuns(r.Context(), limit, statusPtr)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if runs == nil {
+		runs = []store.ScheduledRun{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+}
+
+// ListActiveRuns returns currently running tasks.
+// GET /api/tasks/active
+func (h *TasksHandler) ListActiveRuns(w http.ResponseWriter, r *http.Request) {
+	runs, err := h.sched.ListActiveRuns(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if runs == nil {
+		runs = []store.ScheduledRun{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+}

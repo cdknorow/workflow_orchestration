@@ -1,0 +1,13 @@
+src/coral.egg-info/
+*pycache*
+dist/
+build/
+*.egg-info/
+*.egg
+site/
+.venv/*
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+coral-go/coral
+coral-go/db-compare
+coral-go/cmd/db-compare/db-compare
