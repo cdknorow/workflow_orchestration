@@ -71,6 +71,47 @@ def _write_board_state(tmux_session_name: str, project: str, job_title: str,
         data["server_url"] = server_url.rstrip("/")
     state_file.write_text(_json_mod.dumps(data))
 
+async def _is_agent_cli_running(session_name: str) -> bool:
+    """Check if an agent CLI process (claude, gemini) is running in a tmux pane.
+
+    Uses tmux to get the pane's shell PID, then checks if any child process
+    matches known agent CLI binaries. Returns False if only a bare shell is
+    running (i.e. the agent CLI has exited).
+    """
+    try:
+        rc, stdout, _ = await run_cmd(
+            "tmux", "list-panes", "-t", session_name, "-F", "#{pane_pid}"
+        )
+        if rc != 0 or not stdout.strip():
+            return False
+        pane_pid = stdout.strip().splitlines()[0]
+        # Check child processes of the pane's shell.
+        # Try ps --ppid first (Linux), fall back to pgrep -P (macOS/Linux).
+        rc, stdout, _ = await run_cmd(
+            "ps", "--ppid", pane_pid, "-o", "comm=",
+        )
+        if rc != 0:
+            rc, stdout, _ = await run_cmd("pgrep", "-P", pane_pid, "-l")
+            if rc != 0:
+                return False
+        children = stdout.strip().lower().splitlines()
+        _AGENT_BINS = {"claude", "gemini", "node", "python", "python3"}
+        return any(
+            any(agent_bin in child for agent_bin in _AGENT_BINS)
+            for child in children
+        )
+    except Exception:
+        return False
+
+
+# Phrases that indicate a bare shell prompt (agent CLI has exited/crashed)
+_BARE_SHELL_INDICATORS = [
+    "command not found",
+    "no such file or directory",
+    "bash-",
+]
+
+
 async def setup_board_and_prompt(
     session_id: str,
     session_name: str,
@@ -143,6 +184,7 @@ async def setup_board_and_prompt(
             "press enter to",
             "to trust",
         ]
+        cli_ready = False
         for _wait in range(5):
             await asyncio.sleep(1)
             try:
@@ -152,6 +194,16 @@ async def setup_board_and_prompt(
             if not pane_text:
                 continue
             pane_lower = pane_text.lower()
+
+            # Detect if the agent CLI has crashed/exited and we're at a bare shell
+            if any(indicator in pane_lower for indicator in _BARE_SHELL_INDICATORS):
+                if not await _is_agent_cli_running(session_name):
+                    log.warning(
+                        "Agent CLI not running in session %s — bare shell detected, "
+                        "aborting prompt delivery", session_id[:8],
+                    )
+                    return
+
             # Check if Claude Code is showing a trust/acceptance prompt
             if any(phrase in pane_lower for phrase in _ACCEPTANCE_PHRASES):
                 log.info("Detected acceptance prompt in session %s, sending 'y'", session_id[:8])
@@ -163,7 +215,24 @@ async def setup_board_and_prompt(
                 continue
             # Check if the CLI is ready (shows the input prompt ">" or "❯")
             if ">" in pane_text or "❯" in pane_text or "..." in pane_text:
+                cli_ready = True
                 break
+
+        # Final safety check: verify the agent CLI process is actually running
+        # before sending the prompt. This catches cases where the readiness loop
+        # matched ">" from a bash PS1 prompt rather than the Claude CLI prompt.
+        if not await _is_agent_cli_running(session_name):
+            log.warning(
+                "Agent CLI is not running in session %s — aborting prompt delivery "
+                "to prevent sending raw text to bare shell", session_id[:8],
+            )
+            return
+
+        if not cli_ready:
+            log.warning(
+                "CLI readiness not confirmed for session %s, but agent process is "
+                "running — proceeding with prompt delivery", session_id[:8],
+            )
 
         max_attempts = 3
         for attempt in range(max_attempts):
@@ -459,6 +528,61 @@ def load_history_session_messages(session_id: str) -> list[dict[str, Any]]:
     return []
 
 
+async def _resume_single_session(store, rec, log) -> None:
+    """Resume a single persistent session.
+
+    Extracted from resume_persistent_sessions to allow concurrent execution.
+    """
+    sid = rec["session_id"]
+    working_dir = rec["working_dir"]
+    agent_type = rec["agent_type"]
+    display_name = rec.get("display_name")
+    flags = rec.get("flags")  # Already deserialized by get_all_live_sessions
+    prompt = rec.get("prompt")
+    board_name = rec.get("board_name")
+    board_server = rec.get("board_server")
+
+    log.info(
+        "Resuming session %s (%s) in %s",
+        sid[:8], agent_type, working_dir,
+    )
+
+    # Use resume_from_id if available (tracks the original Claude
+    # session across multiple Coral restarts), otherwise fall back
+    # to the session_id itself (first restart after initial launch).
+    resume_id = rec.get("resume_from_id") or sid
+
+    result = await launch_claude_session(
+        working_dir, agent_type, display_name=display_name,
+        resume_session_id=resume_id,
+        flags=flags,
+        prompt=prompt,
+        board_name=board_name,
+        board_server=board_server,
+    )
+
+    if result.get("error"):
+        log.warning("Failed to resume session %s: %s", sid[:8], result["error"])
+        await store.unregister_live_session(sid)
+    else:
+        new_session_id = result["session_id"]
+        new_session_name = result["session_name"]
+        # Old session record is replaced by the new launch
+        # (launch_claude_session calls register_live_session with new id)
+        await store.unregister_live_session(sid)
+
+        # Re-subscribe to message board and re-send prompt
+        if board_name or prompt:
+            asyncio.create_task(setup_board_and_prompt(
+                new_session_id, new_session_name, agent_type,
+                prompt=prompt, board_name=board_name,
+                board_server=board_server, display_name=display_name,
+            ))
+
+
+_RESUME_TIMEOUT = 30  # seconds per session
+
+
 async def resume_persistent_sessions(store, schedule_store=None) -> None:
     """Resume live sessions that were running when Coral last stopped.
 
@@ -469,6 +593,10 @@ async def resume_persistent_sessions(store, schedule_store=None) -> None:
 
     Sessions that belong to scheduled/oneshot job runs are skipped and
     unregistered (they should not be auto-resumed).
+
+    Sessions are resumed concurrently so that one slow/stuck session does
+    not block the others.  Each resume has a per-session timeout of
+    ``_RESUME_TIMEOUT`` seconds.
 
     *store* is a :class:`~coral.store.CoralStore` instance.
     """
@@ -491,6 +619,8 @@ async def resume_persistent_sessions(store, schedule_store=None) -> None:
             except Exception:
                 pass
 
+        # First pass: filter out sessions that don't need resuming
+        to_resume: list[dict] = []
         for rec in registered:
             sid = rec["session_id"]
             if sid in live_session_ids:
@@ -509,49 +639,34 @@ async def resume_persistent_sessions(store, schedule_store=None) -> None:
                 log.info("Removed stale live session %s (dir missing: %s)", sid[:8], working_dir)
                 continue
 
-            agent_type = rec["agent_type"]
-            display_name = rec.get("display_name")
-            flags = rec.get("flags")  # Already deserialized by get_all_live_sessions
-            prompt = rec.get("prompt")
-            board_name = rec.get("board_name")
-            board_server = rec.get("board_server")
+            to_resume.append(rec)
 
-            log.info(
-                "Resuming session %s (%s) in %s",
-                sid[:8], agent_type, working_dir,
-            )
+        if not to_resume:
+            return
 
-            # Use resume_from_id if available (tracks the original Claude
-            # session across multiple Coral restarts), otherwise fall back
-            # to the session_id itself (first restart after initial launch).
-            resume_id = rec.get("resume_from_id") or sid
+        # Second pass: resume all sessions concurrently with per-session timeout
+        async def _safe_resume(rec: dict) -> None:
+            sid = rec["session_id"]
+            try:
+                await asyncio.wait_for(
+                    _resume_single_session(store, rec, log),
+                    timeout=_RESUME_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                log.warning("Timed out resuming session %s after %ds", sid[:8], _RESUME_TIMEOUT)
+                try:
+                    await store.unregister_live_session(sid)
+                except Exception:
+                    pass
+            except Exception:
+                log.exception("Error resuming session %s", sid[:8])
+                try:
+                    await store.unregister_live_session(sid)
+                except Exception:
+                    pass
 
-            result = await launch_claude_session(
-                working_dir, agent_type, display_name=display_name,
-                resume_session_id=resume_id,
-                flags=flags,
-                prompt=prompt,
-                board_name=board_name,
-                board_server=board_server,
-            )
-
-            if result.get("error"):
-                log.warning("Failed to resume session %s: %s", sid[:8], result["error"])
-                await store.unregister_live_session(sid)
-            else:
-                new_session_id = result["session_id"]
-                new_session_name = result["session_name"]
-                # Old session record is replaced by the new launch
-                # (launch_claude_session calls register_live_session with new id)
-                await store.unregister_live_session(sid)
-
-                # Re-subscribe to message board and re-send prompt
-                if board_name or prompt:
-                    asyncio.create_task(setup_board_and_prompt(
-                        new_session_id, new_session_name, agent_type,
-                        prompt=prompt, board_name=board_name,
-                        board_server=board_server, display_name=display_name,
-                    ))
+        log.info("Resuming %d sessions concurrently", len(to_resume))
+        await asyncio.gather(*[_safe_resume(rec) for rec in to_resume])
     except Exception:
         log.exception("Error resuming persistent sessions")
 

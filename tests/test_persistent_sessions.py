@@ -502,3 +502,217 @@ async def test_display_name_set_via_ui_persists_on_resume(store, tmp_path):
         work_dir, "claude", display_name="Dashboard Name", resume_session_id="sid-1", flags=None,
         prompt=None, board_name=None, board_server=None,
     )
+
+
+# ── Bug 1: Concurrent resume with timeouts ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_resume_runs_concurrently(store, tmp_path):
+    """Sessions should be resumed concurrently, not sequentially."""
+    import time as _time
+
+    dirs = []
+    for i in range(3):
+        d = tmp_path / f"wt{i}"
+        d.mkdir()
+        dirs.append(d)
+        await store.register_live_session(f"sid-{i}", "claude", f"wt{i}", str(d))
+
+    call_times = []
+
+    async def mock_launch(working_dir, agent_type, display_name=None,
+                          resume_session_id=None, flags=None, prompt=None,
+                          board_name=None, board_server=None):
+        import asyncio as _asyncio
+        start = _time.monotonic()
+        await _asyncio.sleep(0.5)  # simulate launch delay
+        call_times.append((_time.monotonic() - start, resume_session_id))
+        return {
+            "session_name": f"{agent_type}-new-{resume_session_id}",
+            "session_id": f"new-{resume_session_id}",
+            "log_file": f"/tmp/{agent_type}_coral_new.log",
+            "working_dir": working_dir,
+            "agent_type": agent_type,
+        }
+
+    t0 = _time.monotonic()
+    with patch("coral.tools.session_manager.discover_coral_agents", AsyncMock(return_value=[])), \
+         patch("coral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+        from coral.tools.session_manager import resume_persistent_sessions
+        await resume_persistent_sessions(store)
+
+    elapsed = _time.monotonic() - t0
+    assert len(call_times) == 3
+    # If sequential, elapsed would be ~1.5s (3 × 0.5s). Concurrent should be ~0.5s.
+    assert elapsed < 1.2, f"Resume took {elapsed:.2f}s — expected concurrent execution"
+
+
+@pytest.mark.asyncio
+async def test_resume_timeout_does_not_block_others(store, tmp_path):
+    """A stuck session should time out without blocking other resumes."""
+    dir1 = tmp_path / "wt1"
+    dir2 = tmp_path / "wt2"
+    dir1.mkdir()
+    dir2.mkdir()
+    await store.register_live_session("sid-fast", "claude", "wt1", str(dir1))
+    await store.register_live_session("sid-slow", "claude", "wt2", str(dir2))
+
+    completed = []
+
+    async def mock_launch(working_dir, agent_type, display_name=None,
+                          resume_session_id=None, flags=None, prompt=None,
+                          board_name=None, board_server=None):
+        import asyncio as _asyncio
+        if resume_session_id == "sid-slow":
+            await _asyncio.sleep(999)  # will be timed out
+        completed.append(resume_session_id)
+        return {
+            "session_name": f"{agent_type}-new",
+            "session_id": f"new-{resume_session_id}",
+            "log_file": f"/tmp/{agent_type}_coral_new.log",
+            "working_dir": working_dir,
+            "agent_type": agent_type,
+        }
+
+    # Temporarily reduce timeout for test speed
+    import coral.tools.session_manager as sm
+    original_timeout = sm._RESUME_TIMEOUT
+    sm._RESUME_TIMEOUT = 1  # 1 second timeout for testing
+
+    try:
+        with patch("coral.tools.session_manager.discover_coral_agents", AsyncMock(return_value=[])), \
+             patch("coral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+            await sm.resume_persistent_sessions(store)
+    finally:
+        sm._RESUME_TIMEOUT = original_timeout
+
+    # Fast session should have completed; slow one timed out
+    assert "sid-fast" in completed
+    assert "sid-slow" not in completed
+
+
+@pytest.mark.asyncio
+async def test_resume_one_failure_does_not_abort_others(store, tmp_path):
+    """One session raising an exception should not prevent other resumes."""
+    dir1 = tmp_path / "wt1"
+    dir2 = tmp_path / "wt2"
+    dir1.mkdir()
+    dir2.mkdir()
+    await store.register_live_session("sid-ok", "claude", "wt1", str(dir1))
+    await store.register_live_session("sid-err", "claude", "wt2", str(dir2))
+
+    completed = []
+
+    async def mock_launch(working_dir, agent_type, display_name=None,
+                          resume_session_id=None, flags=None, prompt=None,
+                          board_name=None, board_server=None):
+        if resume_session_id == "sid-err":
+            raise RuntimeError("Simulated launch failure")
+        completed.append(resume_session_id)
+        return {
+            "session_name": f"{agent_type}-new",
+            "session_id": f"new-{resume_session_id}",
+            "log_file": f"/tmp/{agent_type}_coral_new.log",
+            "working_dir": working_dir,
+            "agent_type": agent_type,
+        }
+
+    with patch("coral.tools.session_manager.discover_coral_agents", AsyncMock(return_value=[])), \
+         patch("coral.tools.session_manager.launch_claude_session", AsyncMock(side_effect=mock_launch)):
+        from coral.tools.session_manager import resume_persistent_sessions
+        await resume_persistent_sessions(store)
+
+    assert "sid-ok" in completed
+
+
+# ── Bug 2: CLI detection and prompt delivery safety ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_is_agent_cli_running_detects_claude():
+    """_is_agent_cli_running should return True when claude is a child process."""
+    from coral.tools.session_manager import _is_agent_cli_running
+
+    with patch("coral.tools.session_manager.run_cmd") as mock_run:
+        # First call: tmux list-panes returns a PID
+        # Second call: ps --ppid returns claude as child
+        mock_run.side_effect = [
+            (0, "12345\n", ""),   # tmux list-panes
+            (0, "claude\n", ""),  # ps --ppid
+        ]
+        result = await _is_agent_cli_running("claude-test-session")
+        assert result is True
+
+
+@pytest.mark.asyncio
+async def test_is_agent_cli_running_detects_bare_shell():
+    """_is_agent_cli_running should return False when only bash is running."""
+    from coral.tools.session_manager import _is_agent_cli_running
+
+    with patch("coral.tools.session_manager.run_cmd") as mock_run:
+        mock_run.side_effect = [
+            (0, "12345\n", ""),  # tmux list-panes
+            (0, "bash\n", ""),   # ps --ppid — only bash, no agent
+        ]
+        result = await _is_agent_cli_running("claude-test-session")
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_agent_cli_running_handles_no_children():
+    """_is_agent_cli_running should return False when ps fails (no children)."""
+    from coral.tools.session_manager import _is_agent_cli_running
+
+    with patch("coral.tools.session_manager.run_cmd") as mock_run:
+        mock_run.side_effect = [
+            (0, "12345\n", ""),  # tmux list-panes
+            (1, "", ""),         # ps --ppid fails (no children)
+        ]
+        result = await _is_agent_cli_running("claude-test-session")
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_is_agent_cli_running_detects_node():
+    """_is_agent_cli_running should return True for node (Claude Code runs as node)."""
+    from coral.tools.session_manager import _is_agent_cli_running
+
+    with patch("coral.tools.session_manager.run_cmd") as mock_run:
+        mock_run.side_effect = [
+            (0, "12345\n", ""),    # tmux list-panes
+            (0, "node\nbash\n", ""),  # ps --ppid — node is running
+        ]
+        result = await _is_agent_cli_running("claude-test-session")
+        assert result is True
+
+
+@pytest.mark.asyncio
+async def test_setup_board_and_prompt_aborts_when_cli_not_running():
+    """setup_board_and_prompt should not send prompt if agent CLI is not running."""
+    from coral.tools.session_manager import setup_board_and_prompt
+
+    with patch("coral.tools.session_manager._is_agent_cli_running", AsyncMock(return_value=False)), \
+         patch("coral.tools.tmux_manager.capture_pane", AsyncMock(return_value="$ command not found")), \
+         patch("coral.tools.tmux_manager.send_to_tmux", AsyncMock()) as mock_send:
+        await setup_board_and_prompt(
+            "test-sid", "claude-test-session", "claude",
+            prompt="Hello agent",
+        )
+        mock_send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_setup_board_and_prompt_sends_when_cli_running():
+    """setup_board_and_prompt should send prompt when agent CLI is confirmed running."""
+    from coral.tools.session_manager import setup_board_and_prompt
+
+    with patch("coral.tools.session_manager._is_agent_cli_running", AsyncMock(return_value=True)), \
+         patch("coral.tools.tmux_manager.capture_pane", AsyncMock(return_value="> ready")), \
+         patch("coral.tools.tmux_manager.send_to_tmux", AsyncMock(return_value=None)) as mock_send, \
+         patch("coral.tools.session_manager.run_cmd", AsyncMock(return_value=(0, "", ""))):
+        await setup_board_and_prompt(
+            "test-sid", "claude-test-session", "claude",
+            prompt="Hello agent",
+        )
+        mock_send.assert_called()
