@@ -1077,22 +1077,22 @@ async def wake_team(board_name: str):
         if s.get("board_name") == board_name and s.get("is_sleeping")
     ]
 
-    # Relaunch sleeping sessions concurrently
+    # Relaunch sleeping sessions — only clear is_sleeping on success
     relaunched = 0
+    from coral.messageboard.api import _paused_projects
     for sess in sleeping_sessions:
+        sid = sess["session_id"]
         try:
-            # Override is_sleeping so _resume_single_session sends prompts
-            # and sets up board normally (it's being woken)
             wake_rec = {**sess, "is_sleeping": False}
             await _resume_single_session(store, wake_rec, log)
             relaunched += 1
+            await store.set_session_sleeping(sid, sleeping=False)
         except Exception:
-            log.exception("Failed to wake session %s", sess["session_id"][:8])
+            log.exception("Failed to wake session %s — keeping asleep", sid[:8])
 
-    # Clear sleeping state and unpause board
-    await store.set_board_sleeping(board_name, sleeping=False)
-    from coral.messageboard.api import _paused_projects
-    _paused_projects.discard(board_name)
+    # Unpause board if at least one agent was woken
+    if relaunched > 0:
+        _paused_projects.discard(board_name)
 
     return {"ok": True, "sleeping": False, "sessions_relaunched": relaunched, "board_paused": False}
 
@@ -1148,16 +1148,18 @@ async def wake_all():
     boards = set()
     relaunched = 0
     for sess in sleeping:
+        sid = sess["session_id"]
         try:
             wake_rec = {**sess, "is_sleeping": False}
             await _resume_single_session(store, wake_rec, log)
             relaunched += 1
+            # Only clear sleeping state on successful relaunch
+            await store.set_session_sleeping(sid, sleeping=False)
+            board = sess.get("board_name")
+            if board:
+                boards.add(board)
         except Exception:
-            log.exception("Failed to wake session %s", sess["session_id"][:8])
-        await store.set_session_sleeping(sess["session_id"], sleeping=False)
-        board = sess.get("board_name")
-        if board:
-            boards.add(board)
+            log.exception("Failed to wake session %s — keeping asleep", sid[:8])
 
     for board in boards:
         _paused_projects.discard(board)
@@ -1210,6 +1212,13 @@ async def wake_session(session_id: str):
         return {"ok": False, "error": "Failed to relaunch session"}
 
     await store.set_session_sleeping(session_id, sleeping=False)
+
+    # Unpause the board if this agent was on one
+    board = sess.get("board_name")
+    if board:
+        from coral.messageboard.api import _paused_projects
+        _paused_projects.discard(board)
+
     return {"ok": True, "sleeping": False}
 
 
