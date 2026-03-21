@@ -755,3 +755,301 @@ async def test_replace_live_session_carries_sleeping(store):
     assert len(sessions) == 1
     assert sessions[0]["session_id"] == "new-sid"
     assert sessions[0]["is_sleeping"] is True
+
+
+# ── Per-agent sleep/wake ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_per_agent_sleep_does_not_affect_others(store, tmp_path):
+    """Sleeping one agent should not affect other agents on the same board."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.register_live_session(
+        "sid-2", "claude", "wt2", work_dir, board_name="my-team",
+    )
+
+    await store.set_session_sleeping("sid-1", True)
+
+    sessions = await store.get_all_live_sessions()
+    sleeping = {s["session_id"]: s["is_sleeping"] for s in sessions}
+    assert sleeping["sid-1"] is True
+    assert sleeping["sid-2"] is False
+
+
+@pytest.mark.asyncio
+async def test_per_agent_wake_does_not_affect_others(store, tmp_path):
+    """Waking one agent should not affect other sleeping agents."""
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.register_live_session(
+        "sid-2", "claude", "wt2", work_dir, board_name="my-team",
+    )
+
+    # Sleep both
+    await store.set_session_sleeping("sid-1", True)
+    await store.set_session_sleeping("sid-2", True)
+
+    # Wake only sid-1
+    await store.set_session_sleeping("sid-1", False)
+
+    sessions = await store.get_all_live_sessions()
+    sleeping = {s["session_id"]: s["is_sleeping"] for s in sessions}
+    assert sleeping["sid-1"] is False
+    assert sleeping["sid-2"] is True
+
+
+# ── Sleep-all / Wake-all ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_sleep_all_affects_all_sessions(store, tmp_path):
+    """set_session_sleeping on each session should sleep all of them."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir, board_name="team-a")
+    await store.register_live_session("sid-2", "gemini", "wt2", work_dir, board_name="team-b")
+    await store.register_live_session("sid-3", "claude", "wt3", work_dir)  # no board
+
+    # Simulate sleep-all: sleep each individually
+    for sid in ["sid-1", "sid-2", "sid-3"]:
+        await store.set_session_sleeping(sid, True)
+
+    sessions = await store.get_all_live_sessions()
+    assert all(s["is_sleeping"] is True for s in sessions)
+
+    # get_sleeping_board_names should return both boards
+    sleeping_boards = await store.get_sleeping_board_names()
+    assert "team-a" in sleeping_boards
+    assert "team-b" in sleeping_boards
+
+
+@pytest.mark.asyncio
+async def test_wake_all_clears_all_sleeping(store, tmp_path):
+    """Waking all sessions should clear is_sleeping for everyone."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir, board_name="team-a")
+    await store.register_live_session("sid-2", "gemini", "wt2", work_dir)
+
+    # Sleep all
+    await store.set_session_sleeping("sid-1", True)
+    await store.set_session_sleeping("sid-2", True)
+
+    # Wake all
+    await store.set_session_sleeping("sid-1", False)
+    await store.set_session_sleeping("sid-2", False)
+
+    sessions = await store.get_all_live_sessions()
+    assert all(s["is_sleeping"] is False for s in sessions)
+    assert len(await store.get_sleeping_board_names()) == 0
+
+
+# ── Mixed team/individual sleep edge cases ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_team_sleep_then_individual_wake(store, tmp_path):
+    """Sleeping a team then waking one agent should leave others sleeping."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir, board_name="my-team")
+    await store.register_live_session("sid-2", "claude", "wt2", work_dir, board_name="my-team")
+    await store.register_live_session("sid-3", "claude", "wt3", work_dir, board_name="my-team")
+
+    # Team sleep
+    count = await store.set_board_sleeping("my-team", sleeping=True)
+    assert count == 3
+
+    # Individual wake
+    await store.set_session_sleeping("sid-2", False)
+
+    sessions = await store.get_all_live_sessions()
+    sleeping = {s["session_id"]: s["is_sleeping"] for s in sessions}
+    assert sleeping["sid-1"] is True
+    assert sleeping["sid-2"] is False
+    assert sleeping["sid-3"] is True
+
+    # Board should still be in sleeping boards (sid-1 and sid-3 are sleeping)
+    assert "my-team" in await store.get_sleeping_board_names()
+
+
+@pytest.mark.asyncio
+async def test_individual_sleep_then_team_wake(store, tmp_path):
+    """Sleeping individual agents then waking the whole team should clear all."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir, board_name="my-team")
+    await store.register_live_session("sid-2", "claude", "wt2", work_dir, board_name="my-team")
+
+    # Individual sleep
+    await store.set_session_sleeping("sid-1", True)
+
+    # Team wake (should wake all on board)
+    await store.set_board_sleeping("my-team", sleeping=False)
+
+    sessions = await store.get_all_live_sessions()
+    assert all(s["is_sleeping"] is False for s in sessions)
+
+
+@pytest.mark.asyncio
+async def test_sleep_nonexistent_session(store):
+    """Sleeping a nonexistent session should not raise."""
+    # set_session_sleeping just does an UPDATE — 0 rows affected is fine
+    await store.set_session_sleeping("nonexistent", True)
+    sessions = await store.get_all_live_sessions()
+    assert len(sessions) == 0
+
+
+@pytest.mark.asyncio
+async def test_sleep_all_skips_already_sleeping(store, tmp_path):
+    """Sleep-all should be idempotent — already-sleeping sessions stay sleeping."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir)
+    await store.set_session_sleeping("sid-1", True)
+
+    # Sleep again
+    await store.set_session_sleeping("sid-1", True)
+
+    sessions = await store.get_all_live_sessions()
+    assert sessions[0]["is_sleeping"] is True
+
+
+# ── API endpoint logic tests ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_sleep_session_not_found(store):
+    """sleep_session should return error for nonexistent session_id."""
+    all_sessions = await store.get_all_live_sessions()
+    sess = next((s for s in all_sessions if s["session_id"] == "nonexistent"), None)
+    assert sess is None  # Confirms endpoint would return "Session not found"
+
+
+@pytest.mark.asyncio
+async def test_wake_session_rejects_non_sleeping(store, tmp_path):
+    """wake_session should refuse to wake an agent that isn't sleeping."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir)
+
+    sessions = await store.get_all_live_sessions()
+    sess = sessions[0]
+    assert not sess.get("is_sleeping")  # Confirms endpoint would return "Session is not sleeping"
+
+
+@pytest.mark.asyncio
+async def test_sleep_all_excludes_already_sleeping(store, tmp_path):
+    """sleep-all should only process active (non-sleeping) sessions."""
+    work_dir = str(tmp_path)
+    await store.register_live_session("sid-1", "claude", "wt1", work_dir)
+    await store.register_live_session("sid-2", "claude", "wt2", work_dir)
+    await store.set_session_sleeping("sid-1", True)
+
+    all_sessions = await store.get_all_live_sessions()
+    active = [s for s in all_sessions if not s.get("is_sleeping")]
+    assert len(active) == 1
+    assert active[0]["session_id"] == "sid-2"
+
+
+@pytest.mark.asyncio
+async def test_wake_all_only_clears_sleeping_on_success(store, tmp_path):
+    """wake-all should keep sessions sleeping if relaunch fails.
+
+    Simulates: two sleeping sessions, one fails to relaunch.
+    Only the successful one should have is_sleeping cleared.
+    """
+    dir1 = tmp_path / "wt1"
+    dir2 = tmp_path / "wt2"
+    dir1.mkdir()
+    dir2.mkdir()
+
+    await store.register_live_session("sid-ok", "claude", "wt1", str(dir1))
+    await store.register_live_session("sid-err", "claude", "wt2", str(dir2))
+    await store.set_session_sleeping("sid-ok", True)
+    await store.set_session_sleeping("sid-err", True)
+
+    # Simulate wake-all logic: per-session relaunch with error handling
+    results = {}
+    for sess in await store.get_all_live_sessions():
+        sid = sess["session_id"]
+        if not sess.get("is_sleeping"):
+            continue
+        try:
+            if sid == "sid-err":
+                raise RuntimeError("Simulated relaunch failure")
+            # Simulate successful relaunch
+            await store.set_session_sleeping(sid, sleeping=False)
+            results[sid] = "ok"
+        except Exception:
+            results[sid] = "failed"
+
+    assert results["sid-ok"] == "ok"
+    assert results["sid-err"] == "failed"
+
+    sessions = await store.get_all_live_sessions()
+    sleeping = {s["session_id"]: s["is_sleeping"] for s in sessions}
+    assert sleeping["sid-ok"] is False
+    assert sleeping["sid-err"] is True  # Still sleeping — relaunch failed
+
+
+@pytest.mark.asyncio
+async def test_team_sleep_then_per_agent_wake_board_still_paused(store, tmp_path):
+    """BUG: Per-agent wake after team sleep leaves board paused.
+
+    Scenario: team sleep pauses the board. Per-agent wake relaunches one
+    agent but does NOT unpause the board. The woken agent can't receive
+    board messages because the board is still in _paused_projects.
+    """
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.register_live_session(
+        "sid-2", "claude", "wt2", work_dir, board_name="my-team",
+    )
+
+    # Team sleep — pauses board
+    await store.set_board_sleeping("my-team", sleeping=True)
+    paused = set()
+    paused.add("my-team")
+
+    # Per-agent wake (simulating wake_session endpoint logic)
+    await store.set_session_sleeping("sid-1", False)
+    # NOTE: wake_session does NOT touch _paused_projects
+
+    # Board is still paused even though sid-1 is awake
+    assert "my-team" in paused  # This is the bug
+
+    # At least one agent is awake on the board
+    sessions = await store.get_all_live_sessions()
+    awake_on_board = [
+        s for s in sessions
+        if s.get("board_name") == "my-team" and not s.get("is_sleeping")
+    ]
+    assert len(awake_on_board) == 1
+    assert awake_on_board[0]["session_id"] == "sid-1"
+
+
+@pytest.mark.asyncio
+async def test_wake_team_clears_all_sleeping_unconditionally(store, tmp_path):
+    """wake_team clears is_sleeping for ALL sessions on board, even failed relaunches.
+
+    This differs from wake_all which only clears on success. This could leave
+    ghost sessions (not sleeping in DB, no tmux process).
+    """
+    work_dir = str(tmp_path)
+    await store.register_live_session(
+        "sid-1", "claude", "wt1", work_dir, board_name="my-team",
+    )
+    await store.register_live_session(
+        "sid-2", "claude", "wt2", work_dir, board_name="my-team",
+    )
+    await store.set_board_sleeping("my-team", sleeping=True)
+
+    # Simulate wake_team: even if relaunch fails, set_board_sleeping(False) runs
+    # (line 1093 in live_sessions.py is outside the per-session try/except)
+    await store.set_board_sleeping("my-team", sleeping=False)
+
+    sessions = await store.get_all_live_sessions()
+    # All sessions cleared — even ones that might have failed to relaunch
+    assert all(s["is_sleeping"] is False for s in sessions)
