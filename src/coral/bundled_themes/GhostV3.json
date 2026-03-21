@@ -71,6 +71,11 @@
     "--d2h-del-gutter-bg": "#4a2a2a",
     "--d2h-del-highlight": "#6a3a3a",
     "--d2h-empty-bg": "#2a2f4a",
-    "--d2h-hunk-bg": "#35394f"
+    "--d2h-hunk-bg": "#35394f",
+    "--mb-bg": "#1a1f3a",
+    "--mb-text": "#e0e0e0",
+    "--mb-text-bright": "#f0f0f0",
+    "--mb-heading": "#88c0d0",
+    "--mb-code-bg": "#0a0e27"
   }
 }

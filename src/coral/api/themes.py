@@ -138,6 +138,13 @@ THEME_VARIABLES = {
         "--xterm-bright-cyan": "Bright cyan",
         "--xterm-bright-white": "Bright white",
     },
+    "Message Board": {
+        "--mb-bg": "Message background",
+        "--mb-text": "Body text",
+        "--mb-text-bright": "Bold/emphasis text",
+        "--mb-heading": "Heading color",
+        "--mb-code-bg": "Code block background",
+    },
     "Diff Viewer (diff2html)": {
         "--d2h-code-bg": "Code background",
         "--d2h-gutter-bg": "Gutter background",

@@ -123,6 +123,13 @@
     --xterm-bright-cyan:         #56d4dd;
     --xterm-bright-white:        #f0f6fc;
 
+    /* Message Board */
+    --mb-bg:          #1a1f3a;
+    --mb-text:        #e0e0e0;
+    --mb-text-bright: #f0f0f0;
+    --mb-heading:     #88c0d0;
+    --mb-code-bg:     #0a0e27;
+
     /* Diff2html overrides */
     --d2h-code-bg:        #0d1117;
     --d2h-gutter-bg:      #161b22;
@@ -247,6 +254,13 @@
     --xterm-bright-magenta:      #6639ba;
     --xterm-bright-cyan:         #1b7c83;
     --xterm-bright-white:        #1f2328;
+
+    /* Message Board */
+    --mb-bg:          rgba(240, 240, 240, 0.6);
+    --mb-text:        #333;
+    --mb-text-bright: #1a1a1a;
+    --mb-heading:     #2e7d9c;
+    --mb-code-bg:     #e8e8e8;
 
     /* Diff2html overrides */
     --d2h-code-bg:        #f4f5f7;
