@@ -6,6 +6,17 @@ import pytest_asyncio
 from coral.store import CoralStore as SessionStore
 
 
+@pytest.fixture(autouse=True)
+def _reset_event_batcher():
+    """Reset the global event batcher state between tests."""
+    import coral.store.tasks as _t
+    _t._event_queue = []
+    _t._flush_count = 0
+    yield
+    _t._event_queue = []
+    _t._flush_count = 0
+
+
 @pytest_asyncio.fixture
 async def store(tmp_path):
     """Create a SessionStore backed by a temp DB and close it after the test."""

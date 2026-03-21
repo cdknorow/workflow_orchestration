@@ -18,6 +18,17 @@ _truncate = truncate
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _reset_event_batcher():
+    """Reset the global event batcher state between tests."""
+    import coral.store.tasks as _t
+    _t._event_queue = []
+    _t._flush_count = 0
+    yield
+    _t._event_queue = []
+    _t._flush_count = 0
+
+
 @pytest_asyncio.fixture
 async def tmp_store(tmp_path):
     """Create a SessionStore backed by a temp SQLite database."""
@@ -93,12 +104,16 @@ async def test_event_counts_aggregation(tmp_store):
 
 @pytest.mark.asyncio
 async def test_retention_limit(tmp_store):
-    """Auto-prune keeps at most 500 events per agent."""
-    for i in range(550):
+    """Auto-prune keeps events roughly bounded per agent.
+
+    Events are batched and pruning is deferred, so the exact count may
+    slightly exceed the 500-event target between prune cycles.
+    """
+    for i in range(600):
         await tmp_store.insert_agent_event("agent1", "tool_use", f"Event {i}", tool_name="Read")
 
-    events = await tmp_store.list_agent_events("agent1", limit=600)
-    assert len(events) == 500
+    events = await tmp_store.list_agent_events("agent1", limit=700)
+    assert len(events) <= 550  # 500 limit + up to one batch of slack
 
 
 @pytest.mark.asyncio

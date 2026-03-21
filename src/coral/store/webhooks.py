@@ -11,6 +11,10 @@ from coral.store.connection import DatabaseManager
 class WebhookStore(DatabaseManager):
     """Webhook configs and delivery queue CRUD operations."""
 
+    # Deferred delivery pruning — only prune every N inserts
+    _delivery_insert_count: int = 0
+    _DELIVERY_PRUNE_INTERVAL: int = 50
+
     async def _ensure_schema(self, conn) -> None:
         await conn.executescript("""
             CREATE TABLE IF NOT EXISTS webhook_configs (
@@ -137,14 +141,17 @@ class WebhookStore(DatabaseManager):
             (webhook_id, agent_name, session_id, event_type, event_summary, now),
         )
         delivery_id = cur.lastrowid
-        # Prune to 200 deliveries per webhook, excluding pending rows
-        await conn.execute(
-            "DELETE FROM webhook_deliveries WHERE webhook_id = ? "
-            "AND status != 'pending' AND id NOT IN "
-            "(SELECT id FROM webhook_deliveries WHERE webhook_id = ? "
-            " AND status != 'pending' ORDER BY id DESC LIMIT 200)",
-            (webhook_id, webhook_id),
-        )
+        # Deferred prune: only prune every N inserts to reduce lock contention
+        WebhookStore._delivery_insert_count += 1
+        if WebhookStore._delivery_insert_count >= WebhookStore._DELIVERY_PRUNE_INTERVAL:
+            WebhookStore._delivery_insert_count = 0
+            await conn.execute(
+                "DELETE FROM webhook_deliveries WHERE webhook_id = ? "
+                "AND status != 'pending' AND id NOT IN "
+                "(SELECT id FROM webhook_deliveries WHERE webhook_id = ? "
+                " AND status != 'pending' ORDER BY id DESC LIMIT 200)",
+                (webhook_id, webhook_id),
+            )
         await conn.commit()
         return {
             "id": delivery_id, "webhook_id": webhook_id,

@@ -181,16 +181,19 @@ class GitStore(DatabaseManager):
                 (agent_name,),
             )
 
-        # Insert fresh records
-        for f in files:
-            await conn.execute(
+        # Insert fresh records in a single batch
+        if files:
+            await conn.executemany(
                 """INSERT INTO git_changed_files
                    (agent_name, session_id, working_directory, filepath,
                     additions, deletions, status, recorded_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (agent_name, session_id, working_directory,
-                 f["filepath"], f.get("additions", 0), f.get("deletions", 0),
-                 f.get("status", "M"), now),
+                [
+                    (agent_name, session_id, working_directory,
+                     f["filepath"], f.get("additions", 0), f.get("deletions", 0),
+                     f.get("status", "M"), now)
+                    for f in files
+                ],
             )
         await conn.commit()
 

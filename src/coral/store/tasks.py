@@ -2,10 +2,83 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from coral.store.connection import DatabaseManager
+
+log = logging.getLogger(__name__)
+
+# ── Event Write Batcher ────────────────────────────────────────────────────
+# Queues insert_agent_event calls in memory and flushes them to the DB in
+# a single transaction every _FLUSH_INTERVAL seconds (or when the queue
+# reaches _FLUSH_SIZE items).  This dramatically reduces write-lock
+# contention when many agents fire events concurrently via hooks.
+
+_FLUSH_INTERVAL: float = 2.0   # seconds
+_FLUSH_SIZE: int = 50           # max events before force flush
+_PRUNE_INTERVAL: int = 2       # prune old events every N flushes
+
+_event_queue: list[tuple] = []
+_flush_task: asyncio.Task | None = None
+_flush_count: int = 0
+
+
+async def _flush_events(store: "TaskStore") -> None:
+    """Flush queued events to the DB in a single transaction."""
+    global _event_queue, _flush_count
+    if not _event_queue:
+        return
+    batch = _event_queue[:]
+    _event_queue = []
+    try:
+        conn = await store._get_conn()
+        await conn.executemany(
+            "INSERT INTO agent_events "
+            "(agent_name, session_id, event_type, tool_name, summary, detail_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            batch,
+        )
+        # Deferred prune: only run every N flushes
+        _flush_count += 1
+        if _flush_count >= _PRUNE_INTERVAL:
+            _flush_count = 0
+            # Prune to 500 events per agent for agents in this batch
+            pruned_agents: set[str] = set()
+            for row in batch:
+                agent_name = row[0]
+                if agent_name not in pruned_agents:
+                    pruned_agents.add(agent_name)
+                    await conn.execute(
+                        "DELETE FROM agent_events WHERE agent_name = ? AND id NOT IN "
+                        "(SELECT id FROM agent_events WHERE agent_name = ? "
+                        "ORDER BY id DESC LIMIT 500)",
+                        (agent_name, agent_name),
+                    )
+        await conn.commit()
+    except Exception:
+        log.exception("Failed to flush %d events to DB", len(batch))
+
+
+async def _flush_loop(store: "TaskStore") -> None:
+    """Background loop that flushes events periodically."""
+    while True:
+        await asyncio.sleep(_FLUSH_INTERVAL)
+        await _flush_events(store)
+
+
+def _ensure_flush_task(store: "TaskStore") -> None:
+    """Start the background flush loop if not already running."""
+    global _flush_task
+    if _flush_task is not None and not _flush_task.done():
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        _flush_task = loop.create_task(_flush_loop(store))
+    except RuntimeError:
+        pass  # No event loop — sync context, skip
 
 
 class TaskStore(DatabaseManager):
@@ -185,25 +258,20 @@ class TaskStore(DatabaseManager):
         detail_json: str | None = None,
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        conn = await self._get_conn()
-        cur = await conn.execute(
-            "INSERT INTO agent_events (agent_name, session_id, event_type, tool_name, summary, detail_json, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (agent_name, session_id, event_type, tool_name, summary, detail_json, now),
-        )
-        event_id = cur.lastrowid
-        # Auto-prune to 500 events per agent
-        await conn.execute(
-            "DELETE FROM agent_events WHERE agent_name = ? AND id NOT IN "
-            "(SELECT id FROM agent_events WHERE agent_name = ? ORDER BY id DESC LIMIT 500)",
-            (agent_name, agent_name),
-        )
-        await conn.commit()
-        return {"id": event_id, "agent_name": agent_name, "event_type": event_type,
+        row = (agent_name, session_id, event_type, tool_name, summary, detail_json, now)
+        _event_queue.append(row)
+        _ensure_flush_task(self)
+        # Force-flush if queue is large
+        if len(_event_queue) >= _FLUSH_SIZE:
+            await _flush_events(self)
+        return {"id": -1, "agent_name": agent_name, "event_type": event_type,
                 "tool_name": tool_name, "summary": summary, "detail_json": detail_json,
                 "created_at": now}
 
     async def list_agent_events(self, agent_name: str, limit: int = 50, session_id: str | None = None) -> list[dict[str, Any]]:
+        # Flush pending events so reads are consistent
+        if _event_queue:
+            await _flush_events(self)
         conn = await self._get_conn()
         if session_id is not None:
             rows = await (await conn.execute(
@@ -220,6 +288,8 @@ class TaskStore(DatabaseManager):
         return [dict(r) for r in rows]
 
     async def get_agent_event_counts(self, agent_name: str, session_id: str | None = None) -> list[dict[str, Any]]:
+        if _event_queue:
+            await _flush_events(self)
         conn = await self._get_conn()
         if session_id is not None:
             rows = await (await conn.execute(
@@ -239,6 +309,8 @@ class TaskStore(DatabaseManager):
         """Return the latest (event_type, summary) for each session_id (excluding status/goal/confidence)."""
         if not session_ids:
             return {}
+        if _event_queue:
+            await _flush_events(self)
         conn = await self._get_conn()
         placeholders = ",".join("?" for _ in session_ids)
         rows = await (await conn.execute(
@@ -259,6 +331,8 @@ class TaskStore(DatabaseManager):
         """Return the latest goal summary for each session_id."""
         if not session_ids:
             return {}
+        if _event_queue:
+            await _flush_events(self)
         conn = await self._get_conn()
         placeholders = ",".join("?" for _ in session_ids)
         rows = await (await conn.execute(
@@ -275,6 +349,12 @@ class TaskStore(DatabaseManager):
         return result
 
     async def clear_agent_events(self, agent_name: str, session_id: str | None = None) -> None:
+        global _event_queue
+        # Discard any queued events for this agent before deleting from DB
+        if session_id is not None:
+            _event_queue = [e for e in _event_queue if not (e[0] == agent_name and e[1] == session_id)]
+        else:
+            _event_queue = [e for e in _event_queue if e[0] != agent_name]
         conn = await self._get_conn()
         if session_id is not None:
             await conn.execute(
