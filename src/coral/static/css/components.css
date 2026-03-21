@@ -76,6 +76,11 @@
     margin: 8px 16px 12px;
 }
 
+/* Message board — worker message indent */
+.mb-message-worker {
+    margin-left: 40px;
+}
+
 /* Sleeping agent in sidebar */
 .session-group-item.sleeping {
     opacity: 0.5;
