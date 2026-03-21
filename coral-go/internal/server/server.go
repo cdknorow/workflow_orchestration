@@ -43,6 +43,7 @@ type Server struct {
 	router       chi.Router
 	indexTmpl    *template.Template
 	diffTmpl     *template.Template
+	previewTmpl  *template.Template
 	tasksHandler *routes.TasksHandler
 }
 
@@ -94,6 +95,12 @@ func New(cfg *config.Config, db *store.DB, backend ptymanager.TerminalBackend) *
 		log.Printf("Warning: failed to parse diff template: %v (serving placeholder)", err)
 	}
 	s.diffTmpl = diffTmpl
+
+	previewTmpl, err := template.ParseFS(templateFS, "frontend/templates/preview.html")
+	if err != nil {
+		log.Printf("Warning: failed to parse preview template: %v (serving placeholder)", err)
+	}
+	s.previewTmpl = previewTmpl
 
 	s.router = s.buildRouter()
 	return s
@@ -163,6 +170,9 @@ func (s *Server) buildRouter() chi.Router {
 	r.Post("/api/sessions/live/{name}/resume", sessHandler.Resume)
 	r.Post("/api/sessions/live/{name}/attach", sessHandler.Attach)
 	r.Put("/api/sessions/live/{name}/display-name", sessHandler.SetDisplayName)
+	r.Get("/api/sessions/live/{name}/file-content", sessHandler.GetFileContent)
+	r.Put("/api/sessions/live/{name}/file-content", sessHandler.SaveFileContent)
+	r.Put("/api/sessions/live/{name}/icon", sessHandler.SetIcon)
 	r.Post("/api/sessions/launch", sessHandler.Launch)
 	r.Post("/api/sessions/launch-team", sessHandler.LaunchTeam)
 
@@ -202,8 +212,8 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/tags", sysHandler.ListTags)
 	r.Post("/api/tags", sysHandler.CreateTag)
 	r.Delete("/api/tags/{tagID}", sysHandler.DeleteTag)
-	r.Post("/api/sessions/{sessionID}/tags", sysHandler.AddSessionTag)
-	r.Delete("/api/sessions/{sessionID}/tags/{tagID}", sysHandler.RemoveSessionTag)
+	r.Post("/api/sessions/history/{sessionID}/tags", sysHandler.AddSessionTag)
+	r.Delete("/api/sessions/history/{sessionID}/tags/{tagID}", sysHandler.RemoveSessionTag)
 
 	// Folder tags
 	r.Get("/api/folder-tags", sysHandler.GetAllFolderTags)
@@ -215,13 +225,13 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/sessions/history", histHandler.ListSessions)
 	r.Get("/api/sessions/history/{sessionID}", histHandler.GetSessionDetail)
 	r.Get("/api/sessions/history/{sessionID}/agent-notes", histHandler.GetSessionAgentNotes)
-	r.Get("/api/sessions/{sessionID}/notes", histHandler.GetSessionNotes)
-	r.Put("/api/sessions/{sessionID}/notes", histHandler.SaveSessionNotes)
-	r.Post("/api/sessions/{sessionID}/resummarize", histHandler.Resummarize)
-	r.Get("/api/sessions/{sessionID}/tags", histHandler.GetSessionTags)
-	r.Get("/api/sessions/{sessionID}/git", histHandler.GetSessionGit)
-	r.Get("/api/sessions/{sessionID}/events", histHandler.GetSessionEvents)
-	r.Get("/api/sessions/{sessionID}/tasks", histHandler.GetSessionTasks)
+	r.Get("/api/sessions/history/{sessionID}/notes", histHandler.GetSessionNotes)
+	r.Put("/api/sessions/history/{sessionID}/notes", histHandler.SaveSessionNotes)
+	r.Post("/api/sessions/history/{sessionID}/resummarize", histHandler.Resummarize)
+	r.Get("/api/sessions/history/{sessionID}/tags", histHandler.GetSessionTags)
+	r.Get("/api/sessions/history/{sessionID}/git", histHandler.GetSessionGit)
+	r.Get("/api/sessions/history/{sessionID}/events", histHandler.GetSessionEvents)
+	r.Get("/api/sessions/history/{sessionID}/tasks", histHandler.GetSessionTasks)
 
 	// Scheduled jobs
 	r.Get("/api/scheduled/jobs", schedHandler.ListJobs)
@@ -250,6 +260,15 @@ func (s *Server) buildRouter() chi.Router {
 	r.Delete("/api/themes/{name}", themeHandler.DeleteTheme)
 	r.Post("/api/themes/import", themeHandler.ImportTheme)
 	r.Post("/api/themes/generate", themeHandler.GenerateTheme)
+
+	// Templates
+	tmplHandler := routes.NewTemplatesHandler()
+	r.Get("/api/templates/agents", tmplHandler.ListAgentCategories)
+	r.Get("/api/templates/agents/{category}", tmplHandler.ListAgentsInCategory)
+	r.Get("/api/templates/agents/{category}/{name}", tmplHandler.GetAgentTemplate)
+	r.Get("/api/templates/commands", tmplHandler.ListCommandCategories)
+	r.Get("/api/templates/commands/{category}", tmplHandler.ListCommandsInCategory)
+	r.Get("/api/templates/commands/{category}/{name}", tmplHandler.GetCommandTemplate)
 
 	// Uploads
 	r.Post("/api/upload", routes.UploadFile)
@@ -303,6 +322,7 @@ func (s *Server) buildRouter() chi.Router {
 	// ── Dashboard SPA ───────────────────────────────────────────
 	r.Get("/", s.serveIndex)
 	r.Get("/diff", s.serveDiff)
+	r.Get("/preview", s.servePreview)
 
 	return r
 }
@@ -477,6 +497,18 @@ func (s *Server) serveDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.diffTmpl.Execute(w, nil); err != nil {
 		log.Printf("Error rendering diff template: %v", err)
+		http.Error(w, "Template render error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) servePreview(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if s.previewTmpl == nil {
+		w.Write([]byte(`<!DOCTYPE html><html><body>Template not loaded</body></html>`))
+		return
+	}
+	if err := s.previewTmpl.Execute(w, nil); err != nil {
+		log.Printf("Error rendering preview template: %v", err)
 		http.Error(w, "Template render error", http.StatusInternalServerError)
 	}
 }

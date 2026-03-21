@@ -117,6 +117,7 @@ var columnMigrations = []columnMigration{
 	{"live_sessions", "board_name", "TEXT"},
 	{"live_sessions", "board_server", "TEXT"},
 	{"live_sessions", "backend", "TEXT DEFAULT 'tmux'"},
+	{"live_sessions", "icon", "TEXT"},
 	{"scheduled_jobs", "flags", "TEXT DEFAULT ''"},
 	{"scheduled_runs", "trigger_type", "TEXT DEFAULT 'cron'"},
 	{"scheduled_runs", "webhook_url", "TEXT"},

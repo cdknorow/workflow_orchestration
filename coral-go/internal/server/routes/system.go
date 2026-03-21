@@ -242,7 +242,7 @@ func (h *SystemHandler) DeleteTag(w http.ResponseWriter, r *http.Request) {
 }
 
 // AddSessionTag adds a tag to a session.
-// POST /api/sessions/{sessionID}/tags
+// POST /api/sessions/history/{sessionID}/tags
 func (h *SystemHandler) AddSessionTag(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 	var body struct {
@@ -259,7 +259,7 @@ func (h *SystemHandler) AddSessionTag(w http.ResponseWriter, r *http.Request) {
 }
 
 // RemoveSessionTag removes a tag from a session.
-// DELETE /api/sessions/{sessionID}/tags/{tagID}
+// DELETE /api/sessions/history/{sessionID}/tags/{tagID}
 func (h *SystemHandler) RemoveSessionTag(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 	tagID, _ := strconv.Atoi(chi.URLParam(r, "tagID"))

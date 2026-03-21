@@ -57,6 +57,7 @@ type LiveSession struct {
 	BoardName    *string `db:"board_name" json:"board_name,omitempty"`
 	BoardServer  *string `db:"board_server" json:"board_server,omitempty"`
 	Backend      *string `db:"backend" json:"backend,omitempty"`
+	Icon         *string `db:"icon" json:"icon,omitempty"`
 	CreatedAt    string  `db:"created_at" json:"created_at"`
 }
 
@@ -713,11 +714,11 @@ func (s *SessionStore) RegisterLiveSession(ctx context.Context, ls *LiveSession)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ls.SessionID, ls.AgentType, ls.AgentName, ls.WorkingDir,
 		ls.DisplayName, ls.ResumeFromID, ls.Flags, ls.IsJob,
-		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.CreatedAt)
+		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.Icon, ls.CreatedAt)
 	return err
 }
 
@@ -733,7 +734,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 	var sessions []LiveSession
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, created_at
 		 FROM live_sessions ORDER BY created_at`)
 	return sessions, err
 }
@@ -771,7 +772,7 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 	// Carry forward flags, prompt, board from old session if not set
 	var old LiveSession
 	err = tx.GetContext(ctx, &old,
-		"SELECT flags, prompt, board_name, board_server FROM live_sessions WHERE session_id = ?",
+		"SELECT flags, prompt, board_name, board_server, icon FROM live_sessions WHERE session_id = ?",
 		oldSessionID)
 	if err == nil {
 		if newSession.Flags == nil {
@@ -786,6 +787,9 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 		if newSession.BoardServer == nil {
 			newSession.BoardServer = old.BoardServer
 		}
+		if newSession.Icon == nil {
+			newSession.Icon = old.Icon
+		}
 	}
 
 	tx.ExecContext(ctx, "DELETE FROM live_sessions WHERE session_id = ?", oldSessionID)
@@ -793,17 +797,54 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 	now := nowUTC()
 	_, err = tx.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		newSession.SessionID, newSession.AgentType, newSession.AgentName,
 		newSession.WorkingDir, newSession.DisplayName, newSession.ResumeFromID,
 		newSession.Flags, newSession.Prompt, newSession.BoardName,
-		newSession.BoardServer, now)
+		newSession.BoardServer, newSession.Icon, now)
 	if err != nil {
 		return err
 	}
 
 	return tx.Commit()
+}
+
+// SetIcon sets or clears the emoji icon for a live session.
+func (s *SessionStore) SetIcon(ctx context.Context, sessionID string, icon *string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE live_sessions SET icon = ? WHERE session_id = ?",
+		icon, sessionID)
+	return err
+}
+
+// GetIcons returns {session_id: icon} for sessions that have an icon set.
+func (s *SessionStore) GetIcons(ctx context.Context, sessionIDs []string) (map[string]string, error) {
+	if len(sessionIDs) == 0 {
+		return map[string]string{}, nil
+	}
+	placeholders := make([]string, len(sessionIDs))
+	args := make([]any, len(sessionIDs))
+	for i, id := range sessionIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(
+		"SELECT session_id, icon FROM live_sessions WHERE session_id IN (%s) AND icon IS NOT NULL AND icon != ''",
+		strings.Join(placeholders, ","))
+	rows, err := s.db.QueryxContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[string]string{}
+	for rows.Next() {
+		var sid, icon string
+		if err := rows.Scan(&sid, &icon); err == nil {
+			result[sid] = icon
+		}
+	}
+	return result, nil
 }
 
 // ── Live Session Flags Helper ──────────────────────────────────────────
@@ -943,8 +984,8 @@ func computeDuration(firstTS, lastTS *string) *int {
 	return &delta
 }
 
-// isoFormat matches Python's datetime.isoformat() which uses +00:00 instead of Z for UTC.
-const isoFormat = "2006-01-02T15:04:05+00:00"
+// isoFormat matches Python's datetime.isoformat() which includes microseconds and uses +00:00 instead of Z for UTC.
+const isoFormat = "2006-01-02T15:04:05.000000+00:00"
 
 func nowUTC() string {
 	return time.Now().UTC().Format(isoFormat)

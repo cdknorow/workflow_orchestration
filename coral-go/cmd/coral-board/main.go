@@ -35,7 +35,7 @@ type boardState struct {
 func stateFilePath() string {
 	home, _ := os.UserHomeDir()
 	sessionName := resolveSessionName()
-	return filepath.Join(home, ".coral-go", fmt.Sprintf("board_state_%s.json", sessionName))
+	return filepath.Join(home, ".coral", fmt.Sprintf("board_state_%s.json", sessionName))
 }
 
 func loadState() *boardState {

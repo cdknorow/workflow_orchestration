@@ -96,7 +96,7 @@ func (h *HistoryHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Agent sessions ──
-	var agentSessions []map[string]any
+	agentSessions := make([]map[string]any, 0)
 	agentTotal := 0
 	if chatType == "all" || chatType == "agent" {
 		result, err := h.ss.ListSessionsPaged(r.Context(), params)
@@ -252,7 +252,7 @@ func (h *HistoryHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetSessionNotes returns notes for a historical session.
-// GET /api/sessions/{sessionID}/notes
+// GET /api/sessions/history/{sessionID}/notes
 func (h *HistoryHandler) GetSessionNotes(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	meta, err := h.ss.GetSessionNotes(r.Context(), sid)
@@ -260,11 +260,20 @@ func (h *HistoryHandler) GetSessionNotes(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, meta)
+	// Match Python response shape: include summarizing field, omit session_id
+	resp := map[string]any{
+		"notes_md":       meta.NotesMD,
+		"auto_summary":   meta.AutoSummary,
+		"is_user_edited": meta.IsUserEdited,
+	}
+	if meta.NotesMD == "" && meta.AutoSummary == "" {
+		resp["summarizing"] = true
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // SaveSessionNotes saves notes for a historical session.
-// PUT /api/sessions/{sessionID}/notes
+// PUT /api/sessions/history/{sessionID}/notes
 func (h *HistoryHandler) SaveSessionNotes(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	var body struct {
@@ -282,18 +291,24 @@ func (h *HistoryHandler) SaveSessionNotes(w http.ResponseWriter, r *http.Request
 }
 
 // Resummarize re-queues a session for AI summarization.
-// POST /api/sessions/{sessionID}/resummarize
+// POST /api/sessions/history/{sessionID}/resummarize
 func (h *HistoryHandler) Resummarize(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	if err := h.ss.EnqueueForSummarization(r.Context(), sid); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	// Match Python: return auto_summary alongside ok
+	meta, _ := h.ss.GetSessionNotes(r.Context(), sid)
+	autoSummary := ""
+	if meta != nil {
+		autoSummary = meta.AutoSummary
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "auto_summary": autoSummary})
 }
 
 // GetSessionTags returns tags for a session.
-// GET /api/sessions/{sessionID}/tags
+// GET /api/sessions/history/{sessionID}/tags
 func (h *HistoryHandler) GetSessionTags(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	tags, err := h.ss.GetSessionTags(r.Context(), sid)
@@ -308,7 +323,7 @@ func (h *HistoryHandler) GetSessionTags(w http.ResponseWriter, r *http.Request) 
 }
 
 // GetSessionGit returns git snapshots for a historical session.
-// GET /api/sessions/{sessionID}/git
+// GET /api/sessions/history/{sessionID}/git
 func (h *HistoryHandler) GetSessionGit(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	limit := queryInt(r, "limit", 20)
@@ -317,11 +332,14 @@ func (h *HistoryHandler) GetSessionGit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if snaps == nil {
+		snaps = []store.GitSnapshot{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"session_id": sid, "commits": snaps})
 }
 
 // GetSessionEvents returns events for a historical session.
-// GET /api/sessions/{sessionID}/events
+// GET /api/sessions/history/{sessionID}/events
 func (h *HistoryHandler) GetSessionEvents(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	limit := queryInt(r, "limit", 200)
@@ -330,17 +348,23 @@ func (h *HistoryHandler) GetSessionEvents(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if events == nil {
+		events = []store.AgentEvent{}
+	}
 	writeJSON(w, http.StatusOK, events)
 }
 
 // GetSessionTasks returns tasks for a historical session.
-// GET /api/sessions/{sessionID}/tasks
+// GET /api/sessions/history/{sessionID}/tasks
 func (h *HistoryHandler) GetSessionTasks(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "sessionID")
 	tasks, err := h.ts.ListTasksBySession(r.Context(), sid)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if tasks == nil {
+		tasks = []store.AgentTask{}
 	}
 	writeJSON(w, http.StatusOK, tasks)
 }

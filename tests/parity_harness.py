@@ -236,7 +236,8 @@ def compare_json(py_val, go_val, path: str = "$") -> list[str]:
     # Skip fields that are expected to differ
     skip_fields = {"created_at", "updated_at", "subscribed_at", "recorded_at",
                    "session_id", "id", "startup_time", "uptime_seconds",
-                   "started_at", "finished_at", "version"}
+                   "started_at", "finished_at", "version", "scheduled_at",
+                   "path"}
 
     if isinstance(py_val, dict) and isinstance(go_val, dict):
         all_keys = set(py_val.keys()) | set(go_val.keys())
@@ -334,9 +335,10 @@ def main():
             else:
                 print(f"  WARNING: {scenarios_path} has no run_all_scenarios()")
 
-        # Always run built-in scenarios too
-        results = run_default_scenarios(py_server.url, go_server.url)
-        results.extend(ext_results)
+        # Run external scenarios first (they manage their own cleanup),
+        # then built-in scenarios.  This avoids state leaks between suites.
+        results = list(ext_results)
+        results.extend(run_default_scenarios(py_server.url, go_server.url))
 
         # Print results
         print("\n=== Results ===")

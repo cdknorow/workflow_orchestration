@@ -200,6 +200,10 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	displayNames, _ := h.ss.GetDisplayNames(ctx, sessionIDs)
+	icons, _ := h.ss.GetIcons(ctx, sessionIDs)
+	if icons == nil {
+		icons = map[string]string{}
+	}
 
 	// Batch fetch git state, file counts, events, and goals
 	gitState, _ := h.gs.GetAllLatestGitState(ctx)
@@ -323,6 +327,11 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 			branchVal = git.Branch
 		}
 
+		var iconVal any
+		if ic, ok := icons[sid]; ok && sid != "" {
+			iconVal = ic
+		}
+
 		entry := map[string]any{
 			"name":               agent.AgentName,
 			"agent_type":         agent.AgentType,
@@ -333,6 +342,7 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 			"staleness_seconds":  staleness,
 			"working_directory":  agent.WorkingDir,
 			"display_name":       displayNames[sid],
+			"icon":               iconVal,
 			"branch":             branchVal,
 			"waiting_for_input":  waiting,
 			"done":               done,
@@ -1767,4 +1777,132 @@ func boardJobTitle(subs map[string]*board.Subscriber, fallback map[string][2]str
 		return fb[1]
 	}
 	return nil
+}
+
+// GetFileContent returns the raw content of a file in the agent's working tree.
+// GET /api/sessions/live/{name}/file-content?filepath=...&session_id=...
+func (h *SessionsHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	fp := r.URL.Query().Get("filepath")
+	sessionID := r.URL.Query().Get("session_id")
+
+	if fp == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "filepath is required"})
+		return
+	}
+
+	workdir := h.resolveWorkdir(r.Context(), name, "", sessionID)
+	if workdir == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "Could not determine working directory"})
+		return
+	}
+
+	fullPath, err := filepath.Abs(filepath.Join(workdir, fp))
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "invalid path"})
+		return
+	}
+	realWorkdir, _ := filepath.EvalSymlinks(workdir)
+	realPath, _ := filepath.EvalSymlinks(fullPath)
+	if !strings.HasPrefix(realPath, realWorkdir+string(os.PathSeparator)) {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "Path traversal not allowed"})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "File not found"})
+		return
+	}
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"filepath":          fp,
+		"content":           string(content),
+		"working_directory": workdir,
+	})
+}
+
+// SaveFileContent writes content to a file in the agent's working tree.
+// PUT /api/sessions/live/{name}/file-content?filepath=...&session_id=...
+func (h *SessionsHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	fp := r.URL.Query().Get("filepath")
+	sessionID := r.URL.Query().Get("session_id")
+
+	if fp == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "filepath is required"})
+		return
+	}
+
+	var body struct {
+		Content *string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if body.Content == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "content is required"})
+		return
+	}
+
+	workdir := h.resolveWorkdir(r.Context(), name, "", sessionID)
+	if workdir == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "Could not determine working directory"})
+		return
+	}
+
+	fullPath, err := filepath.Abs(filepath.Join(workdir, fp))
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "invalid path"})
+		return
+	}
+	realWorkdir, _ := filepath.EvalSymlinks(workdir)
+	realPath, _ := filepath.EvalSymlinks(fullPath)
+	if !strings.HasPrefix(realPath, realWorkdir+string(os.PathSeparator)) {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "Path traversal not allowed"})
+		return
+	}
+
+	if err := os.WriteFile(fullPath, []byte(*body.Content), 0644); err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "filepath": fp})
+}
+
+// SetIcon sets or clears the emoji icon for a live session.
+// PUT /api/sessions/live/{name}/icon
+func (h *SessionsHandler) SetIcon(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SessionID string `json:"session_id"`
+		Icon      string `json:"icon"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if body.SessionID == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "session_id is required"})
+		return
+	}
+
+	var icon *string
+	trimmed := strings.TrimSpace(body.Icon)
+	if trimmed != "" {
+		icon = &trimmed
+	}
+
+	if err := h.ss.SetIcon(r.Context(), body.SessionID, icon); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "icon": icon})
 }

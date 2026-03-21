@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	_ "github.com/jmoiron/sqlx"
 )
@@ -48,7 +47,7 @@ func NewGitStore(db *DB) *GitStore {
 
 // UpsertGitSnapshot inserts or updates a git snapshot.
 func (s *GitStore) UpsertGitSnapshot(ctx context.Context, snap *GitSnapshot) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := nowUTC()
 	snap.RecordedAt = now
 
 	// Insert or ignore (dedup on session_id + commit_hash)
@@ -194,7 +193,7 @@ func (s *GitStore) GetGitSnapshotsForSession(ctx context.Context, sessionID stri
 
 // ReplaceChangedFiles replaces all changed-file records for an agent/session.
 func (s *GitStore) ReplaceChangedFiles(ctx context.Context, agentName, workingDir string, files []ChangedFile, sessionID *string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := nowUTC()
 
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {

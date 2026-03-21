@@ -32,7 +32,7 @@ func setActivateURL(url string) { activateEndpoint = url }
 // setValidateURL overrides the validate endpoint (for testing).
 func setValidateURL(url string) { validateEndpoint = url }
 
-// CachedLicense is persisted to ~/.coral-go/license.json.
+// CachedLicense is persisted to ~/.coral/license.json.
 type CachedLicense struct {
 	LicenseKey    string `json:"license_key"`
 	InstanceID    string `json:"instance_id"`

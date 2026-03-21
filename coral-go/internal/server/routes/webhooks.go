@@ -1,8 +1,13 @@
 package routes
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -92,11 +97,68 @@ func (h *WebhooksHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// TestWebhook sends a test notification.
+// TestWebhook sends a test notification immediately via direct delivery.
 // POST /api/webhooks/{webhookID}/test
 func (h *WebhooksHandler) TestWebhook(w http.ResponseWriter, r *http.Request) {
-	// TODO: send test delivery
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	whID, _ := strconv.ParseInt(chi.URLParam(r, "webhookID"), 10, 64)
+	cfg, err := h.ws.GetWebhookConfig(r.Context(), whID)
+	if err != nil || cfg == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"error": "Webhook not found"})
+		return
+	}
+	delivery, err := h.ws.CreateWebhookDelivery(
+		r.Context(), whID, "coral-test", "needs_input",
+		"Test notification from Coral dashboard", nil,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	// Deliver immediately inline (same as Python's deliver_now)
+	go h.deliverTestWebhook(cfg, delivery)
+	// Return the delivery record
+	writeJSON(w, http.StatusOK, delivery)
+}
+
+func (h *WebhooksHandler) deliverTestWebhook(cfg *store.WebhookConfig, delivery *store.WebhookDelivery) {
+	ctx := context.Background()
+	payload := map[string]interface{}{
+		"agent_name": delivery.AgentName,
+		"session_id": delivery.SessionID,
+		"event_type": delivery.EventType,
+		"summary":    delivery.EventSummary,
+		"timestamp":  delivery.CreatedAt,
+		"source":     "coral",
+	}
+	body, _ := json.Marshal(payload)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		errMsg := err.Error()
+		h.ws.MarkWebhookDelivery(ctx, delivery.ID, "failed", nil, &errMsg, nil, nil)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		errMsg := err.Error()
+		if len(errMsg) > 200 {
+			errMsg = errMsg[:200]
+		}
+		h.ws.MarkWebhookDelivery(ctx, delivery.ID, "failed", nil, &errMsg, nil, nil)
+		return
+	}
+	defer resp.Body.Close()
+
+	status := resp.StatusCode
+	if status >= 200 && status < 300 {
+		h.ws.MarkWebhookDelivery(ctx, delivery.ID, "delivered", &status, nil, nil, nil)
+	} else {
+		errMsg := fmt.Sprintf("HTTP %d", status)
+		h.ws.MarkWebhookDelivery(ctx, delivery.ID, "failed", &status, &errMsg, nil, nil)
+	}
 }
 
 // ListDeliveries returns delivery history for a webhook.

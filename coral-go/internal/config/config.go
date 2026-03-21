@@ -52,7 +52,7 @@ type Config struct {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	homeDir, _ := os.UserHomeDir()
-	coralDir := filepath.Join(homeDir, ".coral-go")
+	coralDir := filepath.Join(homeDir, ".coral")
 	logDir := os.TempDir()
 
 	// Allow overriding the data directory.
@@ -100,7 +100,7 @@ func Load() *Config {
 	return cfg
 }
 
-// CoralDir returns the ~/.coral-go directory path.
+// CoralDir returns the ~/.coral directory path.
 func (c *Config) CoralDir() string {
 	return filepath.Dir(c.DBPath)
 }

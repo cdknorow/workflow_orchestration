@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	uploadDir = filepath.Join(mustHomeDir(), ".coral-go", "uploads")
+	uploadDir = filepath.Join(mustHomeDir(), ".coral", "uploads")
 
 	allowedExtensions = map[string]bool{
 		".png": true, ".jpg": true, ".jpeg": true, ".gif": true,

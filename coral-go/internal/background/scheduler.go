@@ -27,6 +27,18 @@ var (
 
 const defaultMaxAutoAccepts = 10
 
+// isoFormat matches Python's datetime.isoformat() with microseconds.
+const isoFormat = "2006-01-02T15:04:05.000000+00:00"
+
+// parseTimestamp parses a timestamp string, trying isoFormat (with microseconds) first,
+// then falling back to time.RFC3339 for backwards compatibility.
+func parseTimestamp(s string) (time.Time, error) {
+	if t, err := time.Parse(isoFormat, s); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
+}
+
 // ConcurrencyLimitError is returned when the max concurrent run limit is reached.
 type ConcurrencyLimitError struct {
 	Limit int
@@ -120,7 +132,7 @@ func (s *JobScheduler) reapStaleRuns(ctx context.Context) {
 		if run.StartedAt == nil {
 			continue
 		}
-		started, err := time.Parse(time.RFC3339, *run.StartedAt)
+		started, err := parseTimestamp(*run.StartedAt)
 		if err != nil {
 			continue
 		}
@@ -136,7 +148,7 @@ func (s *JobScheduler) reapStaleRuns(ctx context.Context) {
 		elapsed := now.Sub(started)
 		if elapsed > maxDur*2 { // generous 2x buffer
 			s.logger.Warn("reaping stale run", "run_id", run.ID, "elapsed", elapsed)
-			finished := now.Format(time.RFC3339)
+			finished := now.Format(isoFormat)
 			s.store.UpdateScheduledRun(ctx, run.ID, map[string]interface{}{
 				"status":      "killed",
 				"exit_reason": "timeout_reap",
@@ -199,7 +211,7 @@ func (s *JobScheduler) evaluateJob(ctx context.Context, job store.ScheduledJob, 
 	// Calculate next fire time
 	var afterTime time.Time
 	if lastRun != nil {
-		afterTime, _ = time.Parse(time.RFC3339, lastRun.ScheduledAt)
+		afterTime, _ = parseTimestamp(lastRun.ScheduledAt)
 	} else {
 		afterTime = now.Add(-24 * time.Hour) // Look back 24h for first run
 	}
@@ -222,7 +234,7 @@ func (s *JobScheduler) evaluateJob(ctx context.Context, job store.ScheduledJob, 
 	s.runningMu.Unlock()
 
 	// Create a run record
-	runID, err := s.store.CreateScheduledRun(ctx, job.ID, now.Format(time.RFC3339), "pending")
+	runID, err := s.store.CreateScheduledRun(ctx, job.ID, now.Format(isoFormat), "pending")
 	if err != nil {
 		return err
 	}
@@ -265,7 +277,7 @@ func (s *JobScheduler) FireOneshot(ctx context.Context, config map[string]interf
 	}
 	s.runningMu.Unlock()
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format(isoFormat)
 	var displayName, webhookURL *string
 	if v, ok := config["display_name"].(string); ok && v != "" {
 		displayName = &v
@@ -352,7 +364,7 @@ func (s *JobScheduler) KillRun(ctx context.Context, runID int64) bool {
 		}
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format(isoFormat)
 	s.store.UpdateScheduledRun(ctx, runID, map[string]interface{}{
 		"status":      "killed",
 		"exit_reason": "user_cancelled",
@@ -418,7 +430,7 @@ func (s *JobScheduler) launchAndWatch(runID int64, job store.ScheduledJob, rc ru
 		if err != nil {
 			errMsg := fmt.Sprintf("git worktree add failed: %v", err)
 			s.logger.Error(errMsg, "run_id", runID)
-			now := time.Now().UTC().Format(time.RFC3339)
+			now := time.Now().UTC().Format(isoFormat)
 			s.store.UpdateScheduledRun(ctx, runID, map[string]interface{}{
 				"status":      "failed",
 				"error_msg":   errMsg,
@@ -431,7 +443,7 @@ func (s *JobScheduler) launchAndWatch(runID int64, job store.ScheduledJob, rc ru
 	}
 
 	// Update run with worktree path
-	startedAt := time.Now().UTC().Format(time.RFC3339)
+	startedAt := time.Now().UTC().Format(isoFormat)
 	s.store.UpdateScheduledRun(ctx, runID, map[string]interface{}{
 		"status":        "running",
 		"started_at":    startedAt,
@@ -469,7 +481,7 @@ func (s *JobScheduler) launchAndWatch(runID int64, job store.ScheduledJob, rc ru
 	}
 
 	// Determine final status
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format(isoFormat)
 	status := "completed"
 	exitReason := "agent_done"
 	if launchErr != nil {
@@ -550,8 +562,8 @@ func (s *JobScheduler) fireWebhookForRun(runID int64) {
 
 	var durationS *int
 	if run.StartedAt != nil && run.FinishedAt != nil {
-		start, err1 := time.Parse(time.RFC3339, *run.StartedAt)
-		end, err2 := time.Parse(time.RFC3339, *run.FinishedAt)
+		start, err1 := parseTimestamp(*run.StartedAt)
+		end, err2 := parseTimestamp(*run.FinishedAt)
 		if err1 == nil && err2 == nil {
 			d := int(end.Sub(start).Seconds())
 			durationS = &d

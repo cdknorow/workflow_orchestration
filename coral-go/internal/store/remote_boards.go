@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"time"
 )
 
 // RemoteBoardSub represents a remote board subscription for local tmux notification.
@@ -28,7 +27,7 @@ func NewRemoteBoardStore(db *DB) *RemoteBoardStore {
 
 // AddRemoteSub adds or updates a remote board subscription.
 func (s *RemoteBoardStore) AddRemoteSub(ctx context.Context, sessionID, remoteServer, project, jobTitle string) (*RemoteBoardSub, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := nowUTC()
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO remote_board_subscriptions
 		 (session_id, remote_server, project, job_title, created_at)

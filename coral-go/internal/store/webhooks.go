@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // WebhookConfig represents a webhook subscription.
@@ -176,7 +175,7 @@ func (s *WebhookStore) MarkWebhookDelivery(ctx context.Context, deliveryID int64
 
 // GetPendingWebhookDeliveries returns deliveries ready for sending.
 func (s *WebhookStore) GetPendingWebhookDeliveries(ctx context.Context, limit int) ([]WebhookDelivery, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := nowUTC()
 	var deliveries []WebhookDelivery
 	err := s.db.SelectContext(ctx, &deliveries,
 		`SELECT * FROM webhook_deliveries
