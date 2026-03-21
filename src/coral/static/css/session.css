@@ -260,9 +260,11 @@
     margin: 6px 8px 6px 0 !important;
 }
 
-.session-board-card.team-sleeping {
+.session-board-card.team-sleeping .group-header-text,
+.session-board-card.team-sleeping .group-chevron,
+.session-board-card.team-sleeping .group-board-link,
+.session-board-card.team-sleeping .board-card-agents {
     opacity: 0.6;
-    filter: grayscale(0.3);
 }
 
 .board-card-folder-footer {
