@@ -428,8 +428,17 @@ async def _resume_single_session(store, rec, log) -> None:
         # (launch_claude_session calls register_live_session with new id)
         await store.unregister_live_session(sid)
 
-        # Re-subscribe to message board
+        # Re-subscribe to message board, carrying forward the read cursor
+        # so the agent doesn't re-read old messages.
         if board_name:
+            try:
+                from coral.messageboard.store import MessageBoardStore
+                board_store = MessageBoardStore()
+                old_session_name = rec.get("agent_name", "")
+                if old_session_name and old_session_name != new_session_name:
+                    await board_store.transfer_subscription(board_name, old_session_name, new_session_name)
+            except Exception:
+                log.debug("Failed to transfer board subscription cursor from %s to %s", sid[:8], new_session_id[:8])
             asyncio.create_task(setup_board_and_prompt(
                 new_session_id, new_session_name, agent_type,
                 board_name=board_name,

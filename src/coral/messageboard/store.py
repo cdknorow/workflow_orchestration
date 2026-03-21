@@ -160,6 +160,40 @@ class MessageBoardStore:
         )
         return dict(rows[0]) if rows else None
 
+    async def transfer_subscription(self, project: str, old_session_id: str, new_session_id: str) -> None:
+        """Transfer a subscription from one session to another, preserving last_read_id.
+
+        Used during session resume when the session_id changes but the agent
+        should not re-read old messages.
+        """
+        conn = await self._get_conn()
+        rows = await conn.execute_fetchall(
+            "SELECT last_read_id, job_title, webhook_url, origin_server, receive_mode FROM board_subscribers WHERE project = ? AND session_id = ?",
+            (project, old_session_id),
+        )
+        if not rows:
+            return
+        old = dict(rows[0])
+        now = datetime.now(timezone.utc).isoformat()
+        await conn.execute(
+            """INSERT INTO board_subscribers (project, session_id, job_title, webhook_url, origin_server, receive_mode, last_read_id, subscribed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(project, session_id)
+               DO UPDATE SET job_title = excluded.job_title,
+                             webhook_url = excluded.webhook_url,
+                             origin_server = excluded.origin_server,
+                             receive_mode = excluded.receive_mode,
+                             last_read_id = excluded.last_read_id""",
+            (project, new_session_id, old["job_title"], old["webhook_url"],
+             old["origin_server"], old["receive_mode"], old["last_read_id"], now),
+        )
+        # Remove old subscription
+        await conn.execute(
+            "DELETE FROM board_subscribers WHERE project = ? AND session_id = ?",
+            (project, old_session_id),
+        )
+        await conn.commit()
+
     async def get_all_subscriptions(self) -> dict[str, dict[str, Any]]:
         """Return all active subscriptions keyed by session_id."""
         conn = await self._get_conn()
