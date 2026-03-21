@@ -219,6 +219,12 @@ async def lifespan(app: FastAPI):
         await asyncio.wait_for(dispatcher.close(), timeout=5)
     except asyncio.TimeoutError:
         log.warning("Webhook dispatcher close timed out")
+    # Flush any pending events before closing the store connection
+    from coral.store.tasks import _flush_events
+    try:
+        await _flush_events(store)
+    except Exception:
+        log.debug("Failed to flush pending events on shutdown")
     await board_store.close()
     await remote_board_store.close()
     await store.close()
