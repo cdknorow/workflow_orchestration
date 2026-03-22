@@ -681,15 +681,18 @@ export function renderLiveSessions(sessions) {
             </div>
             <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
 
-        // Sort orchestrator to top
-        boardSessions.sort((a, b) => {
-            const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
-            const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
-            if (aOrch && !bOrch) return -1;
-            if (!aOrch && bOrch) return 1;
-            return 0;
-        });
-        for (const s of boardSessions) {
+        // Apply saved order if any, otherwise sort orchestrator to top
+        const orderedBoard = _sortByOrder(boardSessions);
+        if (!_getSessionOrder().length) {
+            orderedBoard.sort((a, b) => {
+                const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
+                const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
+                if (aOrch && !bOrch) return -1;
+                if (!aOrch && bOrch) return 1;
+                return 0;
+            });
+        }
+        for (const s of orderedBoard) {
             html += _renderSessionItem(s, boardName, true);
         }
         html += `</ul>`;
@@ -845,7 +848,17 @@ export function renderLiveSessions(sessions) {
                         <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)}${boardSleepIcon}</div>${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
                     </div>
                     <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
-                for (const s of boardSessions) {
+                const orderedBoardNested = _sortByOrder(boardSessions);
+                if (!_getSessionOrder().length) {
+                    orderedBoardNested.sort((a, b) => {
+                        const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
+                        const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
+                        if (aOrch && !bOrch) return -1;
+                        if (!aOrch && bOrch) return 1;
+                        return 0;
+                    });
+                }
+                for (const s of orderedBoardNested) {
                     html += _renderSessionItem(s, boardName, true);
                 }
                 html += `</ul></li>`;
@@ -887,8 +900,17 @@ export function renderLiveSessions(sessions) {
 function _attachDragListeners(list) {
     const items = list.querySelectorAll(".session-group-item[draggable]");
 
+    // Allow drops inside nested board-card-agents containers
+    for (const container of list.querySelectorAll(".board-card-agents")) {
+        container.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+        });
+    }
+
     for (const item of items) {
         item.addEventListener("dragstart", (e) => {
+            e.stopPropagation(); // Prevent board card from intercepting
             _draggedSid = item.dataset.sessionId;
             item.classList.add("dragging");
             e.dataTransfer.effectAllowed = "move";
@@ -921,6 +943,7 @@ function _attachDragListeners(list) {
 
         item.addEventListener("drop", (e) => {
             e.preventDefault();
+            e.stopPropagation();
             item.classList.remove("drag-over");
             if (!_draggedSid || _draggedSid === item.dataset.sessionId) return;
 
