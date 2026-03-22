@@ -56,7 +56,15 @@ func main() {
 	foreground := flag.Bool("foreground", false, "Run in foreground (used internally)")
 	stop := flag.Bool("stop", false, "Stop a running tray instance")
 	noBrowser := flag.Bool("no-browser", false, "Don't open the browser on startup")
+	devMode := flag.Bool("dev", false, "Development mode: skip license check")
+	backendFlag := flag.String("backend", "tmux", "Terminal backend: pty or tmux")
 	flag.Parse()
+
+	// When launched from a .app bundle on macOS, run in foreground automatically
+	// (macOS expects the main process to keep running)
+	if !*foreground && runtime.GOOS == "darwin" && isInsideAppBundle() {
+		*foreground = true
+	}
 
 	dataDir := getDataDir()
 
@@ -81,7 +89,7 @@ func main() {
 			os.MkdirAll(*homeDir, 0755)
 			os.Chdir(*homeDir)
 		}
-		runForeground(*host, *port, *noBrowser, dataDir)
+		runForeground(*host, *port, *noBrowser, *devMode, *backendFlag, dataDir)
 		return
 	}
 
@@ -103,7 +111,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot find executable: %v", err)
 	}
-	args := []string{"--foreground", "--host", *host, "--port", strconv.Itoa(*port), "--home", home}
+	args := []string{"--foreground", "--host", *host, "--port", strconv.Itoa(*port), "--home", home, "--backend", *backendFlag}
+	if *devMode {
+		args = append(args, "--dev")
+	}
 	cmd := exec.Command(exe, args...)
 
 	logFile := filepath.Join(dataDir, "tray.log")
@@ -126,7 +137,7 @@ func main() {
 	fmt.Printf("  Stop: coral-tray --stop\n")
 }
 
-func runForeground(host string, port int, noBrowser bool, dataDir string) {
+func runForeground(host string, port int, noBrowser, devMode bool, backendType, dataDir string) {
 	// Write PID
 	writePID(dataDir)
 	defer removePID(dataDir)
@@ -139,6 +150,7 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 	cfg := config.Load()
 	cfg.Host = host
 	cfg.Port = port
+	cfg.DevMode = devMode
 
 	db, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -146,9 +158,26 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 	}
 	defer db.Close()
 
-	tmuxClient := tmux.NewClient()
-	terminal := ptymanager.NewTmuxSessionTerminal(tmuxClient)
-	srv := server.New(cfg, db, nil, terminal) // nil backend = tmux mode
+	// Select terminal backend
+	var backend ptymanager.TerminalBackend
+	var agentRT background.AgentRuntime
+	var terminal ptymanager.SessionTerminal
+	if backendType == "pty" {
+		ptyBackend := ptymanager.NewPTYBackend()
+		backend = ptyBackend
+		agentRT = background.NewPTYRuntime(ptyBackend)
+		terminal = ptymanager.NewPTYSessionTerminal(ptyBackend)
+		log.Println("Using native PTY terminal backend")
+	} else {
+		tmuxClient := tmux.NewClient()
+		tmuxBackend := ptymanager.NewTmuxBackend(tmuxClient, cfg.LogDir)
+		backend = tmuxBackend
+		agentRT = background.NewTmuxRuntime(tmuxClient)
+		terminal = ptymanager.NewTmuxSessionTerminal(tmuxClient)
+		log.Println("Using tmux terminal backend")
+	}
+
+	srv := server.New(cfg, db, backend, terminal)
 	srv.RestoreSleepingBoards()
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
@@ -159,9 +188,6 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
-
-	// Start background services (same as cmd/coral)
-	agentRT := background.NewTmuxRuntime(tmuxClient)
 	gitStore := store.NewGitStore(db)
 	webhookStore := store.NewWebhookStore(db)
 	taskStore := store.NewTaskStore(db)
@@ -177,7 +203,7 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 	go indexer.Run(ctx)
 
 	discoverFn := func(ctx context.Context) ([]background.AgentInfo, error) {
-		return background.DiscoverAgentsFromTmux(ctx, tmuxClient)
+		return agentRT.ListAgents(ctx)
 	}
 
 	idleDetector := background.NewIdleDetector(taskStore, webhookStore, time.Duration(cfg.IdleDetectorIntervalS)*time.Second)
@@ -455,4 +481,14 @@ func nextFireTime(cronExpr, tz string, after time.Time) (time.Time, error) {
 	afterLocal := after.In(loc)
 	next := sched.Next(afterLocal)
 	return next.UTC(), nil
+}
+
+// isInsideAppBundle detects if the binary is running inside a macOS .app bundle
+// by checking if the executable path contains ".app/Contents/MacOS/".
+func isInsideAppBundle() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(exe, ".app/Contents/MacOS/")
 }
