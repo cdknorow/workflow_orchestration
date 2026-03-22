@@ -197,6 +197,9 @@ func (s *Server) buildRouter() chi.Router {
 	r.Post("/api/license/activate", licRoutes.Activate)
 	r.Get("/api/license/status", licRoutes.Status)
 
+	// Debug request logger (session/ws calls only, when CORAL_DEBUG=1)
+	r.Use(routes.DebugRequestLogger)
+
 	// ── API Routes ──────────────────────────────────────────────
 	sessHandler := routes.NewSessionsHandler(s.db, s.cfg, s.backend, s.terminal, s.boardStore)
 	sysHandler := routes.NewSystemHandler(s.db, s.cfg)

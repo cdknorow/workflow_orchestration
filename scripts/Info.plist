@@ -24,9 +24,7 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSAppTransportSecurity</key>
+<key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>
         <true/>

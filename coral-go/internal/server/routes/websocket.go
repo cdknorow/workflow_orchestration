@@ -28,6 +28,9 @@ import (
 // to reduce bandwidth. Full session objects are sent per changed agent
 // (no field-level diffs).
 func (h *SessionsHandler) WSCoral(w http.ResponseWriter, r *http.Request) {
+	if debugEnabled() {
+		slog.Info("[debug] ws/coral connection from", "remote", r.RemoteAddr, "origin", r.Header.Get("Origin"))
+	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// Allow localhost origins (matches CORS config)
 		InsecureSkipVerify: true,
@@ -36,7 +39,12 @@ func (h *SessionsHandler) WSCoral(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("ws/coral accept failed", "error", err)
 		return
 	}
-	defer conn.CloseNow()
+	defer func() {
+		if debugEnabled() {
+			slog.Info("[debug] ws/coral disconnected", "remote", r.RemoteAddr)
+		}
+		conn.CloseNow()
+	}()
 
 	ctx := conn.CloseRead(r.Context())
 
@@ -305,6 +313,12 @@ func (h *SessionsHandler) getActiveRuns(ctx context.Context) []map[string]any {
 // With tmux backend: adaptive polling with capture-pane.
 func (h *SessionsHandler) WSTerminal(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
+	agentType := r.URL.Query().Get("agent_type")
+	sessionID := r.URL.Query().Get("session_id")
+
+	if debugEnabled() {
+		slog.Info("[debug] ws/terminal connect", "name", name, "agent_type", agentType, "session_id", sessionID, "remote", r.RemoteAddr)
+	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
@@ -313,7 +327,12 @@ func (h *SessionsHandler) WSTerminal(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("ws/terminal accept failed", "error", err)
 		return
 	}
-	defer conn.CloseNow()
+	defer func() {
+		if debugEnabled() {
+			slog.Info("[debug] ws/terminal disconnected", "name", name, "session_id", sessionID)
+		}
+		conn.CloseNow()
+	}()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -322,11 +341,17 @@ func (h *SessionsHandler) WSTerminal(w http.ResponseWriter, r *http.Request) {
 	if h.backend != nil {
 		ch, err := h.backend.Subscribe(name, fmt.Sprintf("ws-%d", time.Now().UnixNano()))
 		if err == nil && ch != nil {
+			if debugEnabled() {
+				slog.Info("[debug] ws/terminal using PTY streaming", "name", name)
+			}
 			h.wsTerminalStreaming(ctx, conn, name, ch)
 			return
 		}
 	}
 
+	if debugEnabled() {
+		slog.Info("[debug] ws/terminal using tmux polling", "name", name)
+	}
 	// Fallback to tmux polling mode
 	h.wsTerminalPolling(ctx, conn, r, name)
 }

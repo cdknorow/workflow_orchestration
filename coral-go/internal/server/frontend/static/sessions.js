@@ -1,7 +1,7 @@
 /* Session selection and management */
 
 import { state, sessionKey } from './state.js';
-import { showToast, escapeHtml, escapeAttr } from './utils.js';
+import { showToast, escapeHtml, escapeAttr, dbg } from './utils.js';
 import { loadLiveSessionDetail, loadHistoryMessages } from './api.js';
 import { stopCaptureRefresh, startCaptureRefresh } from './capture.js';
 import { updateSessionStatus, updateSessionSummary, updateSessionBranch, updateWaitingIndicator, renderHistoryChat } from './render.js';
@@ -21,6 +21,7 @@ import { getRendererMode } from './renderers.js';
 import { invalidateFileCache, fetchFileList } from './file_mention.js';
 
 export async function selectLiveSession(name, agentType, sessionId) {
+    dbg('selectLiveSession', { name, agentType, sessionId });
     stopCaptureRefresh();
     stopLiveHistoryPoll();
     disconnectTerminalWs();
@@ -113,9 +114,11 @@ export async function selectLiveSession(name, agentType, sessionId) {
     // Reset live history and start capture/terminal
     resetLiveHistory();
     const mode = getRendererMode(agentType, sessionId);
+    dbg('renderer mode:', mode, 'Terminal available:', typeof Terminal !== 'undefined');
     // Always start capture refresh — it polls tasks and events for any mode
     startCaptureRefresh();
     if (mode === "xterm" && typeof Terminal !== 'undefined') {
+        dbg('switching to xterm mode, creating terminal + WS');
         document.getElementById("pane-capture").style.display = "none";
         const container = document.getElementById("xterm-container");
         container.style.display = "flex";
@@ -123,6 +126,7 @@ export async function selectLiveSession(name, agentType, sessionId) {
         createTerminal(container);
         connectTerminalWs(name, agentType, sessionId);
     } else {
+        dbg('switching to capture mode, disposing terminal');
         document.getElementById("xterm-container").style.display = "none";
         document.getElementById("pane-capture").style.display = "";
         disposeTerminal();

@@ -1,5 +1,13 @@
 /* Utility functions: HTML escaping and toast notifications */
 
+// Debug logging — enabled via ?debug=1 URL param or localStorage coral-debug=1
+const _debugEnabled = new URLSearchParams(location.search).has('debug') ||
+    localStorage.getItem('coral-debug') === '1';
+
+export function dbg(...args) {
+    if (_debugEnabled) console.log('[coral]', ...args);
+}
+
 export function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str;
