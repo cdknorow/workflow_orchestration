@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/store"
 )
@@ -140,6 +142,33 @@ func (h *SystemHandler) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": false,
 		"current":   "0.1.0-go",
+	})
+}
+
+// CLICheck verifies whether the required CLI tool for an agent type is installed.
+// GET /api/system/cli-check?type=claude
+func (h *SystemHandler) CLICheck(w http.ResponseWriter, r *http.Request) {
+	agentType := r.URL.Query().Get("type")
+	if agentType == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type parameter required"})
+		return
+	}
+
+	info := agent.GetCLIInfo(agentType)
+	if info == nil {
+		// Unknown agent type — skip check
+		writeJSON(w, http.StatusOK, map[string]any{"available": true, "agent_type": agentType})
+		return
+	}
+
+	_, err := exec.LookPath(info.Binary)
+	available := err == nil
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"available":       available,
+		"agent_type":      agentType,
+		"binary":          info.Binary,
+		"install_command": info.InstallCommand,
 	})
 }
 

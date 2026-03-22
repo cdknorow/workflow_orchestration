@@ -1693,6 +1693,16 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 	if agentType == "" {
 		agentType = "claude"
 	}
+
+	// Check CLI availability before launching (skip for terminal type)
+	if agentType != "terminal" {
+		if info := agent.GetCLIInfo(agentType); info != nil {
+			if _, err := exec.LookPath(info.Binary); err != nil {
+				return nil, fmt.Errorf("%s CLI not found. Install it: %s", info.Binary, info.InstallCommand)
+			}
+		}
+	}
+
 	if backend == "" {
 		if h.backend != nil {
 			backend = "pty"

@@ -87,10 +87,11 @@
                             </ul>
                         </div>
                         <label>Agent Type:
-                            <select id="launch-type">
+                            <select id="launch-type" onchange="window._checkAgentCLI && window._checkAgentCLI(this.value)">
                                 <option value="claude">Claude</option>
                                 <option value="gemini">Gemini</option>
                             </select>
+                            <span id="cli-check-warning" class="cli-check-warning" style="display:none"></span>
                         </label>
                         <label>Backend:
                             <select id="launch-backend">

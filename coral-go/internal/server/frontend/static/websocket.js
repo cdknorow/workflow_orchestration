@@ -5,9 +5,10 @@ import { renderLiveSessions, updateSessionStatus, updateSessionSummary, updateSe
 import { renderLiveJobs } from './live_jobs.js';
 import { updateChangedFileCount } from './changed_files.js';
 import { updateSectionVisibility } from './sidebar.js';
-import { showNotificationToast, showToast, escapeHtml } from './utils.js';
+import { showNotificationToast, showToast, escapeHtml, dbg } from './utils.js';
 
 export function connectCoralWs() {
+    dbg('connectCoralWs: establishing connection');
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${proto}//${location.host}/ws/coral`;
 
@@ -140,11 +141,13 @@ export function connectCoralWs() {
         }
     };
 
-    state.coralWs.onclose = () => {
+    state.coralWs.onclose = (ev) => {
+        dbg('coralWs CLOSE', { code: ev.code, reason: ev.reason });
         setTimeout(connectCoralWs, 5000);
     };
 
-    state.coralWs.onerror = () => {
+    state.coralWs.onerror = (ev) => {
+        dbg('coralWs ERROR', ev);
         // Will trigger onclose
     };
 }

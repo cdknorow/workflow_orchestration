@@ -2133,3 +2133,15 @@
     color: var(--text-primary);
     background: var(--bg-tertiary);
 }
+
+/* ── CLI Check Warning ───────────────────────────────────── */
+
+.cli-check-warning {
+    font-size: 11px;
+    color: var(--warning, #d29922);
+    margin-top: 2px;
+}
+
+.cli-warning-icon {
+    font-size: 13px;
+}

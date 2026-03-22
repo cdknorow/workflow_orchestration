@@ -52,6 +52,9 @@ function _selectLaunchType(type) {
     if (type === "agent") {
         _loadAgentBoardProjects();
         _initAgentPresets();
+        // Check CLI availability for the selected agent type
+        const agentType = document.getElementById("launch-type")?.value;
+        if (agentType) _checkAgentCLI(agentType);
     } else if (type === "team") {
         _initTeamForm();
     } else {
@@ -112,6 +115,76 @@ export function showLaunchModal() {
 
 export function hideLaunchModal() {
     document.getElementById("launch-modal").style.display = "none";
+}
+
+// ── CLI Availability Check ────────────────────────────────────────────────
+
+const CLI_INSTALL_INSTRUCTIONS = {
+    claude: { name: 'claude', cmd: 'npm install -g @anthropic-ai/claude-code' },
+    gemini: { name: 'gemini', cmd: 'pip install google-gemini-cli' },
+    codex: { name: 'codex', cmd: 'npm install -g @openai/codex' },
+};
+
+let _cliCheckCache = {}; // { type: {available, checkedAt} }
+
+async function _checkAgentCLI(agentType) {
+    const warning = document.getElementById('cli-check-warning');
+    if (!warning) return;
+
+    // Check cache (valid for 30s)
+    const cached = _cliCheckCache[agentType];
+    if (cached && (Date.now() - cached.checkedAt) < 30000) {
+        _showCLIWarning(warning, agentType, cached.available);
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/system/cli-check?type=${encodeURIComponent(agentType)}`);
+        const data = await resp.json();
+        const available = data.available !== false;
+        _cliCheckCache[agentType] = { available, checkedAt: Date.now() };
+        _showCLIWarning(warning, agentType, available);
+    } catch {
+        // Network error — don't show warning
+        warning.style.display = 'none';
+    }
+}
+window._checkAgentCLI = _checkAgentCLI;
+
+function _showCLIWarning(el, agentType, available) {
+    if (available) {
+        el.style.display = 'none';
+        return;
+    }
+    const info = CLI_INSTALL_INSTRUCTIONS[agentType] || { name: agentType, cmd: '' };
+    el.innerHTML = `<span class="cli-warning-icon" title="${info.name} CLI not found">&#x26A0;</span> <code>${info.name}</code> not found`;
+    el.style.display = '';
+}
+
+function _showCLINotFoundModal(agentType) {
+    const info = CLI_INSTALL_INSTRUCTIONS[agentType] || { name: agentType, cmd: `Install ${agentType} CLI` };
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-content" style="width:480px">
+            <h3>${info.name} CLI Not Found</h3>
+            <p style="color:var(--text-secondary);font-size:13px;line-height:1.5;margin:8px 0 12px">
+                The <code>${info.name}</code> command was not found on this system. Install it to launch ${info.name} agents.
+            </p>
+            <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--font-mono);font-size:13px;display:flex;align-items:center;gap:8px">
+                <code style="flex:1;user-select:all">${escapeHtml(info.cmd)}</code>
+                <button class="btn btn-small" onclick="navigator.clipboard.writeText('${info.cmd.replace(/'/g, "\\'")}'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+            </div>
+            <div class="modal-actions" style="margin-top:16px">
+                <button class="btn btn-primary" data-action="close">OK</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+        if (e.target.dataset?.action === 'close' || e.target === modal) modal.remove();
+    });
 }
 
 function _checkPermissionFlag(flagsStr) {
@@ -223,7 +296,11 @@ export async function launchSession() {
         });
         const result = await resp.json();
         if (result.error) {
-            showToast(result.error, true);
+            if (result.error.includes('not found') && result.error.includes('CLI')) {
+                _showCLINotFoundModal(type);
+            } else {
+                showToast(result.error, true);
+            }
         } else {
             showToast(`Launched: ${result.session_name}`);
             hideLaunchModal();

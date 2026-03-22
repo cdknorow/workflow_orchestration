@@ -60,3 +60,24 @@ func GetAgent(agentType string) Agent {
 func GetAllAgents() []Agent {
 	return []Agent{&ClaudeAgent{}, &GeminiAgent{}}
 }
+
+// CLIInfo holds the CLI binary name and install instructions for an agent type.
+type CLIInfo struct {
+	Binary         string `json:"binary"`
+	InstallCommand string `json:"install_command"`
+}
+
+// AgentCLIs maps agent types to their required CLI tools and install instructions.
+var AgentCLIs = map[string]CLIInfo{
+	"claude": {Binary: "claude", InstallCommand: "npm install -g @anthropic-ai/claude-code"},
+	"gemini": {Binary: "gemini", InstallCommand: "pip install google-gemini-cli"},
+	"codex":  {Binary: "codex", InstallCommand: "npm install -g @openai/codex"},
+}
+
+// GetCLIInfo returns CLI info for an agent type, or nil if unknown.
+func GetCLIInfo(agentType string) *CLIInfo {
+	if info, ok := AgentCLIs[agentType]; ok {
+		return &info
+	}
+	return nil
+}

@@ -278,6 +278,7 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/settings/default-prompts", sysHandler.GetDefaultPrompts)
 	r.Get("/api/system/status", sysHandler.Status)
 	r.Get("/api/system/update-check", sysHandler.UpdateCheck)
+	r.Get("/api/system/cli-check", sysHandler.CLICheck)
 	r.Get("/api/filesystem/list", sysHandler.ListFilesystem)
 	r.Post("/api/indexer/refresh", sysHandler.RefreshIndexer)
 
