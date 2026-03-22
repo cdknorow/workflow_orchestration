@@ -376,7 +376,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 	defer cancel()
 
 	// Resolve pane target
-	target, err := h.tmux.FindPaneTarget(ctx, name, agentType, sessionID)
+	target, err := h.terminal.FindTarget(ctx, name, agentType, sessionID)
 	if err != nil || target == "" {
 		conn.Close(websocket.StatusInternalError, "pane not found")
 		return
@@ -424,7 +424,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 			switch msg.Type {
 			case "terminal_input":
 				if msg.Data != "" && currentTarget != "" {
-					h.tmux.SendTerminalInputToTarget(ctx, currentTarget, msg.Data)
+					h.terminal.SendTerminalInput(ctx, currentTarget, msg.Data)
 					select {
 					case inputEvent <- struct{}{}:
 					default:
@@ -432,7 +432,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 				}
 			case "terminal_resize":
 				if msg.Cols >= 10 && currentTarget != "" {
-					h.tmux.ResizePaneTarget(ctx, currentTarget, msg.Cols)
+					h.terminal.ResizeTarget(ctx, currentTarget, msg.Cols)
 				}
 			}
 		}
@@ -474,7 +474,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 		targetMu.Unlock()
 
 		if currentTarget == "" {
-			newTarget, _ := h.tmux.FindPaneTarget(ctx, name, agentType, sessionID)
+			newTarget, _ := h.terminal.FindTarget(ctx, name, agentType, sessionID)
 			if newTarget != "" {
 				targetMu.Lock()
 				target = newTarget
@@ -494,7 +494,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 		// Query cursor position and alternate screen mode in one call
 		cursorX, cursorY := -1, -1
 		altScreen := false
-		if infoOut, err := h.tmux.DisplayMessage(ctx, currentTarget, "#{cursor_x},#{cursor_y},#{alternate_on}"); err == nil {
+		if infoOut, err := h.terminal.DisplayMessage(ctx, currentTarget, "#{cursor_x},#{cursor_y},#{alternate_on}"); err == nil {
 			parts := strings.SplitN(strings.TrimSpace(infoOut), ",", 3)
 			if len(parts) >= 3 {
 				cursorX, _ = strconv.Atoi(parts[0])
@@ -504,7 +504,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 		}
 
 		// Use visible-only capture when a TUI app is using the alternate screen buffer
-		content, _ := h.tmux.CapturePaneRawTarget(ctx, currentTarget, 200, altScreen)
+		content, _ := h.terminal.CaptureRawOutput(ctx, currentTarget, 200, altScreen)
 		if content != "" {
 			paneGoneNotified = false
 			if content != lastContent || cursorX != lastCursorX || cursorY != lastCursorY {

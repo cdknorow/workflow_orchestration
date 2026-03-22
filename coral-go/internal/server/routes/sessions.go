@@ -36,7 +36,7 @@ type SessionsHandler struct {
 	gs      *store.GitStore
 	bs      *board.Store
 	cfg     *config.Config
-	tmux    *tmux.Client
+	terminal ptymanager.SessionTerminal
 	jsonl   *jsonl.SessionReader
 	backend ptymanager.TerminalBackend // nil = use tmux directly
 
@@ -66,7 +66,7 @@ func NewSessionsHandler(db *store.DB, cfg *config.Config, backend ptymanager.Ter
 		gs:        store.NewGitStore(db),
 		bs:        bs,
 		cfg:       cfg,
-		tmux:      tmux.NewClient(),
+		terminal:  ptymanager.NewTmuxSessionTerminal(tmux.NewClient()),
 		jsonl:     jsonl.NewSessionReader(),
 		backend:   backend,
 		lastKnown: make(map[string]lastKnownState),
@@ -86,7 +86,7 @@ type AgentInfo struct {
 }
 
 func (h *SessionsHandler) discoverAgents(ctx *http.Request) ([]AgentInfo, error) {
-	panes, err := h.tmux.ListPanes(ctx.Context())
+	panes, err := h.terminal.ListSessions(ctx.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +460,7 @@ func (h *SessionsHandler) Detail(w http.ResponseWriter, r *http.Request) {
 	logPath := h.findLogPath(agentType, sessionID)
 	logInfo := getLogStatus(logPath)
 
-	paneText, _ := h.tmux.CapturePane(r.Context(), name, 200, agentType, sessionID)
+	paneText, _ := h.terminal.CaptureOutput(r.Context(), name, 200, agentType, sessionID)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":              name,
@@ -480,7 +480,7 @@ func (h *SessionsHandler) Capture(w http.ResponseWriter, r *http.Request) {
 	agentType := r.URL.Query().Get("agent_type")
 	sessionID := r.URL.Query().Get("session_id")
 
-	text, err := h.tmux.CapturePane(r.Context(), name, 200, agentType, sessionID)
+	text, err := h.terminal.CaptureOutput(r.Context(), name, 200, agentType, sessionID)
 	if err != nil || text == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"name": name, "capture": nil, "error": "Could not capture pane"})
 		return
@@ -503,7 +503,7 @@ func (h *SessionsHandler) Poll(w http.ResponseWriter, r *http.Request) {
 
 	// Capture pane
 	captureResult := map[string]any{"name": name, "capture": nil}
-	if text, err := h.tmux.CapturePane(ctx, name, 200, agentType, sessionID); err == nil && text != "" {
+	if text, err := h.terminal.CaptureOutput(ctx, name, 200, agentType, sessionID); err == nil && text != "" {
 		captureResult["capture"] = text
 	} else {
 		captureResult["error"] = fmt.Sprintf("Could not capture pane for '%s'", name)
@@ -563,7 +563,7 @@ func (h *SessionsHandler) Info(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 	ctx := r.Context()
 
-	pane, _ := h.tmux.FindPane(ctx, name, agentType, sessionID)
+	pane, _ := h.terminal.FindSession(ctx, name, agentType, sessionID)
 
 	result := map[string]any{
 		"name":       name,
@@ -610,7 +610,7 @@ func (h *SessionsHandler) Info(w http.ResponseWriter, r *http.Request) {
 
 // resolveWorkdir determines the working directory for an agent session.
 func (h *SessionsHandler) resolveWorkdir(ctx context.Context, name, agentType, sessionID string) string {
-	pane, _ := h.tmux.FindPane(ctx, name, agentType, sessionID)
+	pane, _ := h.terminal.FindSession(ctx, name, agentType, sessionID)
 	if pane != nil {
 		if pane.CurrentPath != "" {
 			return pane.CurrentPath
@@ -922,7 +922,7 @@ func (h *SessionsHandler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tmux.SendKeys(r.Context(), name, body.Command, body.AgentType, body.SessionID); err != nil {
+	if err := h.terminal.SendInput(r.Context(), name, body.Command, body.AgentType, body.SessionID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -943,7 +943,7 @@ func (h *SessionsHandler) Keys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tmux.SendRawKeys(r.Context(), name, body.Keys, body.AgentType, body.SessionID); err != nil {
+	if err := h.terminal.SendRawInput(r.Context(), name, body.Keys, body.AgentType, body.SessionID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -964,7 +964,7 @@ func (h *SessionsHandler) Resize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tmux.ResizePane(r.Context(), name, body.Columns, body.AgentType, body.SessionID); err != nil {
+	if err := h.terminal.ResizeSession(r.Context(), name, body.Columns, body.AgentType, body.SessionID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -983,7 +983,7 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&body)
 
-	if err := h.tmux.KillSession(r.Context(), name, body.AgentType, body.SessionID); err != nil {
+	if err := h.terminal.KillSession(r.Context(), name, body.AgentType, body.SessionID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1021,7 +1021,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pane, err := h.tmux.FindPane(ctx, name, agentType, body.SessionID)
+	pane, err := h.terminal.FindSession(ctx, name, agentType, body.SessionID)
 	if err != nil || pane == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Pane not found"})
 		return
@@ -1032,12 +1032,12 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	newLogPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, newSessionID))
 
 	// Close old pipe-pane, respawn, rename
-	h.tmux.ClosePipePane(ctx, pane.Target)
-	if err := h.tmux.RespawnPane(ctx, pane.Target, pane.CurrentPath); err != nil {
+	h.terminal.StopLogging(ctx, pane.Target)
+	if err := h.terminal.RestartPane(ctx, pane.Target, pane.CurrentPath); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := h.tmux.RenameSession(ctx, pane.SessionName, newSessionName); err != nil {
+	if err := h.terminal.RenameSession(ctx, pane.SessionName, newSessionName); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1046,14 +1046,14 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Clear scrollback, create log, setup pipe-pane
-	h.tmux.ClearHistory(ctx, target)
+	h.terminal.ClearHistory(ctx, target)
 	os.WriteFile(newLogPath, []byte{}, 0644)
-	h.tmux.PipePane(ctx, target, newLogPath)
+	h.terminal.StartLogging(ctx, target, newLogPath)
 
 	// Set pane title
 	folderName := filepath.Base(strings.TrimRight(pane.CurrentPath, "/"))
 	titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, agentType)
-	h.tmux.SendKeysToTarget(ctx, target, titleCmd)
+	h.terminal.SendToTarget(ctx, target, titleCmd)
 	time.Sleep(300 * time.Millisecond)
 
 	// Load stored flags, prompt, board_name, board_server from the DB
@@ -1096,7 +1096,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		PromptOverrides: promptOverrides,
 		BoardType:       storedBoardType,
 	})
-	h.tmux.SendKeysToTarget(ctx, target, cmd)
+	h.terminal.SendToTarget(ctx, target, cmd)
 
 	// Replace live session in DB (carry forward stored fields)
 	h.ss.ReplaceLiveSession(ctx, body.SessionID, &store.LiveSession{
@@ -1147,7 +1147,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	pane, _ := h.tmux.FindPane(ctx, name, agentType, body.CurrentSessionID)
+	pane, _ := h.terminal.FindSession(ctx, name, agentType, body.CurrentSessionID)
 	if pane == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Pane not found"})
 		return
@@ -1184,15 +1184,15 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		"default_prompt_worker":       userSettings["default_prompt_worker"],
 	}
 
-	h.tmux.ClosePipePane(ctx, pane.Target)
-	h.tmux.RespawnPane(ctx, pane.Target, pane.CurrentPath)
-	h.tmux.RenameSession(ctx, pane.SessionName, newSessionName)
+	h.terminal.StopLogging(ctx, pane.Target)
+	h.terminal.RestartPane(ctx, pane.Target, pane.CurrentPath)
+	h.terminal.RenameSession(ctx, pane.SessionName, newSessionName)
 
 	target := fmt.Sprintf("%s:0.0", newSessionName)
 	time.Sleep(500 * time.Millisecond)
-	h.tmux.ClearHistory(ctx, target)
+	h.terminal.ClearHistory(ctx, target)
 	os.WriteFile(newLogPath, []byte{}, 0644)
-	h.tmux.PipePane(ctx, target, newLogPath)
+	h.terminal.StartLogging(ctx, target, newLogPath)
 
 	cmd := agentImpl.BuildLaunchCommand(agent.LaunchParams{
 		SessionID:       newSessionID,
@@ -1205,7 +1205,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		PromptOverrides: promptOverrides,
 		BoardType:       storedBoardType,
 	})
-	h.tmux.SendKeysToTarget(ctx, target, cmd)
+	h.terminal.SendToTarget(ctx, target, cmd)
 
 	h.ss.ReplaceLiveSession(ctx, body.CurrentSessionID, &store.LiveSession{
 		SessionID:    newSessionID,
@@ -1245,7 +1245,7 @@ func (h *SessionsHandler) Attach(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&body)
 
-	pane, _ := h.tmux.FindPane(r.Context(), name, body.AgentType, body.SessionID)
+	pane, _ := h.terminal.FindSession(r.Context(), name, body.AgentType, body.SessionID)
 	if pane == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Pane not found"})
 		return
@@ -1753,22 +1753,22 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		// Create empty log file
 		os.WriteFile(logFile, []byte{}, 0644)
 
-		if err := h.tmux.NewSession(ctx, sessionName, absDir); err != nil {
+		if err := h.terminal.CreateSession(ctx, sessionName, absDir); err != nil {
 			return nil, fmt.Errorf("tmux new-session failed: %w", err)
 		}
 
 		// Setup pipe-pane logging
-		h.tmux.PipePane(ctx, sessionName, logFile)
+		h.terminal.StartLogging(ctx, sessionName, logFile)
 
 		// Set pane title
 		titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, agentType)
-		h.tmux.SendKeysToTarget(ctx, sessionName+".0", titleCmd)
+		h.terminal.SendToTarget(ctx, sessionName+".0", titleCmd)
 		time.Sleep(300 * time.Millisecond)
 
 		// Launch the agent (unless terminal)
 		if !isTerminal {
 			cmd := agentImpl.BuildLaunchCommand(launchParams)
-			h.tmux.SendKeysToTarget(ctx, sessionName+".0", cmd)
+			h.terminal.SendToTarget(ctx, sessionName+".0", cmd)
 		}
 	}
 
@@ -2064,7 +2064,7 @@ func (h *SessionsHandler) Sleep(w http.ResponseWriter, r *http.Request) {
 	// Kill tmux sessions for agents on this board
 	killed := 0
 	for _, ls := range boardSessions {
-		err := h.tmux.KillSessionOnly(ctx, ls.AgentName, ls.AgentType, ls.SessionID)
+		err := h.terminal.KillSessionOnly(ctx, ls.AgentName, ls.AgentType, ls.SessionID)
 		if err == nil {
 			killed++
 		}
@@ -2167,7 +2167,7 @@ func (h *SessionsHandler) SleepSession(w http.ResponseWriter, r *http.Request) {
 	h.ss.SetSessionSleeping(ctx, sessionID, true)
 
 	// Kill tmux session to free resources
-	err := h.tmux.KillSessionOnly(ctx, sess.AgentName, sess.AgentType, sessionID)
+	err := h.terminal.KillSessionOnly(ctx, sess.AgentName, sess.AgentType, sessionID)
 	if err != nil {
 		log.Printf("Failed to kill tmux for session %s during sleep: %v", sessionID[:8], err)
 	}
@@ -2266,7 +2266,7 @@ func (h *SessionsHandler) SleepAll(w http.ResponseWriter, r *http.Request) {
 		if ls.BoardName != nil && *ls.BoardName != "" {
 			boards[*ls.BoardName] = true
 		}
-		err := h.tmux.KillSessionOnly(ctx, ls.AgentName, ls.AgentType, ls.SessionID)
+		err := h.terminal.KillSessionOnly(ctx, ls.AgentName, ls.AgentType, ls.SessionID)
 		if err == nil {
 			killed++
 		} else {
