@@ -24,6 +24,8 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>LSUIElement</key>
+    <true/>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
 </dict>

@@ -148,12 +148,18 @@ jobs:
         working-directory: coral-go
         run: |
           mkdir -p ../dist/macos
+          # Pure Go binaries (no CGO needed)
           for cmd in coral launch-coral coral-board; do
             CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o "../dist/macos/${cmd}-arm64" "./cmd/$cmd/"
             CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o "../dist/macos/${cmd}-amd64" "./cmd/$cmd/"
             lipo -create -output "../dist/macos/$cmd" "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
             rm "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
           done
+          # Tray app requires CGO for native menu bar (Cocoa)
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o "../dist/macos/coral-tray-arm64" "./cmd/coral-tray/"
+          CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o "../dist/macos/coral-tray-amd64" "./cmd/coral-tray/"
+          lipo -create -output "../dist/macos/coral-tray" "../dist/macos/coral-tray-arm64" "../dist/macos/coral-tray-amd64"
+          rm "../dist/macos/coral-tray-arm64" "../dist/macos/coral-tray-amd64"
 
       - name: Generate .icns icon
         run: |
@@ -176,7 +182,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           APP="dist/Coral.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          for cmd in coral launch-coral coral-board; do
+          for cmd in coral launch-coral coral-board coral-tray; do
             cp "dist/macos/$cmd" "$APP/Contents/MacOS/$cmd"
             chmod +x "$APP/Contents/MacOS/$cmd"
           done
@@ -209,7 +215,7 @@ jobs:
           SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
           APP="dist/Coral.app"
-          for bin in coral launch-coral coral-board; do
+          for bin in coral launch-coral coral-board coral-tray; do
             codesign --force --options runtime --sign "$SIGNING_IDENTITY" \
               --entitlements entitlements.plist "$APP/Contents/MacOS/$bin"
           done
@@ -270,17 +276,21 @@ jobs:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Upload assets to release
+      - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          # Create the release if it doesn't exist
+          gh release create "$TAG" --title "$TAG" --generate-notes || true
+          # Upload all artifacts
           for f in artifacts/**/*; do
-            [ -f "$f" ] && gh release upload "$TAG" "$f" --repo "$GH_REPO" --clobber
+            [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber
           done

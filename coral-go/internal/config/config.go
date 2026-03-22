@@ -98,6 +98,11 @@ func Load() *Config {
 			filepath.Join(homeDir, ".gemini", "tmp")),
 	}
 
+	// Dev mode can also be set via environment variable
+	if os.Getenv("CORAL_DEV") == "1" || os.Getenv("CORAL_DEV") == "true" {
+		cfg.DevMode = true
+	}
+
 	return cfg
 }
 
