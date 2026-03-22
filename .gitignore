@@ -9,8 +9,12 @@ site/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
 coral-go/coral
+coral-go/coral.exe
+coral-go/launch-coral.exe
+coral-go/coral-board.exe
 coral-go/db-compare
 coral-go/cmd/db-compare/db-compare
+*.exe
 
 # Large video files (use GitHub Releases for distribution)
 icons/history.mp4
