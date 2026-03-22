@@ -871,6 +871,7 @@ function _addTeamAgent(defaultName, defaultPrompt) {
     const list = document.getElementById("team-agents-list");
     const row = document.createElement("div");
     row.className = "team-agent-row";
+    row.draggable = true;
     row.dataset.idx = idx;
 
     const hasContent = !!(defaultName || defaultPrompt);
@@ -884,6 +885,12 @@ function _addTeamAgent(defaultName, defaultPrompt) {
                     <span class="team-agent-prompt-preview">${escapeHtml(_truncatePrompt(defaultPrompt, 200))}</span>
                 </div>
                 <div class="team-agent-summary-actions">
+                    <button class="team-agent-reorder-btn" title="Move up" onclick="event.stopPropagation(); window._moveTeamAgent(this, -1)">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 7l4-4 4 4"/></svg>
+                    </button>
+                    <button class="team-agent-reorder-btn" title="Move down" onclick="event.stopPropagation(); window._moveTeamAgent(this, 1)">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 9l4 4 4-4"/></svg>
+                    </button>
                     <button class="team-agent-edit-btn" title="Edit" onclick="event.stopPropagation(); this.closest('.team-agent-card').classList.add('editing')">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -915,12 +922,60 @@ function _addTeamAgent(defaultName, defaultPrompt) {
     `;
     list.appendChild(row);
 
+    // Drag-and-drop reorder handlers
+    row.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', idx.toString());
+        row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        list.querySelectorAll('.team-agent-row.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+    row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over');
+    });
+    row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        const draggedIdx = e.dataTransfer.getData('text/plain');
+        const draggedRow = list.querySelector(`.team-agent-row[data-idx="${draggedIdx}"]`);
+        if (draggedRow && draggedRow !== row) {
+            const rows = [...list.children];
+            const fromPos = rows.indexOf(draggedRow);
+            const toPos = rows.indexOf(row);
+            if (fromPos < toPos) {
+                list.insertBefore(draggedRow, row.nextSibling);
+            } else {
+                list.insertBefore(draggedRow, row);
+            }
+        }
+    });
+
     // Focus the name input if it's a new empty agent
     if (!hasContent) {
         const nameInput = row.querySelector('.team-agent-name');
         if (nameInput) setTimeout(() => nameInput.focus(), 50);
     }
 }
+
+// Move a team agent card up or down
+function _moveTeamAgent(btn, direction) {
+    const row = btn.closest('.team-agent-row');
+    if (!row) return;
+    const list = row.parentElement;
+    if (direction === -1 && row.previousElementSibling) {
+        list.insertBefore(row, row.previousElementSibling);
+    } else if (direction === 1 && row.nextElementSibling) {
+        list.insertBefore(row.nextElementSibling, row);
+    }
+}
+window._moveTeamAgent = _moveTeamAgent;
 
 function _showAddAgentPicker() {
     const picker = document.getElementById("team-agent-picker");

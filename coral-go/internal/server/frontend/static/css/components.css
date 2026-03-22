@@ -2098,3 +2098,38 @@
     font-size: 12px;
     font-family: var(--font-mono);
 }
+
+/* ── Team Agent Reorder ──────────────────────────────────── */
+
+.team-agent-row {
+    cursor: grab;
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.team-agent-row.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+}
+
+.team-agent-row.drag-over {
+    border-top: 2px solid var(--accent, #4a9eff);
+}
+
+.team-agent-reorder-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.team-agent-reorder-btn:hover {
+    opacity: 1;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
