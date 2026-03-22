@@ -222,11 +222,14 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 		}
 	}()
 
-	// Open browser
+	// Open dashboard (try native app first, fall back to browser)
 	if !noBrowser {
 		go func() {
 			time.Sleep(time.Second)
-			openBrowser(fmt.Sprintf("http://localhost:%d", port))
+			dashURL := fmt.Sprintf("http://localhost:%d", port)
+			if err := launchCoralApp(dashURL); err != nil {
+				openBrowser(dashURL)
+			}
 		}()
 	}
 
@@ -241,7 +244,8 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 		systray.SetTitle("")
 		systray.SetTooltip("Coral Dashboard")
 
-		mOpen := systray.AddMenuItem("Open Dashboard", "Open Coral in browser")
+		mOpenApp := systray.AddMenuItem("Open in App", "Open Coral in native window")
+		mOpenBrowser := systray.AddMenuItem("Open in Browser", "Open Coral in web browser")
 		mUpdate := systray.AddMenuItem("Check for Updates", "Check for new versions")
 		systray.AddSeparator()
 		mShutdown := systray.AddMenuItem("Shutdown — Kill Agents & Stop Server", "Kill all agents and stop the server")
@@ -250,7 +254,9 @@ func runForeground(host string, port int, noBrowser bool, dataDir string) {
 		go func() {
 			for {
 				select {
-				case <-mOpen.ClickedCh:
+				case <-mOpenApp.ClickedCh:
+					go launchCoralApp(url)
+				case <-mOpenBrowser.ClickedCh:
 					openBrowser(url)
 				case <-mUpdate.ClickedCh:
 					go checkForUpdates()
@@ -392,6 +398,30 @@ func readPID(dataDir string) int {
 		return 0
 	}
 	return pid
+}
+
+// launchCoralApp tries to launch the coral-app native window binary.
+// Returns an error if coral-app is not found or fails to start.
+func launchCoralApp(url string) error {
+	// Look for coral-app next to the current executable first
+	exe, err := os.Executable()
+	if err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), "coral-app")
+		if runtime.GOOS == "windows" {
+			candidate += ".exe"
+		}
+		if _, err := os.Stat(candidate); err == nil {
+			cmd := exec.Command(candidate, "--url", url)
+			return cmd.Start()
+		}
+	}
+	// Fall back to PATH
+	appPath, err := exec.LookPath("coral-app")
+	if err != nil {
+		return fmt.Errorf("coral-app not found: %w", err)
+	}
+	cmd := exec.Command(appPath, "--url", url)
+	return cmd.Start()
 }
 
 func openBrowser(url string) {
