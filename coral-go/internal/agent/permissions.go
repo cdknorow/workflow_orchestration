@@ -51,6 +51,9 @@ func TranslateToClaudePermissions(caps *Capabilities) *ClaudePermissions {
 		deny = append(deny, mapCapToClaudeTools(cap)...)
 	}
 
+	// Always allow coral-board CLI for message board communication
+	allow = append(allow, "Bash(coral-board *)")
+
 	if len(allow) == 0 && len(deny) == 0 {
 		return nil
 	}
@@ -99,7 +102,7 @@ var Presets = map[string]*Capabilities{
 		Allow: []string{CapFileRead, CapFileWrite, "shell:npm *", "shell:npx *", CapWebAccess},
 	},
 	"orchestrator": {
-		Allow: []string{CapFileRead, "shell:coral-board *", CapAgentSpawn, CapWebAccess},
+		Allow: []string{CapFileRead, CapAgentSpawn, CapWebAccess},
 	},
 	"devops": {
 		Allow: []string{CapFileRead, CapFileWrite, CapShell, CapGitWrite},

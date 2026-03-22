@@ -13,6 +13,8 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"github.com/cdknorow/coral/internal/ptymanager"
+
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/store"
 )
@@ -30,7 +32,9 @@ func setupTestServer(t *testing.T) (*httptest.Server, *SessionsHandler) {
 	require.NoError(t, err)
 	t.Cleanup(func() { db.Close() })
 
-	handler := NewSessionsHandler(db, cfg, nil, nil)
+	ptyBackend := ptymanager.NewPTYBackend()
+	terminal := ptymanager.NewPTYSessionTerminal(ptyBackend)
+	handler := NewSessionsHandler(db, cfg, nil, terminal, nil)
 
 	r := chi.NewRouter()
 	r.Get("/ws/coral", handler.WSCoral)
