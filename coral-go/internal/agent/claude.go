@@ -109,6 +109,18 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		merged["systemPrompt"] = strings.Join(sysParts, "\n\n")
 	}
 
+	// Inject permissions from capabilities
+	if perms := TranslateToClaudePermissions(params.Capabilities); perms != nil {
+		permMap := map[string]any{}
+		if len(perms.Allow) > 0 {
+			permMap["allow"] = perms.Allow
+		}
+		if len(perms.Deny) > 0 {
+			permMap["deny"] = perms.Deny
+		}
+		merged["permissions"] = permMap
+	}
+
 	// Write settings to temp file
 	settingsFile := filepath.Join(os.TempDir(), fmt.Sprintf("coral_settings_%s.json", effectiveID))
 	data, _ := json.MarshalIndent(merged, "", "  ")

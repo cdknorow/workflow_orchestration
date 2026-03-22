@@ -1287,15 +1287,16 @@ func (h *SessionsHandler) SetDisplayName(w http.ResponseWriter, r *http.Request)
 // POST /api/sessions/launch
 func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		WorkingDir  string   `json:"working_dir"`
-		AgentType   string   `json:"agent_type"`
-		DisplayName string   `json:"display_name"`
-		Flags       []string `json:"flags"`
-		Prompt      string   `json:"prompt"`
-		BoardName   string   `json:"board_name"`
-		BoardServer string   `json:"board_server"`
-		Backend     string   `json:"backend"`
-		BoardType   string   `json:"board_type"`
+		WorkingDir   string             `json:"working_dir"`
+		AgentType    string             `json:"agent_type"`
+		DisplayName  string             `json:"display_name"`
+		Flags        []string           `json:"flags"`
+		Prompt       string             `json:"prompt"`
+		BoardName    string             `json:"board_name"`
+		BoardServer  string             `json:"board_server"`
+		Backend      string             `json:"backend"`
+		BoardType    string             `json:"board_type"`
+		Capabilities *agent.Capabilities `json:"capabilities"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1307,7 +1308,7 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.launchSession(r.Context(), body.WorkingDir, body.AgentType, body.DisplayName,
-		"", body.Flags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType)
+		"", body.Flags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, body.Capabilities)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1355,7 +1356,7 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		result, err := h.launchSession(ctx, body.WorkingDir, body.AgentType, agentDef.Name,
-			"", body.Flags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType)
+			"", body.Flags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, nil)
 		if err != nil {
 			launched = append(launched, map[string]any{"name": agentDef.Name, "error": err.Error()})
 			continue
@@ -1683,7 +1684,7 @@ func generateUUID() string {
 
 // launchSession creates a new agent session using the specified backend (tmux or pty).
 func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType, displayName, resumeSessionID string,
-	flags []string, prompt, boardName, boardServer, backend, boardType string) (map[string]any, error) {
+	flags []string, prompt, boardName, boardServer, backend, boardType string, capabilities *agent.Capabilities) (map[string]any, error) {
 
 	absDir, err := filepath.Abs(workDir)
 	if err != nil || !isDir(absDir) {
@@ -1731,6 +1732,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		Prompt:          prompt,
 		PromptOverrides: promptOverrides,
 		BoardType:       boardType,
+		Capabilities:    capabilities,
 	}
 
 	if backend == "pty" && h.backend != nil {
@@ -2103,7 +2105,7 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 		dn := derefStrPtr(ls.DisplayName)
 		bt := derefStrPtr(ls.BoardType)
 		result, err := h.launchSession(ctx, ls.WorkingDir, ls.AgentType, dn,
-			"", flags, prompt, bn, bs, bk, bt)
+			"", flags, prompt, bn, bs, bk, bt, nil)
 		if err != nil {
 			log.Printf("Failed to wake session %s — keeping asleep: %v", ls.SessionID[:8], err)
 			continue
@@ -2208,7 +2210,7 @@ func (h *SessionsHandler) WakeSession(w http.ResponseWriter, r *http.Request) {
 	bt := derefStrPtr(sess.BoardType)
 
 	result, err := h.launchSession(ctx, sess.WorkingDir, sess.AgentType, dn,
-		"", flags, prompt, bn, bs, bk, bt)
+		"", flags, prompt, bn, bs, bk, bt, nil)
 	if err != nil {
 		log.Printf("Failed to wake session %s: %v", sessionID[:8], err)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Failed to relaunch session"})
@@ -2318,7 +2320,7 @@ func (h *SessionsHandler) WakeAll(w http.ResponseWriter, r *http.Request) {
 		bt := derefStrPtr(ls.BoardType)
 
 		result, err := h.launchSession(ctx, ls.WorkingDir, ls.AgentType, dn,
-			"", flags, prompt, bn, bs, bk, bt)
+			"", flags, prompt, bn, bs, bk, bt, nil)
 		if err != nil {
 			log.Printf("Failed to wake session %s — keeping asleep: %v", ls.SessionID[:8], err)
 			continue

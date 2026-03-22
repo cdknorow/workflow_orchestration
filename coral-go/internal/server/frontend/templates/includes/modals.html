@@ -105,6 +105,26 @@
                             <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--chrome')">--chrome</button>
                             <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('launch-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
                         </div>
+                        <div class="permissions-section">
+                            <button type="button" class="permissions-toggle-btn" onclick="window._togglePermissions('launch-perms')">
+                                <svg class="permissions-chevron" width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg>
+                                Permissions <span style="color:var(--text-muted);font-weight:normal;font-size:11px">(optional)</span>
+                            </button>
+                            <div id="launch-perms" class="permissions-editor" style="display:none">
+                                <div class="perms-group">
+                                    <label class="perms-label">Allow:</label>
+                                    <div id="launch-perms-allow" class="perms-chips"></div>
+                                </div>
+                                <div class="perms-group">
+                                    <label class="perms-label">Deny:</label>
+                                    <div id="launch-perms-deny" class="perms-chips"></div>
+                                </div>
+                                <div class="perms-shell-patterns" id="launch-perms-shell" style="display:none">
+                                    <label class="perms-label">Shell patterns <span style="color:var(--text-muted);font-weight:normal">(comma-separated)</span>:</label>
+                                    <input type="text" id="launch-perms-shell-input" class="perms-shell-input" placeholder="e.g. git *, npm *, npx *">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="agent-col-presets">
                         <strong style="font-size:13px">Persona</strong>

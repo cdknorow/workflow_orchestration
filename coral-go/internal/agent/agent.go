@@ -27,6 +27,7 @@ type LaunchParams struct {
 	Prompt          string
 	PromptOverrides map[string]string // user overrides for orchestrator/worker prompts
 	BoardType       string
+	Capabilities    *Capabilities
 }
 
 // Agent defines the interface for all agent implementations.

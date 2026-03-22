@@ -2012,3 +2012,89 @@
     color: var(--error);
     background: rgba(248, 81, 73, 0.1);
 }
+
+/* ── Permissions Editor ──────────────────────────────────── */
+
+.permissions-section {
+    margin-top: 4px;
+}
+
+.permissions-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.permissions-toggle-btn:hover {
+    color: var(--text-primary);
+}
+
+.permissions-chevron {
+    transition: transform 0.15s;
+    flex-shrink: 0;
+}
+
+.permissions-editor {
+    padding: 8px 0;
+}
+
+.perms-group {
+    margin-bottom: 8px;
+}
+
+.perms-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.perms-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.perm-chip {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.perm-chip:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.perm-chip.active {
+    background: var(--accent, #4a9eff);
+    color: #fff;
+    border-color: var(--accent, #4a9eff);
+}
+
+.perms-shell-patterns {
+    margin-top: 6px;
+}
+
+.perms-shell-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+    font-family: var(--font-mono);
+}

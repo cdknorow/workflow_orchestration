@@ -191,6 +191,12 @@ export async function launchSession() {
         payload.flags = flagsStr.split(/\s+/);
     }
 
+    // Agent capabilities (only for agent mode)
+    if (_launchMode !== "terminal") {
+        const capabilities = _getPermissions('launch-perms');
+        if (capabilities) payload.capabilities = capabilities;
+    }
+
     // Agent prompt and message board (only for agent mode)
     if (_launchMode !== "terminal") {
         const prompt = document.getElementById("launch-agent-prompt").value.trim();
@@ -318,9 +324,11 @@ async function _saveCurrentPersona(nameInputId, promptInputId, flagsInputId) {
     if (!name) { showToast("Enter a name before saving", "error"); return; }
     if (AGENT_PRESETS.find(p => p.name === name)) { showToast("Can't overwrite a built-in preset", "error"); return; }
 
+    const capabilities = _getPermissions('launch-perms');
     const saved = _getSavedPersonas();
     const idx = saved.findIndex(p => p.name === name);
     const entry = { name, prompt, flags };
+    if (capabilities) entry.capabilities = capabilities;
     if (idx >= 0) saved[idx] = entry; else saved.push(entry);
     await _setSavedPersonas(saved);
     showToast(`Saved persona "${name}"`);
@@ -457,6 +465,10 @@ function _selectAgentPreset(name) {
         promptInput.value = "";
     }
 
+    // Populate permissions from preset
+    const persona = name ? _findPersona(name) : null;
+    _setPermissions('launch-perms', persona?.capabilities || null);
+
     // Lock fields for built-in presets (they can't be saved/overwritten)
     const isBuiltIn = !!AGENT_PRESETS.find(p => p.name === name);
     nameInput.readOnly = isBuiltIn;
@@ -569,40 +581,146 @@ export async function launchAgentToBoard() {
 let _teamAgentCounter = 0;
 
 // Predefined agent presets
+// All known Coral capabilities
+const ALL_CAPABILITIES = ['file_read', 'file_write', 'shell', 'web_access', 'git_write', 'agent_spawn', 'notebook'];
+
 const AGENT_PRESETS = [
     {
         name: "Lead Developer",
         prompt: "You are the lead developer. Implement features, write code, and coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write', 'shell', 'git_write', 'agent_spawn'] },
     },
     {
         name: "QA Engineer",
         prompt: "You are an expert QA engineer. Review the work of other agents, create test plans, write tests, and ask probing questions about complex areas. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read'], deny: ['file_write', 'shell'] },
     },
     {
         name: "Orchestrator",
         prompt: "You are the orchestrator. Coordinate the team, break down tasks, assign work via the message board, and track progress. Do not write code yourself — delegate to the other agents. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'shell:coral-board *', 'agent_spawn', 'web_access'] },
     },
     {
         name: "Frontend Dev",
         prompt: "You are a frontend developer. Build UI components, style pages, and ensure a great user experience. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write', 'shell:npm *', 'shell:npx *', 'web_access'] },
     },
     {
         name: "Backend Dev",
         prompt: "You are a backend developer. Build APIs, services, and data models. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write', 'shell', 'git_write'] },
     },
     {
         name: "DevOps Engineer",
         prompt: "You are a DevOps engineer. Handle CI/CD, infrastructure, deployment, and monitoring. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write', 'shell', 'git_write'] },
     },
     {
         name: "Security Reviewer",
         prompt: "You are a security reviewer. Audit code for vulnerabilities, review auth flows, and ensure OWASP best practices. Report findings via the message board.",
+        capabilities: { allow: ['file_read', 'web_access'] },
     },
     {
         name: "Technical Writer",
         prompt: "You are a technical writer. Write documentation, API guides, and READMEs. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write'] },
     },
 ];
+
+// ── Permissions Editor ─────────────────────────────────────────────────
+
+const CAPABILITY_LABELS = {
+    file_read: 'Read Files',
+    file_write: 'Write Files',
+    shell: 'Shell',
+    web_access: 'Web Access',
+    git_write: 'Git Write',
+    agent_spawn: 'Spawn Agents',
+    notebook: 'Notebooks',
+};
+
+function _togglePermissions(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? '' : 'none';
+    const chevron = el.previousElementSibling?.querySelector('.permissions-chevron');
+    if (chevron) chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+}
+window._togglePermissions = _togglePermissions;
+
+function _renderPermChips(containerId, type, capabilities) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const caps = capabilities?.[type] || [];
+    // Separate base capabilities from shell patterns
+    const baseCaps = caps.filter(c => !c.startsWith('shell:'));
+    const shellPatterns = caps.filter(c => c.startsWith('shell:')).map(c => c.slice(6));
+
+    let html = '';
+    for (const cap of ALL_CAPABILITIES) {
+        const isActive = baseCaps.includes(cap);
+        const cls = `perm-chip${isActive ? ' active' : ''}`;
+        html += `<button class="${cls}" data-cap="${cap}" data-type="${type}" onclick="window._togglePermChip(this)">${CAPABILITY_LABELS[cap] || cap}</button>`;
+    }
+    container.innerHTML = html;
+
+    // Show shell patterns input if shell is in allow
+    const shellSection = container.closest('.permissions-editor')?.querySelector('.perms-shell-patterns');
+    const shellInput = container.closest('.permissions-editor')?.querySelector('.perms-shell-input');
+    if (shellSection && shellInput && type === 'allow') {
+        const hasShell = baseCaps.includes('shell');
+        const hasShellPatterns = shellPatterns.length > 0;
+        shellSection.style.display = (hasShell || hasShellPatterns) ? '' : 'none';
+        shellInput.value = shellPatterns.join(', ');
+    }
+}
+
+function _togglePermChip(btn) {
+    btn.classList.toggle('active');
+    // Toggle shell patterns visibility
+    const cap = btn.dataset.cap;
+    const type = btn.dataset.type;
+    if (cap === 'shell' && type === 'allow') {
+        const shellSection = btn.closest('.permissions-editor')?.querySelector('.perms-shell-patterns');
+        if (shellSection) {
+            shellSection.style.display = btn.classList.contains('active') ? '' : 'none';
+        }
+    }
+}
+window._togglePermChip = _togglePermChip;
+
+function _getPermissions(editorId) {
+    const editor = document.getElementById(editorId);
+    if (!editor || editor.style.display === 'none') return null;
+
+    const result = {};
+    for (const type of ['allow', 'deny']) {
+        const chips = editor.querySelectorAll(`[data-type="${type}"].active`);
+        if (chips.length > 0) {
+            result[type] = [...chips].map(c => c.dataset.cap);
+        }
+    }
+
+    // Add shell patterns to allow list
+    const shellInput = editor.querySelector('.perms-shell-input');
+    if (shellInput && shellInput.value.trim()) {
+        if (!result.allow) result.allow = [];
+        const patterns = shellInput.value.split(',').map(p => p.trim()).filter(Boolean);
+        for (const p of patterns) {
+            result.allow.push(`shell:${p}`);
+        }
+    }
+
+    return Object.keys(result).length > 0 ? result : null;
+}
+
+function _setPermissions(editorId, capabilities) {
+    const editor = document.getElementById(editorId);
+    if (!editor) return;
+    _renderPermChips(editorId + '-allow', 'allow', capabilities || {});
+    _renderPermChips(editorId + '-deny', 'deny', capabilities || {});
+}
 
 // Default team: first 3 presets
 const DEFAULT_TEAM_PRESETS = AGENT_PRESETS.slice(0, 3);
