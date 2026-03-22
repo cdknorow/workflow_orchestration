@@ -123,6 +123,7 @@ var columnMigrations = []columnMigration{
 	{"scheduled_runs", "webhook_url", "TEXT"},
 	{"scheduled_runs", "display_name", "TEXT"},
 	{"live_sessions", "is_sleeping", "INTEGER NOT NULL DEFAULT 0"},
+	{"live_sessions", "board_type", "TEXT"},
 }
 
 var additionalIndexes = []string{

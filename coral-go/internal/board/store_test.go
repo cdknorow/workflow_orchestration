@@ -71,7 +71,7 @@ func TestPostAndReadMessages(t *testing.T) {
 	s.Subscribe(ctx, "proj", "agent-2", "Dev B", nil, nil, "")
 
 	// Agent-1 posts
-	msg, err := s.PostMessage(ctx, "proj", "agent-1", "Hello team!")
+	msg, err := s.PostMessage(ctx, "proj", "agent-1", "Hello team!", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello team!", msg.Content)
 
@@ -98,10 +98,10 @@ func TestListMessages(t *testing.T) {
 	ctx := context.Background()
 
 	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
-	s.PostMessage(ctx, "proj", "agent-1", "msg 1")
-	s.PostMessage(ctx, "proj", "agent-1", "msg 2")
+	s.PostMessage(ctx, "proj", "agent-1", "msg 1", nil)
+	s.PostMessage(ctx, "proj", "agent-1", "msg 2", nil)
 
-	messages, err := s.ListMessages(ctx, "proj", 100, 0)
+	messages, err := s.ListMessages(ctx, "proj", 100, 0, 0)
 	require.NoError(t, err)
 	assert.Len(t, messages, 2)
 
@@ -118,19 +118,19 @@ func TestCheckUnread(t *testing.T) {
 	s.Subscribe(ctx, "proj", "agent-2", "Dev B", nil, nil, "")
 
 	// Post without mention — agent-2 should have 0 unread
-	s.PostMessage(ctx, "proj", "agent-1", "Just a regular message")
+	s.PostMessage(ctx, "proj", "agent-1", "Just a regular message", nil)
 	count, err := s.CheckUnread(ctx, "proj", "agent-2")
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 
 	// Post with @all mention
-	s.PostMessage(ctx, "proj", "agent-1", "@notify-all Important update!")
+	s.PostMessage(ctx, "proj", "agent-1", "@notify-all Important update!", nil)
 	count, err = s.CheckUnread(ctx, "proj", "agent-2")
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
 	// Post with @job_title mention
-	s.PostMessage(ctx, "proj", "agent-1", "@Dev B please review this")
+	s.PostMessage(ctx, "proj", "agent-1", "@Dev B please review this", nil)
 	count, err = s.CheckUnread(ctx, "proj", "agent-2")
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
@@ -147,7 +147,7 @@ func TestGetAllUnreadCounts(t *testing.T) {
 	s.Subscribe(ctx, "proj", "agent-1", "Dev A", nil, nil, "")
 	s.Subscribe(ctx, "proj", "agent-2", "Dev B", nil, nil, "")
 
-	s.PostMessage(ctx, "proj", "agent-1", "@all hello")
+	s.PostMessage(ctx, "proj", "agent-1", "@all hello", nil)
 
 	counts, err := s.GetAllUnreadCounts(ctx)
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestDeleteMessage(t *testing.T) {
 	ctx := context.Background()
 
 	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
-	msg, _ := s.PostMessage(ctx, "proj", "agent-1", "delete me")
+	msg, _ := s.PostMessage(ctx, "proj", "agent-1", "delete me", nil)
 
 	removed, err := s.DeleteMessage(ctx, msg.ID)
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestListProjects(t *testing.T) {
 
 	s.Subscribe(ctx, "proj-a", "agent-1", "Dev", nil, nil, "")
 	s.Subscribe(ctx, "proj-b", "agent-2", "Dev", nil, nil, "")
-	s.PostMessage(ctx, "proj-a", "agent-1", "hello")
+	s.PostMessage(ctx, "proj-a", "agent-1", "hello", nil)
 
 	projects, err := s.ListProjects(ctx)
 	require.NoError(t, err)
@@ -188,7 +188,7 @@ func TestDeleteProject(t *testing.T) {
 	ctx := context.Background()
 
 	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
-	s.PostMessage(ctx, "proj", "agent-1", "hello")
+	s.PostMessage(ctx, "proj", "agent-1", "hello", nil)
 
 	err := s.DeleteProject(ctx, "proj")
 	require.NoError(t, err)

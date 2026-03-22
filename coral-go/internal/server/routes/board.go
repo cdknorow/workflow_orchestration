@@ -118,14 +118,15 @@ func (h *BoardHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 func (h *BoardHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	var body struct {
-		SessionID string `json:"session_id"`
-		Content   string `json:"content"`
+		SessionID     string  `json:"session_id"`
+		Content       string  `json:"content"`
+		TargetGroupID *string `json:"target_group_id,omitempty"`
 	}
 	if err := decodeJSON(r, &body); err != nil || body.Content == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content required"})
 		return
 	}
-	msg, err := h.bs.PostMessage(r.Context(), project, body.SessionID, body.Content)
+	msg, err := h.bs.PostMessage(r.Context(), project, body.SessionID, body.Content, body.TargetGroupID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -224,18 +225,28 @@ func (h *BoardHandler) ListAllMessages(w http.ResponseWriter, r *http.Request) {
 		limit = 500
 	}
 	offset := queryInt(r, "offset", 0)
-	messages, err := h.bs.ListMessages(r.Context(), project, limit, offset)
+	beforeID := int64(queryInt(r, "before_id", 0))
+	format := r.URL.Query().Get("format")
+	messages, err := h.bs.ListMessages(r.Context(), project, limit, offset, beforeID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	total, _ := h.bs.CountMessages(r.Context(), project)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"messages": messages,
-		"total":    total,
-		"limit":    limit,
-		"offset":   offset,
-	})
+	if format == "dashboard" {
+		total, _ := h.bs.CountMessages(r.Context(), project)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"messages": messages,
+			"total":    total,
+			"limit":    limit,
+			"offset":   offset,
+		})
+	} else {
+		// Default: bare array for CLI consumers
+		if messages == nil {
+			messages = []board.Message{}
+		}
+		writeJSON(w, http.StatusOK, messages)
+	}
 }
 
 // CheckUnread returns the unread message count.

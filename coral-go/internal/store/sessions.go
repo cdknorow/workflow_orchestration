@@ -59,6 +59,7 @@ type LiveSession struct {
 	Backend      *string `db:"backend" json:"backend,omitempty"`
 	Icon         *string `db:"icon" json:"icon,omitempty"`
 	IsSleeping   int     `db:"is_sleeping" json:"is_sleeping"`
+	BoardType    *string `db:"board_type" json:"board_type,omitempty"`
 	CreatedAt    string  `db:"created_at" json:"created_at"`
 }
 
@@ -105,6 +106,16 @@ func (s *SessionStore) SetSetting(ctx context.Context, key, value string) error 
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 		key, value)
 	return err
+}
+
+// DeleteSetting deletes a user setting. Returns true if the key existed.
+func (s *SessionStore) DeleteSetting(ctx context.Context, key string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM user_settings WHERE key = ?", key)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // ── Session Notes ──────────────────────────────────────────────────────
@@ -720,11 +731,11 @@ func (s *SessionStore) RegisterLiveSession(ctx context.Context, ls *LiveSession)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ls.SessionID, ls.AgentType, ls.AgentName, ls.WorkingDir,
 		ls.DisplayName, ls.ResumeFromID, ls.Flags, ls.IsJob,
-		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.Icon, ls.IsSleeping, ls.CreatedAt)
+		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.Icon, ls.IsSleeping, ls.BoardType, ls.CreatedAt)
 	return err
 }
 
@@ -740,7 +751,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 	var sessions []LiveSession
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, created_at
 		 FROM live_sessions ORDER BY created_at`)
 	return sessions, err
 }
@@ -749,7 +760,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 func (s *SessionStore) GetLiveSessionPromptInfo(ctx context.Context, sessionID string) (*LiveSession, error) {
 	var ls LiveSession
 	err := s.db.GetContext(ctx, &ls,
-		"SELECT prompt, board_name, board_server FROM live_sessions WHERE session_id = ?", sessionID)
+		"SELECT prompt, board_name, board_server, board_type FROM live_sessions WHERE session_id = ?", sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -761,7 +772,7 @@ func (s *SessionStore) GetLiveSession(ctx context.Context, sessionID string) (*L
 	var ls LiveSession
 	err := s.db.GetContext(ctx, &ls,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, created_at
 		 FROM live_sessions WHERE session_id = ?`, sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -791,7 +802,7 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 	// Carry forward flags, prompt, board from old session if not set
 	var old LiveSession
 	err = tx.GetContext(ctx, &old,
-		"SELECT flags, prompt, board_name, board_server, icon, is_sleeping FROM live_sessions WHERE session_id = ?",
+		"SELECT flags, prompt, board_name, board_server, icon, is_sleeping, board_type FROM live_sessions WHERE session_id = ?",
 		oldSessionID)
 	if err == nil {
 		if newSession.Flags == nil {
@@ -809,6 +820,9 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 		if newSession.Icon == nil {
 			newSession.Icon = old.Icon
 		}
+		if newSession.BoardType == nil {
+			newSession.BoardType = old.BoardType
+		}
 		newSession.IsSleeping = old.IsSleeping
 	}
 
@@ -817,12 +831,12 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 	now := nowUTC()
 	_, err = tx.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, is_sleeping, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, is_sleeping, board_type, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		newSession.SessionID, newSession.AgentType, newSession.AgentName,
 		newSession.WorkingDir, newSession.DisplayName, newSession.ResumeFromID,
 		newSession.Flags, newSession.Prompt, newSession.BoardName,
-		newSession.BoardServer, newSession.Icon, newSession.IsSleeping, now)
+		newSession.BoardServer, newSession.Icon, newSession.IsSleeping, newSession.BoardType, now)
 	if err != nil {
 		return err
 	}

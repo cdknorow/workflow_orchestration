@@ -1,6 +1,20 @@
 // Package agent provides agent implementations for Claude and Gemini.
 package agent
 
+// CLINames maps board_type to CLI command name. The nil/empty key is the default.
+var CLINames = map[string]string{
+	"":      "coral-board",
+	"coral": "coral-board",
+}
+
+// GetCLIName returns the CLI command name for the given board type.
+func GetCLIName(boardType string) string {
+	if cli, ok := CLINames[boardType]; ok {
+		return cli
+	}
+	return CLINames[""]
+}
+
 // LaunchParams holds all parameters for building a launch command.
 type LaunchParams struct {
 	SessionID       string
@@ -12,6 +26,7 @@ type LaunchParams struct {
 	Role            string
 	Prompt          string
 	PromptOverrides map[string]string // user overrides for orchestrator/worker prompts
+	BoardType       string
 }
 
 // Agent defines the interface for all agent implementations.

@@ -36,7 +36,8 @@ const DefaultOrchestratorActionPrompt = `IMPORTANT: You were automatically joine
 
 const DefaultWorkerActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then periodically check for new messages.`
 
-func (a *ClaudeAgent) buildBoardSystemPrompt(boardName, role, prompt string, promptOverrides map[string]string) string {
+func (a *ClaudeAgent) buildBoardSystemPrompt(boardName, role, prompt string, promptOverrides map[string]string, boardType string) string {
+	cli := GetCLIName(boardType)
 	var parts []string
 	if prompt != "" {
 		parts = append(parts, prompt)
@@ -48,14 +49,14 @@ func (a *ClaudeAgent) buildBoardSystemPrompt(boardName, role, prompt string, pro
 		}
 		boardIntro := fmt.Sprintf(
 			"You were automatically joined to message board \"%s\".%s "+
-				"Do NOT run coral-board join — you are already subscribed.\n\n"+
-				"Use the coral-board CLI to communicate with your teammates:\n"+
-				"  coral-board read          — read new messages from teammates\n"+
-				"  coral-board post \"msg\"    — post a message to the board\n"+
-				"  coral-board read --last 5 — see the 5 most recent messages\n"+
-				"  coral-board subscribers   — see who is on the board\n"+
+				"Do NOT run %s join — you are already subscribed.\n\n"+
+				"Use the %s CLI to communicate with your teammates:\n"+
+				"  %s read          — read new messages from teammates\n"+
+				"  %s post \"msg\"    — post a message to the board\n"+
+				"  %s read --last 5 — see the 5 most recent messages\n"+
+				"  %s subscribers   — see who is on the board\n"+
 				"Check the board periodically for updates from your teammates.\n\n",
-			boardName, roleLabel)
+			boardName, roleLabel, cli, cli, cli, cli, cli, cli)
 
 		isOrchestrator := role != "" && strings.Contains(strings.ToLower(role), "orchestrator")
 		var tail string
@@ -100,7 +101,7 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 			sysParts = append(sysParts, string(content))
 		}
 	}
-	boardSysPrompt := a.buildBoardSystemPrompt(params.BoardName, params.Role, params.Prompt, params.PromptOverrides)
+	boardSysPrompt := a.buildBoardSystemPrompt(params.BoardName, params.Role, params.Prompt, params.PromptOverrides, params.BoardType)
 	if boardSysPrompt != "" {
 		sysParts = append(sysParts, boardSysPrompt)
 	}
@@ -122,6 +123,7 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 	// without relying on fragile tmux send-keys delivery.
 	cliPrompt := params.Prompt
 	if params.BoardName != "" {
+		cli := GetCLIName(params.BoardType)
 		isOrchestrator := params.Role != "" && strings.Contains(strings.ToLower(params.Role), "orchestrator")
 		overrides := params.PromptOverrides
 		if overrides == nil {
@@ -142,6 +144,7 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 			}
 		}
 		actionText := strings.ReplaceAll(template, "{board_name}", params.BoardName)
+		actionText = strings.ReplaceAll(actionText, "coral-board", cli)
 		if cliPrompt != "" {
 			cliPrompt = cliPrompt + "\n\n" + actionText
 		} else {

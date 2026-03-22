@@ -36,12 +36,13 @@ type GroupInfo struct {
 
 // Message represents a board message.
 type Message struct {
-	ID        int64  `db:"id" json:"id"`
-	Project   string `db:"project" json:"project"`
-	SessionID string `db:"session_id" json:"session_id"`
-	Content   string `db:"content" json:"content"`
-	CreatedAt string `db:"created_at" json:"created_at"`
-	JobTitle  string `db:"job_title" json:"job_title,omitempty"`
+	ID             int64   `db:"id" json:"id"`
+	Project        string  `db:"project" json:"project"`
+	SessionID      string  `db:"session_id" json:"session_id"`
+	Content        string  `db:"content" json:"content"`
+	CreatedAt      string  `db:"created_at" json:"created_at"`
+	JobTitle       string  `db:"job_title" json:"job_title,omitempty"`
+	TargetGroupID  *string `db:"target_group_id" json:"target_group_id,omitempty"`
 }
 
 // ProjectInfo holds project summary info.
@@ -116,8 +117,9 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Migration: add receive_mode for existing DBs
+	// Migrations for existing DBs
 	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN receive_mode TEXT NOT NULL DEFAULT 'mentions'")
+	s.db.ExecContext(ctx, "ALTER TABLE board_messages ADD COLUMN target_group_id TEXT")
 	return nil
 }
 
@@ -247,16 +249,20 @@ func (s *Store) TransferSubscription(ctx context.Context, project, oldSessionID,
 // ── Messages ─────────────────────────────────────────────────────────
 
 // PostMessage posts a new message to a project board.
-func (s *Store) PostMessage(ctx context.Context, project, sessionID, content string) (*Message, error) {
+func (s *Store) PostMessage(ctx context.Context, project, sessionID, content string, targetGroupID *string) (*Message, error) {
 	now := nowUTC()
 	result, err := s.db.ExecContext(ctx,
-		"INSERT INTO board_messages (project, session_id, content, created_at) VALUES (?, ?, ?, ?)",
-		project, sessionID, content, now)
+		"INSERT INTO board_messages (project, session_id, content, target_group_id, created_at) VALUES (?, ?, ?, ?, ?)",
+		project, sessionID, content, targetGroupID, now)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := result.LastInsertId()
-	return &Message{ID: id, Project: project, SessionID: sessionID, Content: content, CreatedAt: now}, nil
+	msg := &Message{ID: id, Project: project, SessionID: sessionID, Content: content, CreatedAt: now}
+	if targetGroupID != nil {
+		msg.TargetGroupID = targetGroupID
+	}
+	return msg, nil
 }
 
 // ReadMessages returns unread messages for a subscriber (cursor-based).
@@ -312,16 +318,31 @@ func (s *Store) ReadMessages(ctx context.Context, project, sessionID string, lim
 }
 
 // ListMessages returns recent messages (no cursor, no side effects).
-func (s *Store) ListMessages(ctx context.Context, project string, limit, offset int) ([]Message, error) {
+// If beforeID > 0, only messages with id < beforeID are returned (keyset pagination).
+func (s *Store) ListMessages(ctx context.Context, project string, limit, offset int, beforeID int64) ([]Message, error) {
 	var messages []Message
-	err := s.db.SelectContext(ctx, &messages,
-		`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
-		        COALESCE(s.job_title, 'Unknown') as job_title
-		 FROM board_messages m
-		 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
-		 WHERE m.project = ?
-		 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
-		project, limit, offset)
+	var err error
+	if beforeID > 0 {
+		err = s.db.SelectContext(ctx, &messages,
+			`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			        COALESCE(s.job_title, 'Unknown') as job_title,
+			        m.target_group_id
+			 FROM board_messages m
+			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			 WHERE m.project = ? AND m.id < ?
+			 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
+			project, beforeID, limit, offset)
+	} else {
+		err = s.db.SelectContext(ctx, &messages,
+			`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			        COALESCE(s.job_title, 'Unknown') as job_title,
+			        m.target_group_id
+			 FROM board_messages m
+			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			 WHERE m.project = ?
+			 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
+			project, limit, offset)
+	}
 	return messages, err
 }
 

@@ -42,7 +42,10 @@ func (h *SystemHandler) SetIndexer(idx Indexer) {
 
 // ── Settings ────────────────────────────────────────────────────────────
 
-// GetSettings returns all user settings.
+// sensitiveKeys are settings that should never be returned to the frontend.
+var sensitiveKeys = map[string]bool{}
+
+// GetSettings returns all user settings, filtering out sensitive keys.
 // GET /api/settings
 func (h *SystemHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryxContext(r.Context(), "SELECT key, value FROM user_settings")
@@ -56,7 +59,9 @@ func (h *SystemHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var k, v string
 		if err := rows.Scan(&k, &v); err == nil {
-			settings[k] = v
+			if !sensitiveKeys[k] {
+				settings[k] = v
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"settings": settings})

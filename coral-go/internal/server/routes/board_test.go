@@ -226,8 +226,8 @@ func TestBoardSubscribeAndPost(t *testing.T) {
 	assert.Equal(t, "Test message", msg["content"])
 	assert.NotEmpty(t, msg["id"])
 
-	// List all messages
-	resp4, err := http.Get(base + "/messages/all")
+	// List all messages (dashboard format)
+	resp4, err := http.Get(base + "/messages/all?format=dashboard")
 	require.NoError(t, err)
 	defer resp4.Body.Close()
 

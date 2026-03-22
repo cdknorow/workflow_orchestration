@@ -1059,7 +1059,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	// Load stored flags, prompt, board_name, board_server from the DB
 	agentImpl := agent.GetAgent(agentType)
 	var storedFlags []string
-	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName string
+	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType string
 	if body.SessionID != "" {
 		if ls, err := h.ss.GetLiveSession(ctx, body.SessionID); err == nil && ls != nil {
 			storedFlags = store.UnmarshalFlags(ls.Flags)
@@ -1067,6 +1067,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 			storedBoard = derefStrPtr(ls.BoardName)
 			storedBoardServer = derefStrPtr(ls.BoardServer)
 			storedDisplayName = derefStrPtr(ls.DisplayName)
+			storedBoardType = derefStrPtr(ls.BoardType)
 		}
 	}
 
@@ -1093,6 +1094,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		Role:            role,
 		Prompt:          storedPrompt,
 		PromptOverrides: promptOverrides,
+		BoardType:       storedBoardType,
 	})
 	h.tmux.SendKeysToTarget(ctx, target, cmd)
 
@@ -1106,6 +1108,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		Prompt:       strPtr(storedPrompt),
 		BoardName:    strPtr(storedBoard),
 		BoardServer:  strPtr(storedBoardServer),
+		BoardType:    strPtr(storedBoardType),
 	})
 	h.ss.MigrateDisplayName(ctx, body.SessionID, newSessionID)
 
@@ -1158,13 +1161,14 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	newLogPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, newSessionID))
 
 	// Load stored fields from current session
-	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName string
+	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType string
 	if body.CurrentSessionID != "" {
 		if ls, err := h.ss.GetLiveSession(ctx, body.CurrentSessionID); err == nil && ls != nil {
 			storedPrompt = derefStrPtr(ls.Prompt)
 			storedBoard = derefStrPtr(ls.BoardName)
 			storedBoardServer = derefStrPtr(ls.BoardServer)
 			storedDisplayName = derefStrPtr(ls.DisplayName)
+			storedBoardType = derefStrPtr(ls.BoardType)
 		}
 	}
 
@@ -1199,6 +1203,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		Role:            role,
 		Prompt:          storedPrompt,
 		PromptOverrides: promptOverrides,
+		BoardType:       storedBoardType,
 	})
 	h.tmux.SendKeysToTarget(ctx, target, cmd)
 
@@ -1211,6 +1216,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		Prompt:       strPtr(storedPrompt),
 		BoardName:    strPtr(storedBoard),
 		BoardServer:  strPtr(storedBoardServer),
+		BoardType:    strPtr(storedBoardType),
 	})
 
 	// Transfer board subscription cursor and re-subscribe
@@ -1289,6 +1295,7 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 		BoardName   string   `json:"board_name"`
 		BoardServer string   `json:"board_server"`
 		Backend     string   `json:"backend"`
+		BoardType   string   `json:"board_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1300,7 +1307,7 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.launchSession(r.Context(), body.WorkingDir, body.AgentType, body.DisplayName,
-		"", body.Flags, body.Prompt, body.BoardName, body.BoardServer, body.Backend)
+		"", body.Flags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1325,6 +1332,7 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 		Flags       []string `json:"flags"`
 		BoardServer string   `json:"board_server"`
 		Backend     string   `json:"backend"`
+		BoardType   string   `json:"board_type"`
 		Agents      []struct {
 			Name   string `json:"name"`
 			Prompt string `json:"prompt"`
@@ -1347,7 +1355,7 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		result, err := h.launchSession(ctx, body.WorkingDir, body.AgentType, agentDef.Name,
-			"", body.Flags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend)
+			"", body.Flags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType)
 		if err != nil {
 			launched = append(launched, map[string]any{"name": agentDef.Name, "error": err.Error()})
 			continue
@@ -1675,7 +1683,7 @@ func generateUUID() string {
 
 // launchSession creates a new agent session using the specified backend (tmux or pty).
 func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType, displayName, resumeSessionID string,
-	flags []string, prompt, boardName, boardServer, backend string) (map[string]any, error) {
+	flags []string, prompt, boardName, boardServer, backend, boardType string) (map[string]any, error) {
 
 	absDir, err := filepath.Abs(workDir)
 	if err != nil || !isDir(absDir) {
@@ -1722,6 +1730,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		Role:            role,
 		Prompt:          prompt,
 		PromptOverrides: promptOverrides,
+		BoardType:       boardType,
 	}
 
 	if backend == "pty" && h.backend != nil {
@@ -1774,6 +1783,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		BoardName:    strPtr(boardName),
 		BoardServer:  strPtr(boardServer),
 		Backend:      strPtr(backend),
+		BoardType:    strPtr(boardType),
 	})
 
 	if displayName != "" {
@@ -2091,8 +2101,9 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 			bk = *ls.Backend
 		}
 		dn := derefStrPtr(ls.DisplayName)
+		bt := derefStrPtr(ls.BoardType)
 		result, err := h.launchSession(ctx, ls.WorkingDir, ls.AgentType, dn,
-			"", flags, prompt, bn, bs, bk)
+			"", flags, prompt, bn, bs, bk, bt)
 		if err != nil {
 			log.Printf("Failed to wake session %s — keeping asleep: %v", ls.SessionID[:8], err)
 			continue
@@ -2194,9 +2205,10 @@ func (h *SessionsHandler) WakeSession(w http.ResponseWriter, r *http.Request) {
 		bk = *sess.Backend
 	}
 	dn := derefStrPtr(sess.DisplayName)
+	bt := derefStrPtr(sess.BoardType)
 
 	result, err := h.launchSession(ctx, sess.WorkingDir, sess.AgentType, dn,
-		"", flags, prompt, bn, bs, bk)
+		"", flags, prompt, bn, bs, bk, bt)
 	if err != nil {
 		log.Printf("Failed to wake session %s: %v", sessionID[:8], err)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Failed to relaunch session"})
@@ -2303,9 +2315,10 @@ func (h *SessionsHandler) WakeAll(w http.ResponseWriter, r *http.Request) {
 			bk = *ls.Backend
 		}
 		dn := derefStrPtr(ls.DisplayName)
+		bt := derefStrPtr(ls.BoardType)
 
 		result, err := h.launchSession(ctx, ls.WorkingDir, ls.AgentType, dn,
-			"", flags, prompt, bn, bs, bk)
+			"", flags, prompt, bn, bs, bk, bt)
 		if err != nil {
 			log.Printf("Failed to wake session %s — keeping asleep: %v", ls.SessionID[:8], err)
 			continue
