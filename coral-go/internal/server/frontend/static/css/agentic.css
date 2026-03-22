@@ -620,11 +620,20 @@
 
 /* ── Activity Chart ────────────────────────────────────────── */
 
+#agentic-panel-activity.active {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 .activity-chart {
     padding: 10px 14px 6px;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex-shrink: 0;
+    max-height: 100px;
+    overflow: hidden;
 }
 
 .activity-chart:empty {

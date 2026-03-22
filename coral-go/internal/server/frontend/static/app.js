@@ -250,6 +250,7 @@ window.selectBoardProject = selectBoardProject;
 window.showMessageBoardProjects = showMessageBoardProjects;
 window.postBoardMessage = postBoardMessage;
 window.deleteMessageBoardProject = deleteMessageBoardProject;
+window.confirmDeleteBoard = deleteMessageBoardProject;
 window.toggleBoardPause = toggleBoardPause;
 window.toggleBoardSleep = toggleBoardSleep;
 window.deleteBoardMessage = deleteBoardMessage;
@@ -460,6 +461,11 @@ function pollStartupStatus() {
 
 // ── Initialization ────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
+    // Detect native webview app (coral-app sets window.__CORAL_APP__)
+    if (window.__CORAL_APP__ || navigator.userAgent.includes('CoralApp')) {
+        document.body.classList.add('native-app');
+    }
+
     loadSettings();
 
     // Restore filter state from URL query params before first load

@@ -70,6 +70,12 @@ func main() {
 	w.SetTitle(*title)
 	w.SetSize(*width, *height, webview.HintNone)
 
+	// Configure native title bar (macOS: transparent, content extends into title bar)
+	setupNativeTitlebar()
+
+	// Inject native app flag so frontend can adjust styling (title bar padding, drag regions)
+	w.Init(`window.__CORAL_APP__ = true; document.addEventListener('DOMContentLoaded', function() { document.body.classList.add('native-app'); });`)
+
 	// Bind JS console.log to Go logger in debug mode
 	if debugMode {
 		w.Bind("_coralLog", func(level, msg string) {

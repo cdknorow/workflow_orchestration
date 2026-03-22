@@ -27,6 +27,10 @@ window.toggleTabletSidebar = toggleTabletSidebar;
 function switchMobileTab(tab) {
     _currentMobileTab = tab;
 
+    // Restore tab bar visibility when switching tabs
+    const tabBar = document.querySelector('.mobile-tab-bar');
+    if (tabBar) tabBar.style.display = 'flex';
+
     // Update tab active states
     document.querySelectorAll('.mobile-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
@@ -47,6 +51,10 @@ function switchMobileTab(tab) {
     if (boardView) boardView.style.display = 'none';
     if (schedulerView) schedulerView.style.display = 'none';
 
+    // Hide agentic panel overlay when leaving panel tab
+    const agenticState = document.getElementById('agentic-state');
+    if (agenticState) agenticState.classList.remove('mobile-panel-overlay');
+
     switch (tab) {
         case 'agents':
             if (agentList) agentList.style.display = 'flex';
@@ -59,6 +67,14 @@ function switchMobileTab(tab) {
             if (schedulerView) {
                 schedulerView.style.display = 'flex';
             }
+            break;
+        case 'panel':
+            // Show agentic panel as full-screen overlay
+            if (agenticState) {
+                agenticState.classList.add('mobile-panel-overlay');
+            }
+            // Also show the live session view underneath (for context)
+            if (liveView) liveView.style.display = 'flex';
             break;
         case 'settings':
             if (window.showSettingsModal) {
@@ -137,6 +153,12 @@ function mobileBack() {
     if (historyView) historyView.style.display = 'none';
     if (agentList) agentList.style.display = 'flex';
 
+    // Hide panel overlay and panel tab
+    const agenticState = document.getElementById('agentic-state');
+    if (agenticState) agenticState.classList.remove('mobile-panel-overlay');
+    const panelTab = document.getElementById('mobile-tab-panel');
+    if (panelTab) panelTab.style.display = 'none';
+
     _currentMobileTab = 'agents';
     document.querySelectorAll('.mobile-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.tab === 'agents');
@@ -208,10 +230,15 @@ export function wrapSelectLiveSession() {
         // Call original
         orig(name, agentType, sessionId);
 
-        // On mobile, hide agent list and show the session view
+        // On mobile, hide agent list and tab bar to show full session view
         if (isMobile()) {
             const agentList = document.getElementById('mobile-agent-list');
             if (agentList) agentList.style.display = 'none';
+            const tabBar = document.querySelector('.mobile-tab-bar');
+            if (tabBar) tabBar.style.display = 'none';
+            // Show the Panel tab now that a session is selected
+            const panelTab = document.getElementById('mobile-tab-panel');
+            if (panelTab) panelTab.style.display = '';
         }
 
         // On tablet, close the sidebar overlay

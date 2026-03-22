@@ -148,10 +148,29 @@
 /* ── Tablet: ≤ 1023px ─────────────────────────────────────── */
 
 @media (max-width: 1023px) {
-    /* Hide agentic state panel on tablet */
+    /* Hide agentic state panel + resize handles on tablet */
     .agentic-state-panel,
-    .task-bar-resize-handle {
+    .task-bar-resize-handle,
+    .board-chat-resize-handle {
         display: none !important;
+    }
+
+    /* Agentic tabs: allow horizontal scroll on narrow panels */
+    .agentic-state-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+    }
+
+    .agentic-state-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Board chat input pane: shorter on tablet */
+    .board-chat-input-pane {
+        height: 160px;
+        min-height: 80px;
     }
 
     /* Sidebar collapsible overlay on tablet */
@@ -299,13 +318,47 @@
         display: none !important;
     }
 
-    /* Show the inline send button on mobile */
-    .command-pane .mobile-send-btn {
+    /* Send button group is always visible; ensure it shows on mobile too */
+    .command-pane .send-btn-group {
         display: flex;
     }
 
     .command-pane-resize-handle {
         display: none !important;
+    }
+
+    /* Board chat: compact on mobile */
+    .board-chat-input-pane {
+        height: auto !important;
+        min-height: 80px;
+        max-height: 40vh;
+    }
+
+    .board-chat-textarea {
+        min-height: 60px;
+        max-height: 100px;
+        font-size: 14px !important;
+    }
+
+    .board-chat-editor-wrap {
+        padding: 6px 10px 8px;
+    }
+
+    .board-chat-resize-handle {
+        display: none !important;
+    }
+
+    .board-chat-messages {
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+
+    .board-chat-msg {
+        padding: 2px 0;
+    }
+
+    .board-chat-content {
+        -webkit-line-clamp: 3;
     }
 
     /* Capture pane scroll speed fix — enable momentum scrolling */
@@ -462,7 +515,8 @@
     .sidebar-resize-handle,
     .command-pane-resize-handle,
     .task-bar-resize-handle,
-    .agentic-block-resize-handle {
+    .agentic-block-resize-handle,
+    .board-chat-resize-handle {
         display: none !important;
     }
 
@@ -542,6 +596,80 @@
     .view-body {
         flex-direction: column !important;
     }
+
+    /* Welcome hero button: compact on mobile */
+    .welcome-hero-btn {
+        padding: 12px 24px;
+        font-size: 14px;
+    }
+
+    .welcome-secondary {
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+    }
+
+    /* Board cards: disable drag on mobile, hide grip */
+    .session-group-item {
+        cursor: pointer;
+    }
+
+    .drag-grip {
+        display: none !important;
+    }
+
+    /* Agentic state tabs: scrollable on mobile (when visible) */
+    .agentic-state-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+    }
+
+    .agentic-state-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .agentic-tab {
+        flex: 0 0 auto;
+        padding: 8px 10px;
+        white-space: nowrap;
+    }
+
+    /* Board card folder footer: tighter */
+    .board-card-folder-footer {
+        padding: 4px 10px 4px 16px;
+        font-size: 9px;
+    }
+
+    /* Filter dropdown: full width on mobile */
+    .filter-dropdown {
+        width: calc(100vw - 40px);
+        max-width: 280px;
+    }
+}
+
+/* ── Mobile Panel Overlay ─────────────────────────────────── */
+
+@media (max-width: 767px) {
+    .agentic-state.mobile-panel-overlay {
+        display: flex !important;
+        position: fixed;
+        top: 49px;
+        left: 0;
+        right: 0;
+        bottom: 56px; /* above mobile tab bar */
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        z-index: 60;
+        background: var(--bg-secondary);
+    }
+
+    /* When panel is shown, hide the task-bar-resize-handle */
+    .agentic-state.mobile-panel-overlay + .task-bar-resize-handle {
+        display: none !important;
+    }
 }
 
 /* ── Pull-to-Refresh Indicator ────────────────────────────── */
@@ -574,9 +702,44 @@
         opacity: 0.4 !important;
     }
 
+    /* Always show folder copy button on touch */
+    .folder-copy-btn {
+        display: inline-flex !important;
+        align-items: center;
+        opacity: 0.5;
+    }
+
     /* Larger buttons */
     .btn-small {
         min-height: 36px;
         padding: 6px 14px;
+    }
+
+    /* Board chat send button: larger touch target */
+    .board-chat-send {
+        min-height: 36px;
+        min-width: 36px;
+        padding: 6px 12px;
+    }
+
+    /* Task items: larger touch target */
+    .task-item {
+        min-height: 44px;
+    }
+
+    /* Always show task delete button on touch */
+    .task-delete-btn {
+        opacity: 0.5 !important;
+    }
+
+    /* Event filter chips: larger for touch */
+    .event-filter-chip {
+        width: 34px;
+        height: 32px;
+    }
+
+    /* Group kebab always visible on touch */
+    .group-kebab .sidebar-kebab-btn {
+        opacity: 0.4 !important;
     }
 }

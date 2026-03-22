@@ -429,6 +429,14 @@ export function switchAgenticTab(tabName, blockId) {
     if (tabName === 'files' && state.currentSession && state.currentSession.type === 'live') {
         loadChangedFiles(state.currentSession.name, state.currentSession.session_id);
     }
+
+    // Scroll board chat to bottom when switching to it
+    if (tabName === 'board') {
+        setTimeout(() => {
+            const msgs = document.getElementById('board-panel-msgs');
+            if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        }, 50);
+    }
 }
 
 /** Restore persisted tab selection on page load. */

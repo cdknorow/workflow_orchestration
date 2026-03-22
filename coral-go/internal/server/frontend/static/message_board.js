@@ -80,9 +80,11 @@ export function selectBoardProject(project) {
     const board = document.getElementById('mb-board');
     board.style.display = 'flex';
     document.getElementById('mb-subscribers-panel').style.display = 'block';
-    document.getElementById('mb-back-btn').style.display = '';
+    const backBtn = document.getElementById('mb-back-btn');
+    if (backBtn) backBtn.style.display = '';
     document.getElementById('mb-pause-btn').style.display = '';
-    document.getElementById('mb-sleep-btn').style.display = '';
+    const sleepBtn = document.getElementById('mb-sleep-btn');
+    if (sleepBtn) sleepBtn.style.display = '';
     document.getElementById('mb-delete-btn').style.display = '';
 
     const badge = document.getElementById('messageboard-project-badge');
@@ -116,9 +118,11 @@ export function showMessageBoardProjects() {
     document.getElementById('mb-project-list').style.display = '';
     document.getElementById('mb-board').style.display = 'none';
     document.getElementById('mb-subscribers-panel').style.display = 'none';
-    document.getElementById('mb-back-btn').style.display = 'none';
+    const backBtn2 = document.getElementById('mb-back-btn');
+    if (backBtn2) backBtn2.style.display = 'none';
     document.getElementById('mb-pause-btn').style.display = 'none';
-    document.getElementById('mb-sleep-btn').style.display = 'none';
+    const sleepBtn2 = document.getElementById('mb-sleep-btn');
+    if (sleepBtn2) sleepBtn2.style.display = 'none';
     document.getElementById('mb-delete-btn').style.display = 'none';
     document.getElementById('messageboard-project-badge').style.display = 'none';
 

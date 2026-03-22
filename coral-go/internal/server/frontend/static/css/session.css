@@ -874,25 +874,6 @@
     font-style: italic;
 }
 
-.session-inline-events {
-    margin-top: 2px;
-}
-
-.sidebar-event-line {
-    font-size: 10px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    line-height: 1.5;
-}
-
-.sidebar-event-ago {
-    color: var(--text-muted);
-    opacity: 0.6;
-    font-size: 9px;
-}
-
 /* ── Board Chat (right panel) ─────────────────────────────── */
 
 #agentic-panel-board.active {
@@ -917,6 +898,14 @@
 
 .board-chat-title {
     flex: 1;
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.board-chat-title:hover {
+    color: var(--accent);
+    text-decoration: underline;
 }
 
 .board-chat-actions {
