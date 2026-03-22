@@ -528,6 +528,43 @@ function _moveSession(sessionId, direction) {
     renderLiveSessions(state.liveSessions);
 }
 
+// ── Inline events for active session ──────────────────────────────────
+
+const _eventIcons = {
+    Read: '📄', Edit: '✏️', Write: '📝', Bash: '💻', Grep: '🔍',
+    Glob: '📂', Agent: '🤖', WebSearch: '🌐', WebFetch: '🌐',
+    TaskCreate: '☑️', TaskUpdate: '☑️', NotebookEdit: '📓',
+};
+
+async function _loadInlineEvents() {
+    if (!state.currentSession || state.currentSession.type !== 'live') return;
+    const { name, session_id } = state.currentSession;
+    const el = document.getElementById(`sidebar-events-${session_id}`);
+    if (!el) return;
+    try {
+        const params = new URLSearchParams({ limit: '2' });
+        if (session_id) params.set('session_id', session_id);
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}/events?${params}`);
+        const events = await resp.json();
+        if (!Array.isArray(events) || events.length === 0) return;
+        el.innerHTML = events.slice(0, 2).map(ev => {
+            const icon = _eventIcons[ev.tool_name] || '🔧';
+            const summary = (ev.summary || ev.event_type || '').slice(0, 60);
+            const ago = _timeAgo(ev.created_at);
+            return `<div class="sidebar-event-line">${icon} ${escapeHtml(summary)} <span class="sidebar-event-ago">${ago}</span></div>`;
+        }).join('');
+    } catch { /* ignore */ }
+}
+
+function _timeAgo(iso) {
+    if (!iso) return '';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 60000) return 'just now';
+    if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
+    if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';
+    return Math.floor(ms / 86400000) + 'd ago';
+}
+
 // ── Group collapse state ─────────────────────────────────────────────
 function _getCollapsedGroups() {
     try { return JSON.parse(localStorage.getItem('coral_collapsed_groups') || '[]'); }
@@ -955,6 +992,7 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
             <span class="session-goal${isCompact ? ' session-goal-compact' : ''}">${goal}</span>
             ${branchTag}
             ${isActive && s.status ? `<span class="session-inline-status">${escapeHtml(s.status)}</span>` : ''}
+            ${isActive ? `<div class="session-inline-events" id="sidebar-events-${sid}"></div>` : ''}
         </div>
         <div class="session-tooltip">${tooltip}</div>
     </li>`;
@@ -1310,6 +1348,9 @@ export function renderLiveSessions(sessions) {
 
     // Attach drag-and-drop listeners for reordering
     _attachDragListeners(list);
+
+    // Fetch recent events for the active session
+    _loadInlineEvents();
 
     // Sync mobile agent list
     syncMobileAgentList();
