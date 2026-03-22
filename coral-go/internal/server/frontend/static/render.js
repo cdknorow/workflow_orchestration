@@ -1,7 +1,7 @@
 /* Rendering functions for session lists, chat history, and status updates */
 
 import { state } from './state.js';
-import { escapeHtml, showToast, escapeAttr } from './utils.js';
+import { escapeHtml, showToast, escapeAttr, dbg } from './utils.js';
 import { renderSidebarTagDots } from './tags.js';
 import { getFolderTags, renderFolderTagPills } from './folder_tags.js';
 import { updateSectionVisibility } from './sidebar.js';
@@ -97,14 +97,20 @@ function _setBoardColor(boardName, color) {
 }
 
 export function setBoardAccentColor(boardName) {
+    dbg('setBoardAccentColor', boardName);
     const current = _getBoardColor(boardName) || '#58a6ff';
     const input = document.createElement('input');
     input.type = 'color';
     input.value = current;
-    input.addEventListener('input', () => {
+    // Listen to both 'input' (live preview) and 'change' (final pick) —
+    // some browsers only fire 'change' for color inputs.
+    const apply = () => {
+        dbg('setBoardAccentColor apply:', boardName, input.value, 'sessions:', state.liveSessions?.length);
         _setBoardColor(boardName, input.value);
         renderLiveSessions(state.liveSessions);
-    });
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('change', apply);
     input.click();
 }
 
@@ -196,6 +202,30 @@ export async function moveGroupDown(groupName) {
     [names[idx], names[idx + 1]] = [names[idx + 1], names[idx]];
     await _saveGroupOrder(names);
     renderLiveSessions(state.liveSessions || []);
+}
+
+// ── Session reorder (Move Up/Down) ───────────────────────────────────
+
+export function moveSessionUp(sessionId) {
+    _moveSession(sessionId, -1);
+}
+
+export function moveSessionDown(sessionId) {
+    _moveSession(sessionId, 1);
+}
+
+function _moveSession(sessionId, direction) {
+    const list = document.getElementById("live-sessions-list");
+    if (!list) return;
+    const items = [...list.querySelectorAll(".session-group-item")];
+    const ids = items.map(el => el.dataset.sessionId);
+    const idx = ids.indexOf(sessionId);
+    if (idx < 0) return;
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= ids.length) return;
+    [ids[idx], ids[targetIdx]] = [ids[targetIdx], ids[idx]];
+    _saveSessionOrder(ids);
+    renderLiveSessions(state.liveSessions);
 }
 
 // ── Group collapse state ─────────────────────────────────────────────
@@ -547,6 +577,15 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
                 Session Info
             </button>
             <hr class="overflow-menu-divider">
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveSessionUp('${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 7l4-4 4 4"/></svg>
+                Move Up
+            </button>
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveSessionDown('${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 9l4 4 4-4"/></svg>
+                Move Down
+            </button>
+            <hr class="overflow-menu-divider">
             <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killSessionDirect('${escapeAttr(s.name)}', '${escapeAttr(s.agent_type)}', '${sid}')">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
                 Remove Agent
@@ -575,6 +614,15 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
             <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); toggleAgentSleep('${escapeAttr(s.name)}', '${escapeAttr(s.agent_type)}', '${sid}', 'sleep')">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 1 0 0 10 5 5 0 0 1 0-10z"/></svg>
                 Sleep
+            </button>
+            <hr class="overflow-menu-divider">
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveSessionUp('${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 7l4-4 4 4"/></svg>
+                Move Up
+            </button>
+            <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveSessionDown('${sid}')">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 9l4 4 4-4"/></svg>
+                Move Down
             </button>
             <hr class="overflow-menu-divider">
             <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killSessionDirect('${escapeAttr(s.name)}', '${escapeAttr(s.agent_type)}', '${sid}')">

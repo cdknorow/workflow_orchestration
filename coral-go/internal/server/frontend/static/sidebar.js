@@ -6,6 +6,13 @@ export function initSidebarResize() {
     const handle = document.getElementById("sidebar-resize-handle");
     const sidebar = document.querySelector(".sidebar");
 
+    // Restore saved width from localStorage
+    const saved = localStorage.getItem('coral-sidebar-width');
+    if (saved) {
+        const w = parseInt(saved, 10);
+        if (w >= 200 && w <= window.innerWidth * 0.5) sidebar.style.width = w + "px";
+    }
+
     let dragging = false;
 
     handle.addEventListener("mousedown", (e) => {
@@ -28,6 +35,8 @@ export function initSidebarResize() {
         handle.classList.remove("dragging");
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        // Persist width
+        localStorage.setItem('coral-sidebar-width', sidebar.offsetWidth);
         fitTerminal();
     });
 }
@@ -40,6 +49,13 @@ export function initTaskBarResize() {
     const liveBody = document.querySelector(".live-body");
 
     if (!handle || !taskBar || !liveBody) return;
+
+    // Restore saved width from localStorage
+    const saved = localStorage.getItem('coral-taskbar-width');
+    if (saved) {
+        const w = parseInt(saved, 10);
+        if (w >= 280 && w <= 620) taskBar.style.width = w + "px";
+    }
 
     let dragging = false;
 
@@ -55,7 +71,7 @@ export function initTaskBarResize() {
         if (!dragging) return;
         const rect = liveBody.getBoundingClientRect();
         const newWidth = rect.right - e.clientX;
-        const clamped = Math.min(Math.max(newWidth, 180), 480);
+        const clamped = Math.min(Math.max(newWidth, 280), 620);
         taskBar.style.width = clamped + "px";
     });
 
@@ -65,6 +81,8 @@ export function initTaskBarResize() {
         handle.classList.remove("dragging");
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        // Persist width
+        localStorage.setItem('coral-taskbar-width', taskBar.offsetWidth);
         fitTerminal();
     });
 }
@@ -75,6 +93,13 @@ export function initCommandPaneResize() {
     const handle = document.getElementById("command-pane-resize-handle");
     const pane = document.getElementById("command-pane");
     const column = document.querySelector(".live-left-column");
+
+    // Restore saved height from localStorage
+    const saved = localStorage.getItem('coral-cmdpane-height');
+    if (saved) {
+        const h = parseInt(saved, 10);
+        if (h >= 80 && h <= 600) pane.style.height = h + "px";
+    }
 
     let dragging = false;
 
@@ -101,6 +126,8 @@ export function initCommandPaneResize() {
         handle.classList.remove("dragging");
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+        // Persist height
+        localStorage.setItem('coral-cmdpane-height', pane.offsetHeight);
         fitTerminal();
     });
 }

@@ -29,8 +29,8 @@
 }
 
 .agentic-state {
-    width: 351px;
-    min-width: 230px;
+    width: 420px;
+    min-width: 280px;
     max-width: 620px;
     display: flex;
     flex-direction: column;

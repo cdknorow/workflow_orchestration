@@ -101,6 +101,12 @@ cd coral-go && go run ./cmd/coral/ --dev --host 127.0.0.1 --port 8420
 ```
 The `--dev` flag skips license validation.
 
+### Test Server
+To spin up a test server for manual verification, use `0.0.0.0` (not `127.0.0.1`) so it's reachable from other machines, and a non-default port to avoid conflicts:
+```bash
+cd coral-go && go build -o coral ./cmd/coral/ && ./coral --dev --host 0.0.0.0 --port 8450
+```
+
 ### Database
 - SQLite with WAL mode, stored at `~/.coral/sessions.db` (matches Python)
 - Message board DB at `~/.coral/messageboard.db`
