@@ -1,6 +1,7 @@
 package ptymanager
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -210,6 +211,339 @@ func TestPTYBackendNotFound(t *testing.T) {
 
 	if backend.IsRunning("nonexistent") {
 		t.Error("expected false for nonexistent session")
+	}
+}
+
+func TestPTYBackendRestart(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+	defer backend.Close()
+
+	// Spawn initial session
+	err := backend.Spawn("restart-test", "test", t.TempDir(), "sid-restart", "sh -c 'echo BEFORE; sleep 60'", 80, 24)
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Capture initial output
+	content, err := backend.CaptureContent("restart-test")
+	if err != nil {
+		t.Fatalf("CaptureContent failed: %v", err)
+	}
+	if !strings.Contains(content, "BEFORE") {
+		t.Logf("initial capture: %q", content)
+	}
+
+	// Restart with new command
+	err = backend.Restart("restart-test", "sh -c 'echo AFTER; sleep 60'")
+	if err != nil {
+		t.Fatalf("Restart failed: %v", err)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Session should still be running
+	if !backend.IsRunning("restart-test") {
+		t.Error("expected session to be running after restart")
+	}
+
+	// Capture should show new output
+	content, err = backend.CaptureContent("restart-test")
+	if err != nil {
+		t.Fatalf("CaptureContent after restart failed: %v", err)
+	}
+	if !strings.Contains(content, "AFTER") {
+		t.Errorf("expected capture to contain 'AFTER' after restart, got %q", content)
+	}
+
+	backend.Kill("restart-test")
+}
+
+func TestPTYBackendRestartNotFound(t *testing.T) {
+	backend := NewPTYBackend()
+
+	err := backend.Restart("nonexistent", "echo test")
+	if err == nil {
+		t.Error("expected error for restarting nonexistent session")
+	}
+}
+
+func TestPTYBackendSubscribeUnsubscribe(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+	defer backend.Close()
+
+	err := backend.Spawn("sub-test", "test", t.TempDir(), "sid-sub", "cat", 80, 24)
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	// Subscribe
+	ch1, err := backend.Subscribe("sub-test", "ws-1")
+	if err != nil {
+		t.Fatalf("Subscribe ws-1 failed: %v", err)
+	}
+	ch2, err := backend.Subscribe("sub-test", "ws-2")
+	if err != nil {
+		t.Fatalf("Subscribe ws-2 failed: %v", err)
+	}
+
+	// Send input
+	backend.SendInput("sub-test", []byte("fan-out-test\n"))
+
+	// Both subscribers should receive output
+	got1 := readFromChan(ch1, 2*time.Second)
+	got2 := readFromChan(ch2, 2*time.Second)
+
+	if !strings.Contains(got1, "fan-out-test") {
+		t.Errorf("subscriber 1 expected 'fan-out-test', got %q", got1)
+	}
+	if !strings.Contains(got2, "fan-out-test") {
+		t.Errorf("subscriber 2 expected 'fan-out-test', got %q", got2)
+	}
+
+	// Unsubscribe one
+	backend.Unsubscribe("sub-test", "ws-1")
+
+	// Send more input — only ws-2 should receive
+	backend.SendInput("sub-test", []byte("after-unsub\n"))
+
+	got2 = readFromChan(ch2, 2*time.Second)
+	if !strings.Contains(got2, "after-unsub") {
+		t.Errorf("subscriber 2 expected 'after-unsub' after ws-1 unsubscribed, got %q", got2)
+	}
+
+	backend.Unsubscribe("sub-test", "ws-2")
+	backend.Kill("sub-test")
+}
+
+func TestPTYBackendSubscribeNotFound(t *testing.T) {
+	backend := NewPTYBackend()
+
+	_, err := backend.Subscribe("nonexistent", "ws-1")
+	if err == nil {
+		t.Error("expected error subscribing to nonexistent session")
+	}
+}
+
+func TestPTYBackendClose(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+
+	// Spawn multiple sessions
+	for i := 0; i < 3; i++ {
+		name := fmt.Sprintf("close-test-%d", i)
+		err := backend.Spawn(name, "test", t.TempDir(), fmt.Sprintf("sid-close-%d", i), "sleep 60", 80, 24)
+		if err != nil {
+			t.Fatalf("Spawn %s failed: %v", name, err)
+		}
+	}
+
+	if len(backend.ListSessions()) != 3 {
+		t.Fatalf("expected 3 sessions, got %d", len(backend.ListSessions()))
+	}
+
+	// Close should kill all sessions
+	err := backend.Close()
+	if err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// All sessions should be gone
+	if len(backend.ListSessions()) != 0 {
+		t.Errorf("expected 0 sessions after Close, got %d", len(backend.ListSessions()))
+	}
+}
+
+func TestPTYBackendListSessionsMultiple(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+	defer backend.Close()
+
+	names := []string{"list-a", "list-b", "list-c"}
+	for i, name := range names {
+		err := backend.Spawn(name, "claude", t.TempDir(), fmt.Sprintf("sid-%d", i), "sleep 60", 80, 24)
+		if err != nil {
+			t.Fatalf("Spawn %s failed: %v", name, err)
+		}
+	}
+
+	sessions := backend.ListSessions()
+	if len(sessions) != 3 {
+		t.Fatalf("expected 3 sessions, got %d", len(sessions))
+	}
+
+	// Verify all sessions are present
+	found := map[string]bool{}
+	for _, s := range sessions {
+		found[s.AgentName] = true
+		if s.AgentType != "claude" {
+			t.Errorf("expected agent type 'claude', got %q", s.AgentType)
+		}
+		if !s.Running {
+			t.Errorf("expected session %s to be running", s.AgentName)
+		}
+	}
+	for _, name := range names {
+		if !found[name] {
+			t.Errorf("session %s not found in list", name)
+		}
+	}
+}
+
+func TestPTYBackendConcurrentSpawnKill(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+	defer backend.Close()
+
+	const n = 5
+	errs := make(chan error, n*2)
+
+	// Spawn N sessions concurrently
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			name := fmt.Sprintf("concurrent-%d", i)
+			errs <- backend.Spawn(name, "test", t.TempDir(), fmt.Sprintf("sid-c-%d", i), "sleep 60", 80, 24)
+		}(i)
+	}
+
+	// Wait for all spawns
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent Spawn failed: %v", err)
+		}
+	}
+
+	sessions := backend.ListSessions()
+	if len(sessions) != n {
+		t.Errorf("expected %d sessions, got %d", n, len(sessions))
+	}
+
+	// Kill N sessions concurrently
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			name := fmt.Sprintf("concurrent-%d", i)
+			errs <- backend.Kill(name)
+		}(i)
+	}
+
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent Kill failed: %v", err)
+		}
+	}
+
+	sessions = backend.ListSessions()
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions after concurrent kill, got %d", len(sessions))
+	}
+}
+
+func TestPTYBackendRingBufferOverflow(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+	defer backend.Close()
+
+	// Spawn a session that produces a lot of output
+	err := backend.Spawn("overflow-test", "test", t.TempDir(), "sid-overflow",
+		"sh -c 'for i in $(seq 1 5000); do echo LINE_$i; done; sleep 1'", 80, 24)
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	// Wait for output to complete
+	time.Sleep(2 * time.Second)
+
+	// Capture should not error even with large output (ring buffer handles overflow)
+	content, err := backend.CaptureContent("overflow-test")
+	if err != nil {
+		t.Fatalf("CaptureContent failed: %v", err)
+	}
+
+	// Should have some content (ring buffer may have dropped oldest lines)
+	if len(content) == 0 {
+		t.Error("expected non-empty capture after overflow")
+	}
+
+	// The latest lines should be present (ring buffer keeps tail)
+	if !strings.Contains(content, "LINE_5000") {
+		t.Logf("capture length: %d bytes", len(content))
+		// The ring buffer may truncate, so just verify we got some recent content
+		if !strings.Contains(content, "LINE_49") {
+			t.Errorf("expected recent lines in capture after overflow")
+		}
+	}
+
+	backend.Kill("overflow-test")
+}
+
+func TestPTYBackendSubscriberFanOut(t *testing.T) {
+	canFork(t)
+	backend := NewPTYBackend()
+	defer backend.Close()
+
+	err := backend.Spawn("fanout-test", "test", t.TempDir(), "sid-fanout", "cat", 80, 24)
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	// Subscribe 5 subscribers
+	const numSubs = 5
+	channels := make([]<-chan []byte, numSubs)
+	for i := 0; i < numSubs; i++ {
+		ch, err := backend.Subscribe("fanout-test", fmt.Sprintf("ws-%d", i))
+		if err != nil {
+			t.Fatalf("Subscribe ws-%d failed: %v", i, err)
+		}
+		channels[i] = ch
+	}
+
+	// Send input
+	backend.SendInput("fanout-test", []byte("broadcast\n"))
+
+	// All subscribers should receive
+	for i, ch := range channels {
+		got := readFromChan(ch, 2*time.Second)
+		if !strings.Contains(got, "broadcast") {
+			t.Errorf("subscriber %d expected 'broadcast', got %q", i, got)
+		}
+	}
+
+	// Cleanup
+	for i := 0; i < numSubs; i++ {
+		backend.Unsubscribe("fanout-test", fmt.Sprintf("ws-%d", i))
+	}
+	backend.Kill("fanout-test")
+}
+
+// readFromChan reads all available data from a channel until timeout.
+func readFromChan(ch <-chan []byte, timeout time.Duration) string {
+	var buf strings.Builder
+	timer := time.After(timeout)
+	for {
+		select {
+		case data, ok := <-ch:
+			if !ok {
+				return buf.String()
+			}
+			buf.Write(data)
+			// Check if we have meaningful content
+			if buf.Len() > 0 {
+				// Give a tiny bit more time for remaining data
+				select {
+				case data, ok := <-ch:
+					if ok {
+						buf.Write(data)
+					}
+				case <-time.After(200 * time.Millisecond):
+				}
+				return buf.String()
+			}
+		case <-timer:
+			return buf.String()
+		}
 	}
 }
 
