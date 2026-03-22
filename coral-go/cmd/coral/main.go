@@ -32,7 +32,10 @@ func main() {
 	port := flag.Int("port", cfg.Port, "Port to bind to")
 	noBrowser := flag.Bool("no-browser", false, "Don't open the browser on startup")
 	devMode := flag.Bool("dev", false, "Development mode: skip license check")
-	defaultBackend := "pty"
+	defaultBackend := "tmux"
+	if runtime.GOOS == "windows" {
+		defaultBackend = "pty"
+	}
 	backendFlag := flag.String("backend", defaultBackend, "Terminal backend: pty or tmux")
 	flag.Parse()
 
