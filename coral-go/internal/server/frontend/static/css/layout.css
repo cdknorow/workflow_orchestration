@@ -657,17 +657,5 @@
 /* ── Native App (macOS webview) ───────────────────────────── */
 
 .native-app .top-bar {
-    padding-top: 28px;
-    -webkit-app-region: drag;
-}
-
-.native-app .top-bar button,
-.native-app .top-bar a,
-.native-app .top-bar input,
-.native-app .top-bar select {
-    -webkit-app-region: no-drag;
-}
-
-.native-app .sidebar {
-    padding-top: 28px;
+    padding-left: 78px;
 }
