@@ -1989,6 +1989,54 @@ func (h *SessionsHandler) GetFileContent(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// GetFileOriginal returns the original (git base) content of a file.
+// GET /api/sessions/live/{name}/file-original?filepath=...&session_id=...
+func (h *SessionsHandler) GetFileOriginal(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	fp := r.URL.Query().Get("filepath")
+	sessionID := r.URL.Query().Get("session_id")
+
+	if fp == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "filepath is required"})
+		return
+	}
+
+	workdir := h.resolveWorkdir(r.Context(), name, "", sessionID)
+	if workdir == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"error": "Could not determine working directory"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	base := getDiffBase(ctx, workdir)
+
+	// git show <ref>:<path> needs paths relative to the repo root, not the workdir.
+	// Use git rev-parse --show-prefix to get the workdir's prefix within the repo.
+	prefix := ""
+	if prefixOut, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--show-prefix").Output(); err == nil {
+		prefix = strings.TrimSpace(string(prefixOut))
+	}
+
+	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "show", base+":"+prefix+fp).Output()
+	if err != nil {
+		// File doesn't exist in the base commit (new file)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"filepath":          fp,
+			"content":           "",
+			"working_directory": workdir,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"filepath":          fp,
+		"content":           string(out),
+		"working_directory": workdir,
+	})
+}
+
 // SaveFileContent writes content to a file in the agent's working tree.
 // PUT /api/sessions/live/{name}/file-content?filepath=...&session_id=...
 func (h *SessionsHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {

@@ -129,18 +129,6 @@
     --mb-text-bright: #f0f0f0;
     --mb-heading:     #88c0d0;
     --mb-code-bg:     #0a0e27;
-
-    /* Diff2html overrides */
-    --d2h-code-bg:        #0d1117;
-    --d2h-gutter-bg:      #161b22;
-    --d2h-ins-bg:         #1a3326;
-    --d2h-ins-gutter-bg:  #1c3828;
-    --d2h-ins-highlight:  #264d35;
-    --d2h-del-bg:         #331a1f;
-    --d2h-del-gutter-bg:  #381c22;
-    --d2h-del-highlight:  #4d262d;
-    --d2h-empty-bg:       #151b22;
-    --d2h-hunk-bg:        #111a24;
 }
 
 /* ── Light Theme ───────────────────────────────────────────── */
@@ -261,16 +249,4 @@
     --mb-text-bright: #1a1a1a;
     --mb-heading:     #2e7d9c;
     --mb-code-bg:     #e8e8e8;
-
-    /* Diff2html overrides */
-    --d2h-code-bg:        #f4f5f7;
-    --d2h-gutter-bg:      #ecedf0;
-    --d2h-ins-bg:         #d4f4db;
-    --d2h-ins-gutter-bg:  #c5edcf;
-    --d2h-ins-highlight:  #a6e4b4;
-    --d2h-del-bg:         #fce4e2;
-    --d2h-del-gutter-bg:  #f5cbc8;
-    --d2h-del-highlight:  #f0b3ae;
-    --d2h-empty-bg:       #ecedf0;
-    --d2h-hunk-bg:        #d6edf8;
 }

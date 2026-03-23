@@ -70,8 +70,9 @@ function _agentName() {
 
 /* ── CodeMirror 6 (lazy-loaded) ─────────────────────────────── */
 
-let _cmModules = null; // cached CodeMirror imports
-let _cmView = null;    // active EditorView instance
+let _cmModules = null;    // cached CodeMirror imports
+let _cmView = null;       // active EditorView instance (edit mode)
+let _cmMergeView = null;  // active merge view instance (diff mode)
 
 async function _loadCmModules() {
     if (_cmModules) return _cmModules;
@@ -122,6 +123,34 @@ function _destroyCmEditor() {
         _cmView.destroy();
         _cmView = null;
     }
+    if (_cmMergeView) {
+        _cmMergeView.destroy();
+        _cmMergeView = null;
+    }
+}
+
+async function _createCmMergeView(container, originalContent, currentContent, langName) {
+    const cm = await _loadCmModules();
+
+    const extensions = [
+        cm.basicSetup,
+        cm.oneDark,
+        cm.EditorView.lineWrapping,
+        cm.EditorView.editable.of(false),
+        cm.EditorState.readOnly.of(true),
+        cm.EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
+        cm.unifiedMergeView({
+            original: cm.Text.of(originalContent.split('\n')),
+        }),
+    ];
+
+    const langExt = _getLangExtension(cm, langName);
+    if (langExt) extensions.push(langExt);
+
+    _cmMergeView = new cm.EditorView({
+        state: cm.EditorState.create({ doc: currentContent, extensions }),
+        parent: container,
+    });
 }
 
 function _getCmContent() {
@@ -161,7 +190,7 @@ async function _openInlinePane(filepath, initialView) {
     const { name } = splitPath(filepath);
     const gen = ++_previewGen;
 
-    _previewState = { filepath, mode: 'preview', content: '', hasDiff: false, diffText: '', gen };
+    _previewState = { filepath, mode: 'preview', content: '', originalContent: null, hasDiff: false, gen };
 
     // Render the pane shell
     panel.innerHTML = `
@@ -171,7 +200,9 @@ async function _openInlinePane(filepath, initialView) {
             </button>
             <span class="inline-preview-filepath" title="${escapeHtml(filepath)}">${escapeHtml(name)}</span>
             <div class="inline-preview-actions">
-                <button class="inline-preview-toggle" id="preview-toggle-btn" onclick="window._togglePreviewEdit()">Edit</button>
+                <button class="inline-preview-mode-btn" id="mode-btn-diff" onclick="window._switchMode('diff')" title="Diff"><span class="material-icons">difference</span></button>
+                <button class="inline-preview-mode-btn" id="mode-btn-preview" onclick="window._switchMode('preview')" title="Preview"><span class="material-icons">visibility</span></button>
+                <button class="inline-preview-mode-btn" id="mode-btn-edit" onclick="window._switchMode('edit')" title="Edit"><span class="material-icons">edit</span></button>
                 <button class="inline-preview-save" id="preview-save-btn" onclick="window._savePreviewFile()" style="display:none">Save</button>
             </div>
         </div>
@@ -181,14 +212,28 @@ async function _openInlinePane(filepath, initialView) {
         <div class="inline-preview-cm" id="inline-preview-cm" style="display:none"></div>
     `;
 
-    // Load content based on initial view
+    // Set active mode button and load content
+    _updateModeButtons(initialView);
     if (initialView === 'edit') {
-        // Go straight into edit mode — prefetch content then toggle
+        _previewState.mode = 'edit';
         await _prefetchContent(filepath, gen);
-        if (!_isStale(gen)) await window._togglePreviewEdit();
+        if (!_isStale(gen)) {
+            const body = document.getElementById('inline-preview-body');
+            const cmContainer = document.getElementById('inline-preview-cm');
+            if (body && cmContainer) {
+                body.style.display = 'none';
+                cmContainer.style.display = 'block';
+                const saveBtn = document.getElementById('preview-save-btn');
+                if (saveBtn) saveBtn.style.display = '';
+                const langName = _getLangFromPath(filepath);
+                await _createCmEditor(cmContainer, _previewState.content, langName);
+            }
+        }
     } else if (initialView === 'diff') {
+        _previewState.mode = 'diff';
         await _loadDiffView(filepath, gen);
     } else {
+        _previewState.mode = 'preview';
         await _loadContentView(filepath, gen);
     }
 }
@@ -206,46 +251,47 @@ async function _loadDiffView(filepath, gen) {
     if (!agentName) return;
 
     try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/diff?${_apiQs(filepath)}`);
-        const data = await resp.json();
+        // Fetch original and current content in parallel
+        const [origResp, curResp] = await Promise.all([
+            fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/file-original?${_apiQs(filepath)}`),
+            fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/file-content?${_apiQs(filepath)}`),
+        ]);
+
+        const origData = await origResp.json();
+        const curData = await curResp.json();
 
         if (_isStale(gen)) return;
 
-        if (data.error) {
-            body.innerHTML = `<div class="inline-preview-error">${escapeHtml(data.error)}</div>`;
+        if (curData.error) {
+            body.innerHTML = `<div class="inline-preview-error">${escapeHtml(curData.error)}</div>`;
             return;
         }
 
-        const diffText = data.diff || '';
-        if (!diffText) {
-            // No diff — fall back to content view
-            await _loadContentView(filepath, gen);
+        const currentContent = curData.content || '';
+        const originalContent = origData.error ? '' : (origData.content || '');
+        _previewState.content = currentContent;
+        _previewState.originalContent = originalContent;
+
+        // If original and current are the same (no changes), show content view
+        if (originalContent === currentContent) {
+            _renderContentView(body, currentContent, filepath);
             return;
         }
 
         _previewState.hasDiff = true;
-        _previewState.diffText = diffText;
 
-        _renderDiff2Html(body, diffText);
+        // Hide the body div and show merge view in-place
+        body.style.display = 'none';
+        const cmContainer = document.getElementById('inline-preview-cm');
+        if (cmContainer) {
+            cmContainer.style.display = 'block';
+            const langName = _getLangFromPath(filepath);
+            await _createCmMergeView(cmContainer, originalContent, currentContent, langName);
+        }
     } catch (e) {
         if (_isStale(gen)) return;
         body.innerHTML = '<div class="inline-preview-error">Failed to load diff</div>';
     }
-
-    // Also pre-fetch file content for edit mode
-    _prefetchContent(filepath, gen);
-}
-
-/** Render diff text into the given container using diff2html. */
-function _renderDiff2Html(container, diffText) {
-    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-    const html = window.Diff2Html.html(diffText, {
-        drawFileList: false,
-        matching: 'lines',
-        outputFormat: 'line-by-line',
-        colorScheme: theme === 'light' ? 'light' : 'dark',
-    });
-    container.innerHTML = html;
 }
 
 /** Render file content with syntax highlighting into the given container. */
@@ -313,44 +359,58 @@ async function _prefetchContent(filepath, gen) {
     } catch (e) { /* best effort */ }
 }
 
-/** Toggle between Preview and Edit modes. */
-window._togglePreviewEdit = async function() {
-    if (!_previewState) return;
+function _updateModeButtons(activeMode) {
+    ['diff', 'preview', 'edit'].forEach(m => {
+        const btn = document.getElementById(`mode-btn-${m}`);
+        if (btn) btn.classList.toggle('active', m === activeMode);
+    });
+    const saveBtn = document.getElementById('preview-save-btn');
+    if (saveBtn) saveBtn.style.display = activeMode === 'edit' ? '' : 'none';
+}
+
+/** Switch between diff, preview, and edit modes. */
+window._switchMode = async function(targetMode) {
+    if (!_previewState || _previewState.mode === targetMode) return;
 
     const body = document.getElementById('inline-preview-body');
     const cmContainer = document.getElementById('inline-preview-cm');
-    const toggleBtn = document.getElementById('preview-toggle-btn');
-    const saveBtn = document.getElementById('preview-save-btn');
-    if (!body || !cmContainer || !toggleBtn) return;
+    if (!body || !cmContainer) return;
 
-    if (_previewState.mode === 'preview') {
-        // Switch to edit — create CodeMirror editor
-        _previewState.mode = 'edit';
+    // Save content from current editor before destroying
+    const cmContent = _getCmContent();
+    if (cmContent != null) _previewState.content = cmContent;
+    _destroyCmEditor();
+
+    _previewState.mode = targetMode;
+    _updateModeButtons(targetMode);
+    const langName = _getLangFromPath(_previewState.filepath);
+
+    if (targetMode === 'edit') {
         body.style.display = 'none';
         cmContainer.style.display = 'block';
-        toggleBtn.textContent = 'Preview';
-        if (saveBtn) saveBtn.style.display = '';
-
-        const langName = _getLangFromPath(_previewState.filepath);
         await _createCmEditor(cmContainer, _previewState.content, langName);
-    } else {
-        // Switch back to preview — read content and destroy editor
-        _previewState.mode = 'preview';
-        const cmContent = _getCmContent();
-        if (cmContent != null) _previewState.content = cmContent;
-        _destroyCmEditor();
-        cmContainer.style.display = 'none';
-        body.style.display = '';
-        toggleBtn.textContent = 'Edit';
-        if (saveBtn) saveBtn.style.display = 'none';
-
-        // Re-render: show diff if we originally had one, otherwise show content
-        if (_previewState.hasDiff && _previewState.diffText) {
-            _renderDiff2Html(body, _previewState.diffText);
+    } else if (targetMode === 'diff') {
+        if (_previewState.hasDiff && _previewState.originalContent != null) {
+            body.style.display = 'none';
+            cmContainer.style.display = 'block';
+            await _createCmMergeView(cmContainer, _previewState.originalContent, _previewState.content, langName);
         } else {
+            cmContainer.style.display = 'none';
+            body.style.display = '';
             _renderContentView(body, _previewState.content, _previewState.filepath);
         }
+    } else {
+        // preview — show syntax-highlighted content
+        cmContainer.style.display = 'none';
+        body.style.display = '';
+        _renderContentView(body, _previewState.content, _previewState.filepath);
     }
+};
+
+// Keep backward compat for the edit initial view
+window._togglePreviewEdit = async function() {
+    if (!_previewState) return;
+    await window._switchMode(_previewState.mode === 'edit' ? 'preview' : 'edit');
 };
 
 /** Save the file from the editor. */
@@ -474,8 +534,9 @@ export function renderChangedFiles() {
         const stats = (adds || dels) ? `<span class="file-stats">${adds}${dels}</span>` : '';
         const statusIcon = f.status === '??' ? '?' : f.status === 'A' || f.status === 'AM' ? '+' : f.status === 'D' ? '-' : '~';
         const escapedPath = escapeHtml(f.filepath).replace(/'/g, "\\'");
-        const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview diff"><span class="material-icons">visibility</span></button>`;
-        const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit file"><span class="material-icons">edit</span></button>`;
+        const diffBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileDiff('${escapedPath}')" title="Diff"><span class="material-icons">difference</span></button>`;
+        const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview"><span class="material-icons">visibility</span></button>`;
+        const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit"><span class="material-icons">edit</span></button>`;
 
         return `<div class="file-item ${statusCls}" title="${escapeHtml(f.filepath)} (${statusLabel})"
                      onclick="openFileDiff('${escapedPath}')">
@@ -485,7 +546,7 @@ export function renderChangedFiles() {
                 ${dir ? `<span class="file-dir">${escapeHtml(dir)}</span>` : ''}
             </div>
             ${stats}
-            <div class="file-action-btns">${previewBtn}${editBtn}</div>
+            <div class="file-action-btns">${diffBtn}${previewBtn}${editBtn}</div>
         </div>`;
     }).join('');
 }
