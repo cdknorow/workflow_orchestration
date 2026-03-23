@@ -21,7 +21,6 @@ import (
 	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/board"
 	"github.com/cdknorow/coral/internal/config"
-	"github.com/cdknorow/coral/internal/executil"
 	"github.com/cdknorow/coral/internal/jsonl"
 	"github.com/cdknorow/coral/internal/pulse"
 	"github.com/cdknorow/coral/internal/ptymanager"
@@ -669,7 +668,7 @@ func (h *SessionsHandler) resolveWorkdir(ctx context.Context, name, agentType, s
 
 // getDiffBase returns the merge-base ref for diffing on feature branches.
 func getDiffBase(ctx context.Context, workdir string) string {
-	out, err := executil.Command(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return "HEAD"
 	}
@@ -678,7 +677,7 @@ func getDiffBase(ctx context.Context, workdir string) string {
 		return "HEAD"
 	}
 	for _, baseBranch := range []string{"main", "master"} {
-		out, err = executil.Command(ctx, "git", "-C", workdir, "merge-base", baseBranch, "HEAD").Output()
+		out, err = exec.CommandContext(ctx, "git", "-C", workdir, "merge-base", baseBranch, "HEAD").Output()
 		if err == nil && len(out) > 0 {
 			return strings.TrimSpace(string(out))
 		}
@@ -722,7 +721,7 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	base := getDiffBase(ctx, workdir)
-	out, err := executil.Command(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
 	fileMap := make(map[string]store.ChangedFile)
 	if err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -740,7 +739,7 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Include untracked files
-	untrackedOut, err := executil.Command(ctx, "git", "-C", workdir, "ls-files", "--others", "--exclude-standard").Output()
+	untrackedOut, err := exec.CommandContext(ctx, "git", "-C", workdir, "ls-files", "--others", "--exclude-standard").Output()
 	if err == nil {
 		for _, f := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
 			if f == "" {
@@ -816,7 +815,7 @@ func (h *SessionsHandler) Diff(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	base := getDiffBase(ctx, workdir)
-	out, err := executil.Command(ctx, "git", "-C", workdir, "diff", base, "--", fp).Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "diff", base, "--", fp).Output()
 	diffText := ""
 	if err == nil {
 		diffText = string(out)
@@ -861,7 +860,7 @@ func (h *SessionsHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	out, err := executil.Command(ctx, "git", "-C", workdir, "ls-files", "--cached", "--others", "--exclude-standard").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "ls-files", "--cached", "--others", "--exclude-standard").Output()
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"files": []string{}})
 		return
@@ -1805,7 +1804,11 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 
 		// Wait for shell to initialize, then send the launch command
 		if !isTerminal && cmd != "" {
-			time.Sleep(300 * time.Millisecond)
+			if pty, ok := h.backend.(*ptymanager.PTYBackend); ok {
+				pty.WaitReady(sessionName, 3*time.Second)
+			} else {
+				time.Sleep(300 * time.Millisecond)
+			}
 			h.backend.SendInput(sessionName, []byte(cmd+"\n"))
 		}
 	} else {
