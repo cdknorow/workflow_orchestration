@@ -21,6 +21,7 @@ import (
 	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/board"
 	"github.com/cdknorow/coral/internal/config"
+	"github.com/cdknorow/coral/internal/gitutil"
 	"github.com/cdknorow/coral/internal/jsonl"
 	"github.com/cdknorow/coral/internal/pulse"
 	"github.com/cdknorow/coral/internal/ptymanager"
@@ -667,45 +668,12 @@ func (h *SessionsHandler) resolveWorkdir(ctx context.Context, name, agentType, s
 }
 
 // resolveGitRoot returns the git toplevel for the agent's working directory.
-// Falls back to checking one level of subdirectories if the workdir itself isn't a repo.
 func (h *SessionsHandler) resolveGitRoot(ctx context.Context, name, agentType, sessionID string) string {
 	workdir := h.resolveWorkdir(ctx, name, agentType, sessionID)
 	if workdir == "" {
 		return ""
 	}
-	if out, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--show-toplevel").Output(); err == nil {
-		return strings.TrimSpace(string(out))
-	}
-	entries, _ := os.ReadDir(workdir)
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		sub := filepath.Join(workdir, e.Name())
-		if out, err := exec.CommandContext(ctx, "git", "-C", sub, "rev-parse", "--show-toplevel").Output(); err == nil {
-			return strings.TrimSpace(string(out))
-		}
-	}
-	return workdir
-}
-
-// getDiffBase returns the merge-base ref for diffing on feature branches.
-func getDiffBase(ctx context.Context, workdir string) string {
-	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
-	if err != nil {
-		return "HEAD"
-	}
-	branch := strings.TrimSpace(string(out))
-	if branch == "main" || branch == "master" || branch == "HEAD" || branch == "" {
-		return "HEAD"
-	}
-	for _, baseBranch := range []string{"main", "master"} {
-		out, err = exec.CommandContext(ctx, "git", "-C", workdir, "merge-base", baseBranch, "HEAD").Output()
-		if err == nil && len(out) > 0 {
-			return strings.TrimSpace(string(out))
-		}
-	}
-	return "HEAD"
+	return gitutil.ResolveGitRoot(ctx, workdir)
 }
 
 // Files returns changed files for a live agent.
@@ -743,7 +711,7 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	base := getDiffBase(ctx, workdir)
+	base := gitutil.GetDiffBase(ctx, workdir)
 	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
 	fileMap := make(map[string]store.ChangedFile)
 	if err == nil {
@@ -837,7 +805,7 @@ func (h *SessionsHandler) Diff(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	base := getDiffBase(ctx, workdir)
+	base := gitutil.GetDiffBase(ctx, workdir)
 	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "diff", base, "--", fp).Output()
 	diffText := ""
 	if err == nil {
@@ -2033,14 +2001,10 @@ func (h *SessionsHandler) GetFileOriginal(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	base := getDiffBase(ctx, workdir)
+	base := gitutil.GetDiffBase(ctx, workdir)
 
 	// git show <ref>:<path> needs paths relative to the repo root, not the workdir.
-	// Use git rev-parse --show-prefix to get the workdir's prefix within the repo.
-	prefix := ""
-	if prefixOut, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--show-prefix").Output(); err == nil {
-		prefix = strings.TrimSpace(string(prefixOut))
-	}
+	prefix := gitutil.ShowPrefix(ctx, workdir)
 
 	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "show", base+":"+prefix+fp).Output()
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cdknorow/coral/internal/executil"
+	"github.com/cdknorow/coral/internal/gitutil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -81,6 +82,7 @@ func (p *GitPoller) PollOnce(ctx context.Context) error {
 	}
 
 	for workdir, dirAgents := range dirToAgents {
+		workdir = gitutil.ResolveGitRoot(ctx, workdir)
 		gitInfo, err := queryGit(ctx, workdir)
 		if err != nil || gitInfo == nil {
 			continue
@@ -185,10 +187,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	base, err := getDiffBase(ctx, workdir)
-	if err != nil {
-		base = "HEAD"
-	}
+	base := gitutil.GetDiffBase(ctx, workdir)
 	baseTS := getBaseTimestamp(ctx, workdir, base)
 
 	fileMap := make(map[string]store.ChangedFile)
@@ -258,25 +257,6 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 		files = append(files, f)
 	}
 	return files, nil
-}
-
-func getDiffBase(ctx context.Context, workdir string) (string, error) {
-	out, err := executil.Command(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
-	if err != nil {
-		return "HEAD", err
-	}
-	branch := strings.TrimSpace(string(out))
-	if branch == "main" || branch == "master" || branch == "HEAD" || branch == "" {
-		return "HEAD", nil
-	}
-
-	for _, baseBranch := range []string{"main", "master"} {
-		out, err = executil.Command(ctx, "git", "-C", workdir, "merge-base", baseBranch, "HEAD").Output()
-		if err == nil && len(out) > 0 {
-			return strings.TrimSpace(string(out)), nil
-		}
-	}
-	return "HEAD", nil
 }
 
 func getBaseTimestamp(ctx context.Context, workdir, baseRef string) float64 {
