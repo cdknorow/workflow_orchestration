@@ -139,10 +139,16 @@ export function openFileDiff(filepath) {
     _openInlinePane(filepath, 'diff');
 }
 
-/** Show inline preview/edit for a file (clicking the edit icon). */
+/** Show inline preview for a file (clicking the preview icon). */
 export function openFilePreview(filepath) {
     if (!state.currentSession || state.currentSession.type !== 'live') return;
     _openInlinePane(filepath, 'preview');
+}
+
+/** Open file directly in edit mode (clicking the edit icon). */
+export function openFileEdit(filepath) {
+    if (!state.currentSession || state.currentSession.type !== 'live') return;
+    _openInlinePane(filepath, 'edit');
 }
 
 async function _openInlinePane(filepath, initialView) {
@@ -176,7 +182,11 @@ async function _openInlinePane(filepath, initialView) {
     `;
 
     // Load content based on initial view
-    if (initialView === 'diff') {
+    if (initialView === 'edit') {
+        // Go straight into edit mode — prefetch content then toggle
+        await _prefetchContent(filepath, gen);
+        if (!_isStale(gen)) await window._togglePreviewEdit();
+    } else if (initialView === 'diff') {
         await _loadDiffView(filepath, gen);
     } else {
         await _loadContentView(filepath, gen);
@@ -464,7 +474,8 @@ export function renderChangedFiles() {
         const stats = (adds || dels) ? `<span class="file-stats">${adds}${dels}</span>` : '';
         const statusIcon = f.status === '??' ? '?' : f.status === 'A' || f.status === 'AM' ? '+' : f.status === 'D' ? '-' : '~';
         const escapedPath = escapeHtml(f.filepath).replace(/'/g, "\\'");
-        const editBtn = `<button class="file-preview-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Edit file"><span class="material-icons">edit</span></button>`;
+        const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview diff"><span class="material-icons">visibility</span></button>`;
+        const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit file"><span class="material-icons">edit</span></button>`;
 
         return `<div class="file-item ${statusCls}" title="${escapeHtml(f.filepath)} (${statusLabel})"
                      onclick="openFileDiff('${escapedPath}')">
@@ -474,7 +485,7 @@ export function renderChangedFiles() {
                 ${dir ? `<span class="file-dir">${escapeHtml(dir)}</span>` : ''}
             </div>
             ${stats}
-            ${editBtn}
+            <div class="file-action-btns">${previewBtn}${editBtn}</div>
         </div>`;
     }).join('');
 }

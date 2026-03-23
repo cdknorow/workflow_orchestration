@@ -1096,23 +1096,33 @@
     overflow-x: auto;
 }
 
-.file-preview-btn {
+.file-action-btns {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.file-item:hover .file-action-btns {
+    opacity: 1;
+}
+
+.file-action-btn {
     background: none;
     border: none;
     cursor: pointer;
     color: var(--text-muted);
     padding: 2px;
     line-height: 1;
-    opacity: 0.6;
 }
 
-.file-preview-btn:hover {
-    opacity: 1;
+.file-action-btn:hover {
     color: var(--accent);
 }
 
-.file-preview-btn .material-icons {
-    font-size: 16px;
+.file-action-btn .material-icons {
+    font-size: 15px;
 }
 
 .file-status-icon {
