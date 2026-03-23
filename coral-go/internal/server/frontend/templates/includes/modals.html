@@ -406,6 +406,13 @@
                 <dd>
                     <input type="text" id="settings-working-dir" class="settings-input" data-coral-root="{{ .CoralRoot }}" placeholder="{{ .CoralRoot }}">
                 </dd>
+                <dt>CLI Paths</dt>
+                <dd class="settings-cli-paths">
+                    <label>Claude: <input type="text" id="settings-cli-path-claude" class="settings-input" placeholder="claude"></label>
+                    <label>Codex: <input type="text" id="settings-cli-path-codex" class="settings-input" placeholder="codex"></label>
+                    <label>Gemini: <input type="text" id="settings-cli-path-gemini" class="settings-input" placeholder="gemini"></label>
+                    <span class="settings-hint">Full path to agent CLI binary. Leave empty to use default from PATH.</span>
+                </dd>
                 <dt>Group by Team</dt>
                 <dd>
                     <label class="settings-toggle">

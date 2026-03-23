@@ -1616,6 +1616,14 @@ export async function showSettingsModal() {
         dirInput.placeholder = dirInput.dataset.coralRoot || "/path/to/project";
     }
 
+    // CLI Paths
+    const cliClaude = document.getElementById("settings-cli-path-claude");
+    const cliCodex = document.getElementById("settings-cli-path-codex");
+    const cliGemini = document.getElementById("settings-cli-path-gemini");
+    if (cliClaude) cliClaude.value = s.cli_path_claude || "";
+    if (cliCodex) cliCodex.value = s.cli_path_codex || "";
+    if (cliGemini) cliGemini.value = s.cli_path_gemini || "";
+
     // Group by Team
     const groupByTeamCheck = document.getElementById("settings-group-by-team");
     if (groupByTeamCheck) {
@@ -1654,6 +1662,9 @@ export async function applySettings() {
     const engineName = document.getElementById("settings-renderer-select").value;
     const agentType = document.getElementById("settings-agent-type")?.value || "claude";
     const workingDir = document.getElementById("settings-working-dir")?.value.trim() || "";
+    const cliPathClaude = document.getElementById("settings-cli-path-claude")?.value.trim() || "";
+    const cliPathCodex = document.getElementById("settings-cli-path-codex")?.value.trim() || "";
+    const cliPathGemini = document.getElementById("settings-cli-path-gemini")?.value.trim() || "";
     const fitPaneWidth = document.getElementById("settings-fit-pane-width")?.checked || false;
     const notifyNeedsInput = document.getElementById("settings-notify-needs-input")?.checked || false;
     const terminalScrollback = document.getElementById("settings-terminal-scrollback")?.value || "1000";
@@ -1681,6 +1692,9 @@ export async function applySettings() {
         notify_needs_input: notifyNeedsInput,
         terminal_scrollback: terminalScrollback,
         show_scrollbars: showScrollbars,
+        cli_path_claude: cliPathClaude,
+        cli_path_codex: cliPathCodex,
+        cli_path_gemini: cliPathGemini,
     };
 
     try {

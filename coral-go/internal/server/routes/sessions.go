@@ -1746,11 +1746,26 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		agentType = at.Claude
 	}
 
+	// Resolve custom CLI path from settings
+	userSettings, _ := h.ss.GetSettings(ctx)
+	cliPath := userSettings[agent.CLIPathSettingKey(agentType)]
+
 	// Check CLI availability before launching (skip for terminal type)
 	if agentType != at.Terminal {
-		if info := agent.GetCLIInfo(agentType); info != nil {
-			if _, err := exec.LookPath(info.Binary); err != nil {
-				return nil, fmt.Errorf("%s CLI not found. Install it: %s", info.Binary, info.InstallCommand)
+		checkBin := cliPath
+		if checkBin == "" {
+			if info := agent.GetCLIInfo(agentType); info != nil {
+				checkBin = info.Binary
+			}
+		}
+		if checkBin != "" {
+			if _, err := exec.LookPath(checkBin); err != nil {
+				info := agent.GetCLIInfo(agentType)
+				installCmd := ""
+				if info != nil {
+					installCmd = info.InstallCommand
+				}
+				return nil, fmt.Errorf("%s CLI not found. Install it: %s", checkBin, installCmd)
 			}
 		}
 	}
@@ -1774,8 +1789,6 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		agentImpl.PrepareResume(resumeSessionID, absDir)
 	}
 
-	// Read user prompt overrides from settings
-	userSettings, _ := h.ss.GetSettings(ctx)
 	promptOverrides := map[string]string{
 		"default_prompt_orchestrator": userSettings["default_prompt_orchestrator"],
 		"default_prompt_worker":       userSettings["default_prompt_worker"],
@@ -1798,6 +1811,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		PromptOverrides: promptOverrides,
 		BoardType:       boardType,
 		Capabilities:    capabilities,
+		CLIPath:         cliPath,
 	}
 
 	if backend == "pty" && h.backend != nil {

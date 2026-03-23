@@ -24,13 +24,16 @@ func (a *CodexAgent) HistoryBasePath() string {
 func (a *CodexAgent) HistoryGlobPattern() string { return "rollout-*.jsonl" }
 
 func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
+	bin := "codex"
+	if params.CLIPath != "" {
+		bin = params.CLIPath
+	}
 	var parts []string
 
 	if params.ResumeSessionID != "" {
-		// Codex uses a subcommand for resume: codex resume --session <id>
-		parts = append(parts, "codex", "resume", "--session", params.ResumeSessionID)
+		parts = append(parts, bin, "resume", "--session", params.ResumeSessionID)
 	} else {
-		parts = append(parts, "codex")
+		parts = append(parts, bin)
 	}
 
 	// Inject permissions from capabilities

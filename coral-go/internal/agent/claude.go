@@ -25,7 +25,11 @@ func (a *ClaudeAgent) HistoryBasePath() string {
 func (a *ClaudeAgent) HistoryGlobPattern() string { return "*.jsonl" }
 
 func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
-	parts := []string{"claude"}
+	bin := "claude"
+	if params.CLIPath != "" {
+		bin = params.CLIPath
+	}
+	parts := []string{bin}
 
 	effectiveID := params.SessionID
 	if params.ResumeSessionID != "" {

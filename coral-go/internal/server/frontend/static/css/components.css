@@ -1233,6 +1233,33 @@
     box-sizing: border-box;
 }
 
+.settings-cli-paths {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.settings-cli-paths label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.settings-cli-paths .settings-input {
+    flex: 1;
+    font-size: 12px;
+    font-family: var(--font-mono);
+}
+
+.settings-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
 .toggle-label {
     display: flex;
     align-items: center;

@@ -35,6 +35,7 @@ type LaunchParams struct {
 	PromptOverrides map[string]string // user overrides for orchestrator/worker prompts
 	BoardType       string
 	Capabilities    *Capabilities
+	CLIPath         string // custom path to agent binary (empty = default from PATH)
 }
 
 // Agent defines the interface for all agent implementations.
@@ -89,6 +90,11 @@ func GetCLIInfo(agentType string) *CLIInfo {
 		return &info
 	}
 	return nil
+}
+
+// CLIPathSettingKey returns the settings key for the agent's custom CLI path.
+func CLIPathSettingKey(agentType string) string {
+	return "cli_path_" + agentType
 }
 
 // Default board system-prompt fragments (used by all agents).

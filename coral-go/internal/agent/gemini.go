@@ -24,6 +24,10 @@ func (a *GeminiAgent) HistoryBasePath() string {
 func (a *GeminiAgent) HistoryGlobPattern() string { return "session-*.json" }
 
 func (a *GeminiAgent) BuildLaunchCommand(params LaunchParams) string {
+	bin := "gemini"
+	if params.CLIPath != "" {
+		bin = params.CLIPath
+	}
 	var parts []string
 
 	// Inject system prompt: combine protocol file + board system prompt
@@ -45,7 +49,7 @@ func (a *GeminiAgent) BuildLaunchCommand(params LaunchParams) string {
 		parts = append(parts, fmt.Sprintf(`GEMINI_SYSTEM_MD="%s"`, sysFile))
 	}
 
-	parts = append(parts, "gemini")
+	parts = append(parts, bin)
 
 	if len(params.Flags) > 0 {
 		parts = append(parts, params.Flags...)
