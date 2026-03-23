@@ -24,11 +24,15 @@ jobs:
         working-directory: coral-go
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          EXTRA_LDFLAGS=""
+          if [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
+            EXTRA_LDFLAGS="-X github.com/cdknorow/coral/internal/config.SkipLicense=true"
+          fi
           mkdir -p ../dist/linux
           for cmd in coral launch-coral coral-board coral-hook-agentic-state coral-hook-message-check coral-hook-task-sync; do
             [ -d "./cmd/$cmd" ] || continue
             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-              -ldflags "-s -w" \
+              -ldflags "-s -w $EXTRA_LDFLAGS" \
               -o "../dist/linux/$cmd" \
               "./cmd/$cmd/"
           done
@@ -64,21 +68,25 @@ jobs:
         run: |
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
+          $extraLdflags = ""
+          if ("${{ github.ref_name }}" -match "-forDropbox") {
+            $extraLdflags = "-X github.com/cdknorow/coral/internal/config.SkipLicense=true"
+          }
           New-Item -ItemType Directory -Force -Path ..\dist\windows\bin | Out-Null
 
           # Pure Go binaries (no CGO)
           $env:CGO_ENABLED = "0"
           foreach ($cmd in @("coral", "launch-coral", "coral-board", "coral-hook-agentic-state", "coral-hook-message-check", "coral-hook-task-sync")) {
             if (Test-Path "./cmd/$cmd") {
-              go build -ldflags "-s -w" -o "..\dist\windows\bin\$cmd.exe" "./cmd/$cmd/"
+              go build -ldflags "-s -w $extraLdflags" -o "..\dist\windows\bin\$cmd.exe" "./cmd/$cmd/"
             }
           }
 
           # CGO binaries (systray, webview)
           $env:CGO_ENABLED = "1"
           $env:CC = "gcc"
-          go build -ldflags "-s -w -H windowsgui" -o "..\dist\windows\bin\coral-tray.exe" "./cmd/coral-tray/"
-          go build -tags webview -ldflags "-s -w -H windowsgui" -o "..\dist\windows\bin\coral-app.exe" "./cmd/coral-app/"
+          go build -ldflags "-s -w -H windowsgui $extraLdflags" -o "..\dist\windows\bin\coral-tray.exe" "./cmd/coral-tray/"
+          go build -tags webview -ldflags "-s -w -H windowsgui $extraLdflags" -o "..\dist\windows\bin\coral-app.exe" "./cmd/coral-app/"
 
       - name: Import signing certificate
         if: env.WINDOWS_CERTIFICATE != ''
@@ -161,18 +169,22 @@ jobs:
       - name: Build universal binaries
         working-directory: coral-go
         run: |
+          EXTRA_LDFLAGS=""
+          if [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
+            EXTRA_LDFLAGS="-X github.com/cdknorow/coral/internal/config.SkipLicense=true"
+          fi
           mkdir -p ../dist/macos
           # Pure Go binaries (no CGO needed)
           for cmd in coral launch-coral coral-board coral-hook-agentic-state coral-hook-message-check coral-hook-task-sync; do
-            CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o "../dist/macos/${cmd}-arm64" "./cmd/$cmd/"
-            CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o "../dist/macos/${cmd}-amd64" "./cmd/$cmd/"
+            CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w $EXTRA_LDFLAGS" -o "../dist/macos/${cmd}-arm64" "./cmd/$cmd/"
+            CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w $EXTRA_LDFLAGS" -o "../dist/macos/${cmd}-amd64" "./cmd/$cmd/"
             lipo -create -output "../dist/macos/$cmd" "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
             rm "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
           done
           # Tray app + webview app require CGO for native platform APIs
           for cmd in coral-tray coral-app; do
-            CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -tags webview -ldflags "-s -w" -o "../dist/macos/${cmd}-arm64" "./cmd/$cmd/"
-            CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -tags webview -ldflags "-s -w" -o "../dist/macos/${cmd}-amd64" "./cmd/$cmd/"
+            CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -tags webview -ldflags "-s -w $EXTRA_LDFLAGS" -o "../dist/macos/${cmd}-arm64" "./cmd/$cmd/"
+            CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -tags webview -ldflags "-s -w $EXTRA_LDFLAGS" -o "../dist/macos/${cmd}-amd64" "./cmd/$cmd/"
             lipo -create -output "../dist/macos/$cmd" "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
             rm "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
           done

@@ -8,6 +8,10 @@ import (
 	"strconv"
 )
 
+// SkipLicense is set to "true" at build time via ldflags for builds that
+// should not require license activation (e.g. internal/partner builds).
+var SkipLicense string
+
 // Config holds all server configuration values.
 type Config struct {
 	// Database
@@ -100,6 +104,11 @@ func Load() *Config {
 
 	// Dev mode can also be set via environment variable
 	if os.Getenv("CORAL_DEV") == "1" || os.Getenv("CORAL_DEV") == "true" {
+		cfg.DevMode = true
+	}
+
+	// Build-time license skip (e.g. partner/internal builds)
+	if SkipLicense == "true" {
 		cfg.DevMode = true
 	}
 
