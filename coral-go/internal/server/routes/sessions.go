@@ -1804,11 +1804,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 
 		// Wait for shell to initialize, then send the launch command
 		if !isTerminal && cmd != "" {
-			if pty, ok := h.backend.(*ptymanager.PTYBackend); ok {
-				pty.WaitReady(sessionName, 3*time.Second)
-			} else {
-				time.Sleep(300 * time.Millisecond)
-			}
+			time.Sleep(300 * time.Millisecond)
 			h.backend.SendInput(sessionName, []byte(cmd+"\n"))
 		}
 	} else {
