@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cdknorow/coral/internal/executil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -146,14 +146,14 @@ func queryGit(ctx context.Context, workdir string) (*gitInfo, error) {
 	defer cancel()
 
 	// Get branch name
-	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := executil.Command(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return nil, err
 	}
 	branch := strings.TrimSpace(string(out))
 
 	// Get latest commit
-	out, err = exec.CommandContext(ctx, "git", "-C", workdir, "log", "-1", "--format=%H|%s|%aI").Output()
+	out, err = executil.Command(ctx, "git", "-C", workdir, "log", "-1", "--format=%H|%s|%aI").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func queryGit(ctx context.Context, workdir string) (*gitInfo, error) {
 
 	// Get remote URL (best-effort)
 	var remoteURL *string
-	out, err = exec.CommandContext(ctx, "git", "-C", workdir, "remote", "get-url", "origin").Output()
+	out, err = executil.Command(ctx, "git", "-C", workdir, "remote", "get-url", "origin").Output()
 	if err == nil {
 		s := strings.TrimSpace(string(out))
 		if s != "" {
@@ -194,7 +194,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 	fileMap := make(map[string]store.ChangedFile)
 
 	// git diff base --numstat
-	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
+	out, err := executil.Command(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
 	if err == nil && len(out) > 0 {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			line = strings.TrimSpace(line)
@@ -217,7 +217,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 	}
 
 	// git status --porcelain for untracked files
-	out, err = exec.CommandContext(ctx, "git", "-C", workdir, "status", "--porcelain", "--untracked-files=all").Output()
+	out, err = executil.Command(ctx, "git", "-C", workdir, "status", "--porcelain", "--untracked-files=all").Output()
 	if err == nil && len(out) > 0 {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if len(line) < 4 {
@@ -261,7 +261,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 }
 
 func getDiffBase(ctx context.Context, workdir string) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := executil.Command(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return "HEAD", err
 	}
@@ -271,7 +271,7 @@ func getDiffBase(ctx context.Context, workdir string) (string, error) {
 	}
 
 	for _, baseBranch := range []string{"main", "master"} {
-		out, err = exec.CommandContext(ctx, "git", "-C", workdir, "merge-base", baseBranch, "HEAD").Output()
+		out, err = executil.Command(ctx, "git", "-C", workdir, "merge-base", baseBranch, "HEAD").Output()
 		if err == nil && len(out) > 0 {
 			return strings.TrimSpace(string(out)), nil
 		}
@@ -280,7 +280,7 @@ func getDiffBase(ctx context.Context, workdir string) (string, error) {
 }
 
 func getBaseTimestamp(ctx context.Context, workdir, baseRef string) float64 {
-	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "log", "-1", "--format=%ct", baseRef).Output()
+	out, err := executil.Command(ctx, "git", "-C", workdir, "log", "-1", "--format=%ct", baseRef).Output()
 	if err != nil {
 		return 0
 	}

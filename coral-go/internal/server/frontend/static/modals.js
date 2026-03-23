@@ -1377,32 +1377,28 @@ export async function resumeIntoSession(agentName, agentType, currentSessionId) 
     const sessionId = state.currentSession.name;
     const displayType = (agentType || "claude").toLowerCase();
 
-    if (!confirm(`This will kill the current session in "${agentName}" and resume session ${sessionId.substring(0, 8)}... in its place. Continue?`)) {
-        return;
-    }
-
-    hideResumeModal();
-
-    try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/resume`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ session_id: sessionId, agent_type: agentType, current_session_id: currentSessionId }),
-        });
-        const result = await resp.json();
-        if (result.error) {
-            showToast(result.error, true);
-        } else {
-            showToast(`Resumed session in ${agentName}`);
-            // Switch to the live session view — session_id will now be the resumed session
-            if (window.selectLiveSession) {
-                window.selectLiveSession(agentName, displayType, sessionId);
+    window.showConfirmModal('Resume Session', `This will kill the current session in "${agentName}" and resume session ${sessionId.substring(0, 8)}... in its place. Continue?`, async () => {
+        hideResumeModal();
+        try {
+            const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/resume`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId, agent_type: agentType, current_session_id: currentSessionId }),
+            });
+            const result = await resp.json();
+            if (result.error) {
+                showToast(result.error, true);
+            } else {
+                showToast(`Resumed session in ${agentName}`);
+                if (window.selectLiveSession) {
+                    window.selectLiveSession(agentName, displayType, sessionId);
+                }
             }
+        } catch (e) {
+            showToast("Failed to resume session", true);
+            console.error("resumeIntoSession error:", e);
         }
-    } catch (e) {
-        showToast("Failed to resume session", true);
-        console.error("resumeIntoSession error:", e);
-    }
+    });
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────────
@@ -1562,6 +1558,12 @@ export async function showSettingsModal() {
     if (dirInput) {
         dirInput.value = s.default_working_dir || "";
         dirInput.placeholder = dirInput.dataset.coralRoot || "/path/to/project";
+    }
+
+    // Group by Team
+    const groupByTeamCheck = document.getElementById("settings-group-by-team");
+    if (groupByTeamCheck) {
+        groupByTeamCheck.checked = localStorage.getItem('coral-group-by-team') !== 'false';
     }
 
     // Terminal Scrollback

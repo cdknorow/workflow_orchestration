@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/cdknorow/coral/internal/config"
+	"github.com/cdknorow/coral/internal/executil"
 )
 
 // ThemesHandler handles theme CRUD endpoints.
@@ -334,7 +335,7 @@ func (h *ThemesHandler) GenerateTheme(w http.ResponseWriter, r *http.Request) {
 		"Respond with ONLY the JSON object."
 
 	args := append(cliArgs, prompt)
-	cmd := exec.CommandContext(r.Context(), cliPath, args...)
+	cmd := executil.Command(r.Context(), cliPath, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]string{"error": "Claude CLI failed: " + err.Error()})

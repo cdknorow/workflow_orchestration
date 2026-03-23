@@ -3,6 +3,7 @@ package ptymanager
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // PTYBackend implements TerminalBackend using native PTY sessions.
@@ -79,6 +80,29 @@ func (m *PTYBackend) SendInput(name string, data []byte) error {
 		return fmt.Errorf("session %q not found", name)
 	}
 	return s.sendInput(data)
+}
+
+// WaitReady blocks until the session's shell has produced output (prompt ready)
+// or the timeout expires. Returns true if ready, false on timeout.
+func (m *PTYBackend) WaitReady(name string, timeout time.Duration) bool {
+	m.mu.RLock()
+	s, ok := m.sessions[name]
+	m.mu.RUnlock()
+	if !ok {
+		return false
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		s.ringMu.Lock()
+		n := len(s.ring)
+		s.ringMu.Unlock()
+		if n > 0 {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
 }
 
 func (m *PTYBackend) Resize(name string, cols, rows uint16) error {

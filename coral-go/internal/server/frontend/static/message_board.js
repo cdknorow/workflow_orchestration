@@ -418,16 +418,17 @@ export async function deleteBoardMessage(messageId) {
 
 // ── Delete project ───────────────────────────────────────────────────────
 
-export async function deleteMessageBoardProject() {
+export function deleteMessageBoardProject() {
     if (!currentProject) return;
-    if (!confirm(`Delete project "${currentProject}" and all its messages?`)) return;
-
-    try {
-        await fetch(`/api/board/${encodeURIComponent(currentProject)}`, { method: 'DELETE' });
-        showMessageBoardProjects();
-    } catch (e) {
-        console.error('Failed to delete project:', e);
-    }
+    const project = currentProject;
+    window.showConfirmModal('Delete Board', `Delete project "${project}" and all its messages?`, async () => {
+        try {
+            await fetch(`/api/board/${encodeURIComponent(project)}`, { method: 'DELETE' });
+            showMessageBoardProjects();
+        } catch (e) {
+            console.error('Failed to delete project:', e);
+        }
+    });
 }
 
 // ── Polling ──────────────────────────────────────────────────────────────
@@ -511,20 +512,24 @@ function updateSleepUI() {
     }
 }
 
-export async function toggleBoardSleep() {
+export function toggleBoardSleep() {
     if (!currentProject) return;
     const action = isSleeping ? 'wake' : 'sleep';
-    if (!isSleeping && !confirm(`Put all agents on "${currentProject}" to sleep?`)) return;
-    try {
-        const resp = await fetch(`/api/sessions/live/team/${encodeURIComponent(currentProject)}/${action}`, {
-            method: 'POST',
-        });
-        const data = await resp.json();
-        isSleeping = !!data.sleeping;
-        updateSleepUI();
-        loadLiveSessions();
-    } catch (e) {
-        console.error('Failed to toggle sleep:', e);
+    const doIt = async () => {
+        try {
+            const resp = await fetch(`/api/sessions/live/team/${encodeURIComponent(currentProject)}/${action}`, { method: 'POST' });
+            const data = await resp.json();
+            isSleeping = !!data.sleeping;
+            updateSleepUI();
+            loadLiveSessions();
+        } catch (e) {
+            console.error('Failed to toggle sleep:', e);
+        }
+    };
+    if (!isSleeping) {
+        window.showConfirmModal('Sleep Team', `Put all agents on "${currentProject}" to sleep?`, doIt);
+    } else {
+        doIt();
     }
 }
 

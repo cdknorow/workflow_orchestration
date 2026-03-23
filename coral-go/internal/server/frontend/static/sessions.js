@@ -70,23 +70,22 @@ export async function selectLiveSession(name, agentType, sessionId) {
     const summaryEl = document.getElementById("session-summary");
     if (summaryEl) summaryEl.style.display = "none";
 
-    // Load detail for status/summary
-    const detail = await loadLiveSessionDetail(name, agentType, sessionId);
-    captureWrapper.classList.remove("loading-skeleton");
-    if (detail) {
-        updateSessionStatus(detail.status);
-        updateSessionSummary(detail.summary);
-
-        // Show initial pane capture
-        if (detail.pane_capture) {
-            document.getElementById("pane-capture").textContent = detail.pane_capture;
-        }
-    }
-
-    // Update branch and waiting indicator from live sessions data
+    // Use cached data from WS for immediate display (no blocking fetch)
     const agent = state.liveSessions.find(s => s.session_id === sessionId);
+    if (agent) {
+        updateSessionStatus(agent.status);
+        updateSessionSummary(agent.summary);
+    }
+    captureWrapper.classList.remove("loading-skeleton");
     updateSessionBranch(agent && agent.branch ? agent.branch : null);
     updateWaitingIndicator(agent || {});
+
+    // Fetch full detail in background (non-blocking) for pane capture
+    loadLiveSessionDetail(name, agentType, sessionId).then(detail => {
+        if (detail && detail.pane_capture) {
+            document.getElementById("pane-capture").textContent = detail.pane_capture;
+        }
+    });
 
     // Show sleeping overlay if agent is sleeping
     const sleepOverlay = document.getElementById('session-sleeping-overlay');
@@ -124,14 +123,7 @@ export async function selectLiveSession(name, agentType, sessionId) {
         }
     }
 
-    // Load tasks, notes, events, and changed files for this agent (pass session_id)
-    loadAgentTasks(name, sessionId);
-    loadAgentNotes(name, sessionId);
-    loadAgentEvents(name, sessionId);
-    loadChangedFiles(name, sessionId);
-    fetchFileList();  // prefetch for @file mention
-
-    // Reset live history and start capture/terminal
+    // Reset live history and start capture/terminal FIRST (fastest path to visible output)
     resetLiveHistory();
     const mode = getRendererMode(agentType, sessionId);
     dbg('renderer mode:', mode, 'Terminal available:', typeof Terminal !== 'undefined');
@@ -164,6 +156,13 @@ export async function selectLiveSession(name, agentType, sessionId) {
     if (historyTab && historyTab.classList.contains("active")) {
         startLiveHistoryPoll();
     }
+
+    // Load secondary data in background (non-blocking, after terminal is connected)
+    loadAgentTasks(name, sessionId);
+    loadAgentNotes(name, sessionId);
+    loadAgentEvents(name, sessionId);
+    loadChangedFiles(name, sessionId);
+    fetchFileList();
 }
 
 export async function selectHistorySession(sessionId) {

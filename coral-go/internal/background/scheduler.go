@@ -8,11 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/cdknorow/coral/internal/executil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -610,7 +610,7 @@ func (s *JobScheduler) fireWebhookForRun(runID int64) {
 // createWorktree creates a git worktree for an isolated job run.
 func runGitCmd(ctx context.Context, repoPath string, args ...string) error {
 	cmdArgs := append([]string{"-C", repoPath}, args...)
-	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
+	cmd := executil.Command(ctx, "git", cmdArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%v: %s", err, string(out))

@@ -23,17 +23,29 @@
     gap: 8px;
 }
 
+/* Rotate coral logo so open part faces down */
+img[src*="favicon.png"],
+img[src*="coral.png"] {
+    transform: rotate(90deg);
+}
+
+.top-bar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .top-bar-logo {
-    height: 28px;
-    width: 28px;
+    height: 18px;
+    width: 18px;
     object-fit: contain;
-    border-radius: 6px;
+    border-radius: 4px;
 }
 
 .top-bar h1 {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-secondary);
 }
 
 .top-bar .btn-primary {
@@ -238,6 +250,39 @@
     margin: 0 !important;
     padding: 2px 8px !important;
     font-size: 11px !important;
+}
+
+.sidebar-new-row {
+    padding: 8px 10px 4px;
+}
+
+.sidebar-new-btn-full {
+    width: 100%;
+    padding: 6px 0;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* Top-bar settings dropdown */
+.top-bar-settings-wrapper {
+    position: relative;
+}
+
+.top-bar-settings-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    z-index: 1000;
 }
 
 .sidebar-header-actions {
@@ -654,8 +699,25 @@
     background: var(--bg-tertiary);
 }
 
-/* ── Native App (macOS webview) ───────────────────────────── */
+/* ── Native App (webview window) ──────────────────────────── */
 
 .native-app .top-bar {
+    -webkit-app-region: drag;           /* Make top bar the window drag handle */
+    padding: 6px 12px;
+}
+
+.native-app .top-bar-title {
+    display: none;                      /* Hide logo + title in native app — window already identifies the app */
+}
+
+/* Buttons must be non-draggable so they remain clickable */
+.native-app .top-bar-btn,
+.native-app .top-bar-brand button,
+.native-app .top-bar-actions {
+    -webkit-app-region: no-drag;
+}
+
+/* macOS: extra left padding for traffic light buttons */
+.native-app.native-macos .top-bar {
     padding-left: 78px;
 }

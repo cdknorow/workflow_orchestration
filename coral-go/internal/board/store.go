@@ -324,17 +324,27 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 	var err error
 	if beforeID > 0 {
 		err = s.db.SelectContext(ctx, &messages,
-			`SELECT * FROM (
-			    SELECT m.id, m.project, m.session_id, m.content, m.created_at,
-			           COALESCE(s.job_title, 'Unknown') as job_title,
-			           m.target_group_id
-			    FROM board_messages m
-			    LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
-			    WHERE m.project = ? AND m.id < ?
-			    ORDER BY m.id DESC LIMIT ? OFFSET ?
-			 ) sub ORDER BY id ASC`,
+			`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			        COALESCE(s.job_title, 'Unknown') as job_title,
+			        m.target_group_id
+			 FROM board_messages m
+			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			 WHERE m.project = ? AND m.id < ?
+			 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
 			project, beforeID, limit, offset)
+	} else if offset > 0 {
+		// Paginated load: use ASC order with offset for consistent pagination
+		err = s.db.SelectContext(ctx, &messages,
+			`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			        COALESCE(s.job_title, 'Unknown') as job_title,
+			        m.target_group_id
+			 FROM board_messages m
+			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			 WHERE m.project = ?
+			 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
+			project, limit, offset)
 	} else {
+		// Initial load (offset=0): get most recent messages
 		err = s.db.SelectContext(ctx, &messages,
 			`SELECT * FROM (
 			    SELECT m.id, m.project, m.session_id, m.content, m.created_at,
@@ -343,9 +353,9 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 			    FROM board_messages m
 			    LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
 			    WHERE m.project = ?
-			    ORDER BY m.id DESC LIMIT ? OFFSET ?
+			    ORDER BY m.id DESC LIMIT ?
 			 ) sub ORDER BY id ASC`,
-			project, limit, offset)
+			project, limit)
 	}
 	return messages, err
 }

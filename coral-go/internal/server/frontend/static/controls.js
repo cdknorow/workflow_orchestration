@@ -349,36 +349,33 @@ export async function killSession() {
         return;
     }
 
-    if (!confirm(`Kill session "${state.currentSession.name}"? This will terminate the agent.`)) {
-        return;
-    }
-
-    try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/kill`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ agent_type: state.currentSession.agent_type, session_id: state.currentSession.session_id }),
-        });
-        const result = await resp.json();
-        if (result.error) {
-            showToast(result.error, true);
-        } else {
-            const killedSid = state.currentSession.session_id;
-            showToast(`Killed: ${state.currentSession.name}`);
-            stopCaptureRefresh();
-            state.currentSession = null;
-            document.getElementById("live-session-view").style.display = "none";
-            document.getElementById("scheduler-view").style.display = "none";
-            document.getElementById("messageboard-view").style.display = "none";
-            document.getElementById("welcome-screen").style.display = "flex";
-            // Remove from cached list and re-render immediately
-            state.liveSessions = state.liveSessions.filter(s => s.session_id !== killedSid);
-            renderLiveSessions(state.liveSessions);
+    window.showConfirmModal('Kill Session', `Kill session "${state.currentSession.name}"? This will terminate the agent.`, async () => {
+        try {
+            const resp = await fetch(`/api/sessions/live/${encodeURIComponent(state.currentSession.name)}/kill`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ agent_type: state.currentSession.agent_type, session_id: state.currentSession.session_id }),
+            });
+            const result = await resp.json();
+            if (result.error) {
+                showToast(result.error, true);
+            } else {
+                const killedSid = state.currentSession.session_id;
+                showToast(`Killed: ${state.currentSession.name}`);
+                stopCaptureRefresh();
+                state.currentSession = null;
+                document.getElementById("live-session-view").style.display = "none";
+                document.getElementById("scheduler-view").style.display = "none";
+                document.getElementById("messageboard-view").style.display = "none";
+                document.getElementById("welcome-screen").style.display = "flex";
+                state.liveSessions = state.liveSessions.filter(s => s.session_id !== killedSid);
+                renderLiveSessions(state.liveSessions);
+            }
+        } catch (e) {
+            showToast("Failed to kill session", true);
+            console.error("killSession exception:", e);
         }
-    } catch (e) {
-        showToast("Failed to kill session", true);
-        console.error("killSession exception:", e);
-    }
+    });
 }
 
 export function restartSession() {

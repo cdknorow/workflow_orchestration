@@ -326,8 +326,31 @@ window.showInfoDirect = showInfoDirect;
 window.attachDirect = attachDirect;
 window.restartDirect = restartDirect;
 
+// Top-bar settings dropdown
+function toggleTopBarSettings() {
+    const menu = document.getElementById('top-bar-settings-menu');
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    menu.style.display = isOpen ? 'none' : '';
+    // Sync group-by-team checkmark
+    const check = document.getElementById('group-by-team-check-top');
+    if (check) {
+        const groupByTeam = localStorage.getItem('coral-group-by-team') === 'true';
+        check.style.opacity = groupByTeam ? '1' : '0.2';
+    }
+}
+function closeTopBarSettings() {
+    const menu = document.getElementById('top-bar-settings-menu');
+    if (menu) menu.style.display = 'none';
+}
+window.toggleTopBarSettings = toggleTopBarSettings;
+window.closeTopBarSettings = closeTopBarSettings;
+
 // Close kebab menus when clicking outside
 document.addEventListener('click', (e) => {
+    if (!e.target.closest('.top-bar-settings-wrapper')) {
+        closeTopBarSettings();
+    }
     if (!e.target.closest('.sidebar-kebab-wrapper')) {
         closeSidebarKebabs();
     }

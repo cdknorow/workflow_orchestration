@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cdknorow/coral/internal/executil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -141,7 +142,7 @@ func callClaude(ctx context.Context, transcript string) (string, error) {
 
 	prompt := summarizerPrompt + "\n\nPlease summarize this coding session:\n\n" + transcript
 
-	cmd := exec.CommandContext(ctx, claudePath,
+	cmd := executil.Command(ctx, claudePath,
 		"--print",
 		"--model", "haiku",
 		"--no-session-persistence",

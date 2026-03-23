@@ -74,7 +74,11 @@ func main() {
 	setupNativeTitlebar()
 
 	// Inject native app flag so frontend can adjust styling (title bar padding, drag regions)
-	w.Init(`window.__CORAL_APP__ = true; document.addEventListener('DOMContentLoaded', function() { document.body.classList.add('native-app'); });`)
+	w.Init(`window.__CORAL_APP__ = true; document.addEventListener('DOMContentLoaded', function() {
+		document.body.classList.add('native-app');
+		if (navigator.platform && navigator.platform.indexOf('Mac') !== -1) document.body.classList.add('native-macos');
+		if (navigator.platform && navigator.platform.indexOf('Win') !== -1) document.body.classList.add('native-windows');
+	});`)
 
 	// Bind JS console.log to Go logger in debug mode
 	if debugMode {

@@ -146,15 +146,16 @@ export async function saveWebhook() {
 
 // ── Delete ────────────────────────────────────────────────────────────────
 
-export async function deleteWebhook(webhookId) {
-    if (!confirm("Delete this webhook and all its history?")) return;
-    try {
-        await fetch(`/api/webhooks/${webhookId}`, { method: "DELETE" });
-        showToast("Webhook deleted");
-        loadWebhookList();
-    } catch (e) {
-        showToast("Failed to delete webhook", true);
-    }
+export function deleteWebhook(webhookId) {
+    window.showConfirmModal('Delete Webhook', 'Delete this webhook and all its history?', async () => {
+        try {
+            await fetch(`/api/webhooks/${webhookId}`, { method: "DELETE" });
+            showToast("Webhook deleted");
+            loadWebhookList();
+        } catch (e) {
+            showToast("Failed to delete webhook", true);
+        }
+    });
 }
 
 // ── Test ──────────────────────────────────────────────────────────────────

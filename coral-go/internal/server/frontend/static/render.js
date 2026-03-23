@@ -342,13 +342,14 @@ async function _checkBoardPauseState(boardName) {
 }
 
 async function _clearBoardMessages(boardName) {
-    if (!confirm(`Clear all messages from "${boardName}"? This cannot be undone.`)) return;
-    try {
-        await fetch(`/api/board/${encodeURIComponent(boardName)}`, { method: 'DELETE' });
-        _boardChatLastId[boardName] = null;
-        _loadBoardPanelChat(boardName);
-        showToast(`Cleared messages from "${boardName}"`);
-    } catch { /* ignore */ }
+    showConfirmModal('Clear Messages', `Clear all messages from "${boardName}"? This cannot be undone.`, async () => {
+        try {
+            await fetch(`/api/board/${encodeURIComponent(boardName)}`, { method: 'DELETE' });
+            _boardChatLastId[boardName] = null;
+            _loadBoardPanelChat(boardName);
+            showToast(`Cleared messages from "${boardName}"`);
+        } catch { /* ignore */ }
+    });
 }
 window._clearBoardMessages = _clearBoardMessages;
 
@@ -547,9 +548,8 @@ export function toggleGroupCollapse(groupName) {
     renderLiveSessions(state.liveSessions);
 }
 
-export async function killSessionDirect(name, agentType, sessionId) {
-    if (!confirm(`Kill session "${name}"? This will terminate the agent.`)) return;
-    try {
+export function killSessionDirect(name, agentType, sessionId) {
+    showConfirmModal('Kill Session', `Kill session "${name}"? This will terminate the agent.`, async () => { try {
         const resp = await fetch(`/api/sessions/live/${encodeURIComponent(name)}/kill`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -567,7 +567,7 @@ export async function killSessionDirect(name, agentType, sessionId) {
         renderLiveSessions(state.liveSessions);
     } catch (e) {
         showToast("Failed to kill session", true);
-    }
+    } });
 }
 
 export async function showInfoDirect(name, agentType, sessionId) {
@@ -762,73 +762,79 @@ export async function saveTeamFromSidebar(boardName) {
     showToast(`Saved template "${templateName}" (${agents.length} agents)`);
 }
 
-export async function toggleTeamSleep(boardName, action) {
-    if (action === 'sleep' && !confirm(`Put all agents on "${boardName}" to sleep?`)) return;
-    try {
-        const resp = await fetch(`/api/sessions/live/team/${encodeURIComponent(boardName)}/${action}`, {
-            method: 'POST',
-        });
-        const data = await resp.json();
-        // Update local state
-        const sleeping = !!data.sleeping;
-        for (const s of state.liveSessions) {
-            if (s.board_project === boardName) s.sleeping = sleeping;
-        }
-        renderLiveSessions(state.liveSessions);
-        showToast(sleeping ? `Team "${boardName}" is now sleeping` : `Team "${boardName}" is awake`);
-    } catch (e) {
-        showToast('Failed to toggle team sleep', true);
-    }
-}
-
-export async function sleepAllAgents() {
-    if (!confirm('Put all agents to sleep?')) return;
-    try {
-        const resp = await fetch('/api/sessions/live/sleep-all', { method: 'POST' });
-        const data = await resp.json();
-        if (data.ok) {
-            for (const s of state.liveSessions) s.sleeping = true;
+export function toggleTeamSleep(boardName, action) {
+    const doIt = async () => {
+        try {
+            const resp = await fetch(`/api/sessions/live/team/${encodeURIComponent(boardName)}/${action}`, { method: 'POST' });
+            const data = await resp.json();
+            const sleeping = !!data.sleeping;
+            for (const s of state.liveSessions) {
+                if (s.board_project === boardName) s.sleeping = sleeping;
+            }
             renderLiveSessions(state.liveSessions);
-            showToast(`All agents are now sleeping (${data.sessions_affected} affected)`);
+            showToast(sleeping ? `Team "${boardName}" is now sleeping` : `Team "${boardName}" is awake`);
+        } catch (e) {
+            showToast('Failed to toggle team sleep', true);
         }
-    } catch (e) {
-        showToast('Failed to sleep all agents', true);
+    };
+    if (action === 'sleep') {
+        showConfirmModal('Sleep Team', `Put all agents on "${boardName}" to sleep?`, doIt);
+    } else {
+        doIt();
     }
 }
 
-export async function wakeAllAgents() {
-    if (!confirm('Wake all sleeping agents?')) return;
-    try {
-        const resp = await fetch('/api/sessions/live/wake-all', { method: 'POST' });
-        const data = await resp.json();
-        if (data.ok) {
-            for (const s of state.liveSessions) s.sleeping = false;
+export function sleepAllAgents() {
+    showConfirmModal('Sleep All', 'Put all agents to sleep?', async () => {
+        try {
+            const resp = await fetch('/api/sessions/live/sleep-all', { method: 'POST' });
+            const data = await resp.json();
+            if (data.ok) {
+                for (const s of state.liveSessions) s.sleeping = true;
+                renderLiveSessions(state.liveSessions);
+                showToast(`All agents are now sleeping (${data.sessions_affected} affected)`);
+            }
+        } catch (e) {
+            showToast('Failed to sleep all agents', true);
+        }
+    });
+}
+
+export function wakeAllAgents() {
+    showConfirmModal('Wake All', 'Wake all sleeping agents?', async () => {
+        try {
+            const resp = await fetch('/api/sessions/live/wake-all', { method: 'POST' });
+            const data = await resp.json();
+            if (data.ok) {
+                for (const s of state.liveSessions) s.sleeping = false;
+                renderLiveSessions(state.liveSessions);
+                showToast(`All agents are awake (${data.sessions_relaunched} relaunched)`);
+            }
+        } catch (e) {
+            showToast('Failed to wake agents', true);
+        }
+    });
+}
+
+export function toggleAgentSleep(name, agentType, sessionId, action) {
+    const doIt = async () => {
+        try {
+            const resp = await fetch(`/api/sessions/live/${encodeURIComponent(sessionId)}/${action}`, { method: 'POST' });
+            const data = await resp.json();
+            if (!data.ok) { showToast(data.error || 'Failed to toggle sleep', true); return; }
+            const sleeping = !!data.sleeping;
+            const s = state.liveSessions.find(s => s.session_id === sessionId);
+            if (s) s.sleeping = sleeping;
             renderLiveSessions(state.liveSessions);
-            showToast(`All agents are awake (${data.sessions_relaunched} relaunched)`);
+            showToast(sleeping ? `"${name}" is now sleeping` : `"${name}" is awake`);
+        } catch (e) {
+            showToast('Failed to toggle agent sleep', true);
         }
-    } catch (e) {
-        showToast('Failed to wake agents', true);
-    }
-}
-
-export async function toggleAgentSleep(name, agentType, sessionId, action) {
-    if (action === 'sleep' && !confirm(`Put "${name}" to sleep?`)) return;
-    try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(sessionId)}/${action}`, {
-            method: 'POST',
-        });
-        const data = await resp.json();
-        if (!data.ok) {
-            showToast(data.error || 'Failed to toggle sleep', true);
-            return;
-        }
-        const sleeping = !!data.sleeping;
-        const s = state.liveSessions.find(s => s.session_id === sessionId);
-        if (s) s.sleeping = sleeping;
-        renderLiveSessions(state.liveSessions);
-        showToast(sleeping ? `"${name}" is now sleeping` : `"${name}" is awake`);
-    } catch (e) {
-        showToast('Failed to toggle agent sleep', true);
+    };
+    if (action === 'sleep') {
+        showConfirmModal('Sleep Agent', `Put "${name}" to sleep?`, doIt);
+    } else {
+        doIt();
     }
 }
 
@@ -963,8 +969,8 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
 export function toggleGroupByTeam() {
     const current = localStorage.getItem('coral-group-by-team') !== 'false';
     localStorage.setItem('coral-group-by-team', !current ? 'true' : 'false');
-    const check = document.getElementById('group-by-team-check');
-    if (check) check.style.visibility = !current ? 'visible' : 'hidden';
+    const check = document.getElementById('group-by-team-check-top');
+    if (check) check.style.opacity = !current ? '1' : '0.2';
     renderLiveSessions(state.liveSessions);
 }
 
@@ -980,8 +986,8 @@ export function renderLiveSessions(sessions) {
 
     // Sync the Group by Team checkmark
     const groupByTeam = localStorage.getItem('coral-group-by-team') !== 'false';
-    const check = document.getElementById('group-by-team-check');
-    if (check) check.style.visibility = groupByTeam ? 'visible' : 'hidden';
+    const check = document.getElementById('group-by-team-check-top');
+    if (check) check.style.opacity = groupByTeam ? '1' : '0.2';
 
     // Helper to generate a deterministic accent color from a string
     function _boardAccentColor(name) {

@@ -175,18 +175,19 @@ export async function toggleScheduledJob(jobId) {
     }
 }
 
-export async function deleteScheduledJob(jobId) {
-    if (!confirm('Delete this scheduled job and all its run history?')) return;
-    try {
-        await fetch(`/api/scheduled/jobs/${jobId}`, { method: 'DELETE' });
-        showToast('Job deleted');
-        selectedJobId = null;
-        document.getElementById('scheduler-view').style.display = 'none';
-        document.getElementById('welcome-screen').style.display = '';
-        await fetchJobs();
-    } catch (e) {
-        showToast('Failed to delete job', true);
-    }
+export function deleteScheduledJob(jobId) {
+    window.showConfirmModal('Delete Job', 'Delete this scheduled job and all its run history?', async () => {
+        try {
+            await fetch(`/api/scheduled/jobs/${jobId}`, { method: 'DELETE' });
+            showToast('Job deleted');
+            selectedJobId = null;
+            document.getElementById('scheduler-view').style.display = 'none';
+            document.getElementById('welcome-screen').style.display = '';
+            await fetchJobs();
+        } catch (e) {
+            showToast('Failed to delete job', true);
+        }
+    });
 }
 
 // ── Job create/edit modal ────────────────────────────────────────────────

@@ -211,13 +211,11 @@ window.loadSelectedTheme = async function() {
     }
 };
 
-window.deleteSelectedTheme = async function() {
+window.deleteSelectedTheme = function() {
     const select = document.getElementById('theme-load-select');
     const name = select.value;
     if (!name) return;
-    if (!confirm(`Delete theme "${name}"?`)) return;
-
-    try {
+    window.showConfirmModal('Delete Theme', `Delete theme "${name}"?`, async () => { try {
         await fetch(`/api/themes/${encodeURIComponent(name)}`, { method: 'DELETE' });
         // If active theme is being deleted, clear the setting
         if (state.settings.custom_theme === name) {
@@ -235,7 +233,7 @@ window.deleteSelectedTheme = async function() {
         showToast(`Deleted: ${name}`);
     } catch (e) {
         showToast('Failed to delete theme', true);
-    }
+    } });
 };
 
 window.exportCurrentTheme = function() {
