@@ -25,42 +25,58 @@ func (a *CodexAgent) HistoryGlobPattern() string { return "rollout-*.jsonl" }
 
 func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 	var parts []string
-	parts = append(parts, "codex")
 
 	if params.ResumeSessionID != "" {
-		parts = append(parts, "--resume", params.ResumeSessionID)
+		// Codex uses a subcommand for resume: codex resume --session <id>
+		parts = append(parts, "codex", "resume", "--session", params.ResumeSessionID)
+	} else {
+		parts = append(parts, "codex")
 	}
 
-	if len(params.Flags) > 0 {
-		parts = append(parts, params.Flags...)
+	for _, flag := range params.Flags {
+		// Translate Claude-specific flags to Codex equivalents
+		if flag == "--dangerously-skip-permissions" {
+			flag = "--full-auto"
+		}
+		parts = append(parts, flag)
 	}
 
-	// Inject system prompt: combine protocol file + board system prompt
-	var sysParts []string
+	// Build combined prompt: protocol + board system prompt + action prompt
+	// Codex doesn't have a --system-prompt flag, so we prepend instructions
+	// to the positional PROMPT argument
+	var promptParts []string
+
+	// Add protocol content
 	if params.ProtocolPath != "" {
 		if content, err := os.ReadFile(params.ProtocolPath); err == nil {
-			sysParts = append(sysParts, string(content))
+			promptParts = append(promptParts, string(content))
 		}
 	}
-	boardSysPrompt := BuildBoardSystemPrompt(params.BoardName, params.Role, params.Prompt, params.PromptOverrides, params.BoardType)
+
+	// Add board system prompt (CLI usage instructions)
+	boardSysPrompt := BuildBoardSystemPrompt(params.BoardName, params.Role, "", params.PromptOverrides, params.BoardType)
 	if boardSysPrompt != "" {
-		sysParts = append(sysParts, boardSysPrompt)
-	}
-	if len(sysParts) > 0 {
-		sysFile := filepath.Join(os.TempDir(), fmt.Sprintf("coral_codex_sys_%s.txt", params.SessionID))
-		os.WriteFile(sysFile, []byte(strings.Join(sysParts, "\n\n")), 0600)
-		parts = append(parts, fmt.Sprintf(`--system-prompt "$(cat '%s')"`, sysFile))
+		promptParts = append(promptParts, boardSysPrompt)
 	}
 
-	// Build action prompt using shared helper
-	cliPrompt := BuildBoardActionPrompt(params.BoardName, params.Role, params.Prompt, params.PromptOverrides, params.BoardType)
-	if cliPrompt != "" {
-		parts = append(parts, fmt.Sprintf(`"%s"`, strings.ReplaceAll(cliPrompt, `"`, `\"`)))
+	// Add action prompt (what to do first)
+	actionPrompt := BuildBoardActionPrompt(params.BoardName, params.Role, params.Prompt, params.PromptOverrides, params.BoardType)
+	if actionPrompt != "" {
+		promptParts = append(promptParts, actionPrompt)
+	} else if params.Prompt != "" {
+		promptParts = append(promptParts, params.Prompt)
+	}
+
+	if len(promptParts) > 0 {
+		combined := strings.Join(promptParts, "\n\n")
+		promptFile := filepath.Join(os.TempDir(), fmt.Sprintf("coral_codex_prompt_%s.txt", params.SessionID))
+		os.WriteFile(promptFile, []byte(combined), 0600)
+		parts = append(parts, FormatPromptFileArg(promptFile))
 	}
 
 	return strings.Join(parts, " ")
 }
 
 func (a *CodexAgent) PrepareResume(sessionID, workingDir string) {
-	// Codex handles resume natively via --resume flag; no file preparation needed.
+	// Codex handles resume natively via the 'resume' subcommand; no file preparation needed.
 }

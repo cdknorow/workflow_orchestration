@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -337,8 +338,8 @@ func TestCodex_Resume(t *testing.T) {
 	cmd := a.BuildLaunchCommand(LaunchParams{
 		ResumeSessionID: "resume-789",
 	})
-	if !strings.Contains(cmd, "--resume resume-789") {
-		t.Errorf("expected --resume, got %q", cmd)
+	if !strings.Contains(cmd, "codex resume --session resume-789") {
+		t.Errorf("expected 'codex resume --session resume-789', got %q", cmd)
 	}
 }
 
@@ -357,43 +358,69 @@ func TestCodex_WithFlags(t *testing.T) {
 
 func TestCodex_WithPrompt(t *testing.T) {
 	a := &CodexAgent{}
+	sid := "test-prompt-sid"
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		Prompt: "Fix the bug",
+		SessionID: sid,
+		Prompt:    "Fix the bug",
 	})
-	if !strings.Contains(cmd, "Fix the bug") {
-		t.Errorf("expected prompt in command, got %q", cmd)
+	// Prompt is written to a temp file and referenced via shell command
+	promptFile := filepath.Join(os.TempDir(), "coral_codex_prompt_"+sid+".txt")
+	content, err := os.ReadFile(promptFile)
+	if err != nil {
+		t.Fatalf("expected prompt file to be written: %v", err)
+	}
+	if !strings.Contains(string(content), "Fix the bug") {
+		t.Errorf("expected prompt in file, got %q", string(content))
+	}
+	if !strings.Contains(cmd, "codex") {
+		t.Errorf("expected codex in command, got %q", cmd)
 	}
 }
 
 func TestCodex_WithBoardWorker(t *testing.T) {
 	a := &CodexAgent{}
+	sid := "test-board-worker-sid"
 	cmd := a.BuildLaunchCommand(LaunchParams{
+		SessionID: sid,
 		Prompt:    "Build frontend",
 		BoardName: "dev-board",
 		Role:      "developer",
 	})
-	if !strings.Contains(cmd, "dev-board") {
-		t.Errorf("expected board name in command, got %q", cmd)
+	promptFile := filepath.Join(os.TempDir(), "coral_codex_prompt_"+sid+".txt")
+	content, err := os.ReadFile(promptFile)
+	if err != nil {
+		t.Fatalf("expected prompt file to be written: %v", err)
 	}
-	if !strings.Contains(cmd, "Build frontend") {
-		t.Errorf("expected original prompt in command, got %q", cmd)
+	if !strings.Contains(string(content), "dev-board") {
+		t.Errorf("expected board name in prompt file, got %q", string(content))
 	}
+	if !strings.Contains(string(content), "Build frontend") {
+		t.Errorf("expected original prompt in file, got %q", string(content))
+	}
+	_ = cmd
 }
 
 func TestCodex_WithBoardOrchestrator(t *testing.T) {
 	a := &CodexAgent{}
+	sid := "test-board-orch-sid"
 	cmd := a.BuildLaunchCommand(LaunchParams{
+		SessionID: sid,
 		Prompt:    "Coordinate team",
 		BoardName: "dev-board",
 		Role:      "orchestrator",
 	})
-	if !strings.Contains(cmd, "dev-board") {
-		t.Errorf("expected board name in command, got %q", cmd)
+	promptFile := filepath.Join(os.TempDir(), "coral_codex_prompt_"+sid+".txt")
+	content, err := os.ReadFile(promptFile)
+	if err != nil {
+		t.Fatalf("expected prompt file to be written: %v", err)
 	}
-	// Orchestrator action prompt should be included
-	if !strings.Contains(cmd, "discuss your proposed plan") {
-		t.Errorf("expected orchestrator action in command, got %q", cmd)
+	if !strings.Contains(string(content), "dev-board") {
+		t.Errorf("expected board name in prompt file, got %q", string(content))
 	}
+	if !strings.Contains(string(content), "discuss your proposed plan") {
+		t.Errorf("expected orchestrator action in prompt file, got %q", string(content))
+	}
+	_ = cmd
 }
 
 // ── Gemini BuildLaunchCommand Tests ─────────────────────────
