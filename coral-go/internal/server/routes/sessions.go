@@ -730,14 +730,27 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Include untracked files
+	untrackedSet := make(map[string]bool)
 	untrackedOut, err := exec.CommandContext(ctx, "git", "-C", workdir, "ls-files", "--others", "--exclude-standard").Output()
 	if err == nil {
 		for _, f := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
 			if f == "" {
 				continue
 			}
+			untrackedSet[f] = true
 			if _, exists := fileMap[f]; !exists {
 				fileMap[f] = store.ChangedFile{Filepath: f, Additions: 0, Deletions: 0, Status: "??"}
+			}
+		}
+	}
+
+	// Build tracked file set (one batch call instead of per-file git ls-files)
+	trackedSet := make(map[string]bool)
+	trackedOut, err := exec.CommandContext(ctx, "git", "-C", workdir, "ls-files").Output()
+	if err == nil {
+		for _, f := range strings.Split(strings.TrimSpace(string(trackedOut)), "\n") {
+			if f != "" {
+				trackedSet[f] = true
 			}
 		}
 	}
@@ -768,12 +781,20 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if _, exists := fileMap[rel]; !exists {
+			// Skip files that no longer exist on disk
+			fullPath := filepath.Join(workdir, rel)
+			info, statErr := os.Stat(fullPath)
+			if statErr != nil || info.IsDir() {
+				continue
+			}
+			// Skip tracked files not in fileMap — they have no diff (clean)
+			if trackedSet[rel] && !untrackedSet[rel] {
+				continue
+			}
 			adds := 0
-			if info, err := os.Stat(fp); err == nil && !info.IsDir() {
-				data, err := os.ReadFile(fp)
-				if err == nil {
-					adds = strings.Count(string(data), "\n") + 1
-				}
+			data, err := os.ReadFile(fullPath)
+			if err == nil {
+				adds = strings.Count(string(data), "\n") + 1
 			}
 			fileMap[rel] = store.ChangedFile{Filepath: rel, Additions: adds, Deletions: 0, Status: "??"}
 		}

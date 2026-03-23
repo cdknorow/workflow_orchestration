@@ -511,7 +511,7 @@ export function renderChangedFiles() {
     const countEl = document.getElementById('files-bar-count');
     if (!list) return;
 
-    const files = _currentFiles;
+    const files = _currentFiles.slice().sort((a, b) => a.filepath.localeCompare(b.filepath));
 
     if (titleEl) {
         titleEl.textContent = `${files.length} file${files.length !== 1 ? 's' : ''} changed`;

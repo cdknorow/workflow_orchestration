@@ -1429,6 +1429,13 @@ export async function loadSettings() {
         if (s.show_scrollbars === undefined) {
             s.show_scrollbars = true;
         }
+        // Coerce refresh_files_on_switch (default: disabled)
+        if (typeof s.refresh_files_on_switch === "string") {
+            s.refresh_files_on_switch = s.refresh_files_on_switch === "True" || s.refresh_files_on_switch === "true";
+        }
+        if (s.refresh_files_on_switch === undefined) {
+            s.refresh_files_on_switch = false;
+        }
         state.settings = s;
 
         // Apply scrollbar visibility
