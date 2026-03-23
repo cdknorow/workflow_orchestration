@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	at "github.com/cdknorow/coral/internal/agenttypes"
 	"github.com/cdknorow/coral/internal/background"
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/store"
@@ -80,10 +81,16 @@ func (h *TasksHandler) SubmitTask(w http.ResponseWriter, r *http.Request) {
 		body.MaxAutoAccepts = 10
 	}
 
-	// Auto-accept flag injection
+	// Auto-accept flag injection (agent-type-aware)
 	flags := strings.TrimSpace(body.Flags)
 	if body.AutoAccept {
-		skipFlag := "--dangerously-skip-permissions"
+		var skipFlag string
+		switch body.AgentType {
+		case at.Codex:
+			skipFlag = "--full-auto"
+		default:
+			skipFlag = "--dangerously-skip-permissions"
+		}
 		if !strings.Contains(flags, skipFlag) {
 			flags = strings.TrimSpace(skipFlag + " " + flags)
 		}

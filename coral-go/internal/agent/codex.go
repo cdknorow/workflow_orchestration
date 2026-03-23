@@ -33,6 +33,11 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 		parts = append(parts, "codex")
 	}
 
+	// Inject permissions from capabilities
+	if perms := TranslateToCodexPermissions(params.Capabilities); perms != nil && perms.FullAuto {
+		parts = append(parts, "--full-auto")
+	}
+
 	for _, flag := range params.Flags {
 		// Translate Claude-specific flags to Codex equivalents
 		if flag == "--dangerously-skip-permissions" {

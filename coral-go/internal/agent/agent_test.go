@@ -423,6 +423,38 @@ func TestCodex_WithBoardOrchestrator(t *testing.T) {
 	_ = cmd
 }
 
+func TestCodex_WithCapabilities_FullAuto(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{
+			Allow: []string{CapShell},
+		},
+	})
+	if !strings.Contains(cmd, "--full-auto") {
+		t.Errorf("expected --full-auto from capabilities injection, got %q", cmd)
+	}
+}
+
+func TestCodex_WithCapabilities_NoShell(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{
+			Allow: []string{CapFileRead},
+		},
+	})
+	if strings.Contains(cmd, "--full-auto") {
+		t.Errorf("should not have --full-auto without shell capability, got %q", cmd)
+	}
+}
+
+func TestCodex_WithCapabilities_Nil(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{})
+	if strings.Contains(cmd, "--full-auto") {
+		t.Errorf("should not have --full-auto with nil capabilities, got %q", cmd)
+	}
+}
+
 // ── Gemini BuildLaunchCommand Tests ─────────────────────────
 
 func TestGemini_BasicLaunch(t *testing.T) {
@@ -615,6 +647,148 @@ func TestTranslateToClaudePermissions_UnknownCapPassthrough(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected unknown cap to pass through, got %v", result.Allow)
+	}
+}
+
+// ── Codex Permission Translation Tests ──────────────────────
+
+func TestTranslateToCodexPermissions_Nil(t *testing.T) {
+	result := TranslateToCodexPermissions(nil)
+	if result != nil {
+		t.Errorf("expected nil for nil capabilities, got %+v", result)
+	}
+}
+
+func TestTranslateToCodexPermissions_Empty(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{})
+	if result != nil {
+		t.Errorf("expected nil for empty capabilities, got %+v", result)
+	}
+}
+
+func TestTranslateToCodexPermissions_ShellFullAuto(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{
+		Allow: []string{CapShell},
+	})
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !result.FullAuto {
+		t.Error("expected FullAuto=true when shell allowed with no denies")
+	}
+}
+
+func TestTranslateToCodexPermissions_ShellWithDenyNotFullAuto(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{
+		Allow: []string{CapShell},
+		Deny:  []string{CapGitWrite},
+	})
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.FullAuto {
+		t.Error("expected FullAuto=false when shell allowed with denies")
+	}
+}
+
+func TestTranslateToCodexPermissions_NoShellReturnsAllowList(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{
+		Allow: []string{CapFileRead, CapFileWrite},
+	})
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.FullAuto {
+		t.Error("expected FullAuto=false without shell capability")
+	}
+	if len(result.Allow) != 2 {
+		t.Errorf("expected 2 allow entries, got %d: %v", len(result.Allow), result.Allow)
+	}
+}
+
+// ── Codex Flag Translation Tests ────────────────────────────
+
+func TestCodex_FlagTranslation(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Flags: []string{"--dangerously-skip-permissions"},
+	})
+	if strings.Contains(cmd, "--dangerously-skip-permissions") {
+		t.Error("Claude flag should be translated, not passed through")
+	}
+	if !strings.Contains(cmd, "--full-auto") {
+		t.Errorf("expected --full-auto (translated from Claude flag), got %q", cmd)
+	}
+}
+
+// ── Gemini Permission Translation Tests ─────────────────────
+
+func TestTranslateToGeminiPermissions_Nil(t *testing.T) {
+	result := TranslateToGeminiPermissions(nil)
+	if result != nil {
+		t.Errorf("expected nil for nil capabilities, got %+v", result)
+	}
+}
+
+func TestTranslateToGeminiPermissions_Empty(t *testing.T) {
+	result := TranslateToGeminiPermissions(&Capabilities{})
+	if result != nil {
+		t.Errorf("expected nil for empty capabilities, got %+v", result)
+	}
+}
+
+func TestTranslateToGeminiPermissions_PassThrough(t *testing.T) {
+	result := TranslateToGeminiPermissions(&Capabilities{
+		Allow: []string{CapFileRead, CapShell},
+	})
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.Allow) != 2 {
+		t.Errorf("expected 2 allow entries, got %d", len(result.Allow))
+	}
+}
+
+// ── TranslatePermissions Dispatcher Tests ───────────────────
+
+func TestTranslatePermissions_Claude(t *testing.T) {
+	result := TranslatePermissions("claude", &Capabilities{Allow: []string{CapFileRead}})
+	if _, ok := result.(*ClaudePermissions); !ok {
+		t.Errorf("expected *ClaudePermissions for claude, got %T", result)
+	}
+}
+
+func TestTranslatePermissions_Codex(t *testing.T) {
+	result := TranslatePermissions("codex", &Capabilities{Allow: []string{CapShell}})
+	cp, ok := result.(*CodexPermissions)
+	if !ok {
+		t.Errorf("expected *CodexPermissions for codex, got %T", result)
+	}
+	if cp != nil && !cp.FullAuto {
+		t.Error("expected FullAuto for codex with shell capability")
+	}
+}
+
+func TestTranslatePermissions_Gemini(t *testing.T) {
+	result := TranslatePermissions("gemini", &Capabilities{Allow: []string{CapFileRead}})
+	if _, ok := result.(*GeminiPermissions); !ok {
+		t.Errorf("expected *GeminiPermissions for gemini, got %T", result)
+	}
+}
+
+func TestTranslatePermissions_UnknownDefaultsToClaude(t *testing.T) {
+	result := TranslatePermissions("unknown", &Capabilities{Allow: []string{CapFileRead}})
+	if _, ok := result.(*ClaudePermissions); !ok {
+		t.Errorf("expected *ClaudePermissions for unknown agent, got %T", result)
+	}
+}
+
+func TestTranslatePermissions_NilCaps(t *testing.T) {
+	// TranslateToClaudePermissions(nil) returns (*ClaudePermissions)(nil),
+	// which wraps to a non-nil interface. Verify the inner value is nil.
+	result := TranslatePermissions("claude", nil)
+	if cp, ok := result.(*ClaudePermissions); ok && cp != nil {
+		t.Errorf("expected nil *ClaudePermissions for nil capabilities, got %+v", cp)
 	}
 }
 

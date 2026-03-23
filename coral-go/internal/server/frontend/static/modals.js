@@ -70,7 +70,7 @@ export function showLaunchModal() {
 
     // Reset agent form
     document.getElementById("launch-agent-name").value = "";
-    document.getElementById("launch-flags").value = "--dangerously-skip-permissions";
+    document.getElementById("launch-flags").value = _getPermFlag('launch-type');
     document.getElementById("launch-agent-prompt").value = "";
     document.getElementById("launch-board-name").value = "";
     document.getElementById("launch-board-server").value = "";
@@ -183,6 +183,18 @@ function _updatePermFlagButtons(selectEl) {
 }
 window._updatePermFlagButtons = _updatePermFlagButtons;
 
+/** Get the permission flag for a given agent type select element ID. */
+function _getPermFlag(selectId) {
+    const el = document.getElementById(selectId);
+    const agentType = el ? el.value : 'claude';
+    return PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+}
+
+/** Check if a flags string contains ANY known permission flag. */
+function _hasPermFlag(flagsStr) {
+    return Object.values(PERM_FLAGS).some(f => flagsStr.includes(f));
+}
+
 function _showCLIWarning(el, agentType, available) {
     if (available) {
         el.style.display = 'none';
@@ -219,9 +231,10 @@ function _showCLINotFoundModal(agentType) {
     });
 }
 
-function _checkPermissionFlag(flagsStr) {
+function _checkPermissionFlag(flagsStr, agentType) {
+    const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
     return new Promise((resolve) => {
-        if (flagsStr && flagsStr.includes('--dangerously-skip-permissions')) {
+        if (flagsStr && _hasPermFlag(flagsStr)) {
             resolve('skip');
             return;
         }
@@ -232,7 +245,7 @@ function _checkPermissionFlag(flagsStr) {
             <div class="modal-content" style="width:460px">
                 <h3>Permission Prompt Warning</h3>
                 <p style="color:var(--text-secondary);font-size:13px;line-height:1.5;margin:8px 0 16px">
-                    Agents may get stuck on permission prompts without <code>--dangerously-skip-permissions</code>. Would you like to enable it?
+                    Agents may get stuck on permission prompts without <code>${escapeHtml(permFlag)}</code>. Would you like to enable it?
                 </p>
                 <div class="modal-actions" style="gap:8px">
                     <button class="btn" data-action="cancel">Cancel</button>
@@ -279,10 +292,11 @@ export async function launchSession() {
 
     // Permission flag check (skip for terminals)
     if (_launchMode !== "terminal") {
-        const permResult = await _checkPermissionFlag(flagsStr);
+        const permResult = await _checkPermissionFlag(flagsStr, type);
         if (permResult === null) return;
         if (permResult === 'enable') {
-            flagsStr = (flagsStr ? flagsStr + ' ' : '') + '--dangerously-skip-permissions';
+            const permFlag = PERM_FLAGS[type] || PERM_FLAGS.claude;
+            flagsStr = (flagsStr ? flagsStr + ' ' : '') + permFlag;
             const flagsInput = document.getElementById("launch-flags");
             if (flagsInput) flagsInput.value = flagsStr;
         }
@@ -603,7 +617,7 @@ export function showAddAgentToBoard(boardName, workDir) {
     document.getElementById("add-agent-board-subtitle").textContent = `Board: ${boardName}`;
     document.getElementById("add-agent-board-agent-name").value = "";
     document.getElementById("add-agent-board-prompt").value = "";
-    document.getElementById("add-agent-board-flags").value = "--dangerously-skip-permissions";
+    document.getElementById("add-agent-board-flags").value = _getPermFlag('add-agent-board-type');
     _syncFlagButtons("add-agent-board-flags");
 
     _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
@@ -650,10 +664,12 @@ export async function launchAgentToBoard() {
     }
 
     // Permission flag check
-    const permResult = await _checkPermissionFlag(flagsStr);
+    const boardAgentType = document.getElementById("add-agent-board-type")?.value || "claude";
+    const permResult = await _checkPermissionFlag(flagsStr, boardAgentType);
     if (permResult === null) return;
     if (permResult === 'enable') {
-        flagsStr = (flagsStr ? flagsStr + ' ' : '') + '--dangerously-skip-permissions';
+        const permFlag = PERM_FLAGS[boardAgentType] || PERM_FLAGS.claude;
+        flagsStr = (flagsStr ? flagsStr + ' ' : '') + permFlag;
         const flagsInput = document.getElementById("add-agent-board-flags");
         if (flagsInput) flagsInput.value = flagsStr;
     }
@@ -838,7 +854,7 @@ async function _initTeamForm() {
     // Reset form
     document.getElementById("team-board-name").value = "";
     document.getElementById("team-board-server").value = "";
-    document.getElementById("team-flags").value = "--dangerously-skip-permissions";
+    document.getElementById("team-flags").value = _getPermFlag('team-agent-type');
     _syncFlagButtons("team-flags");
     _teamAgentCounter = 0;
     const list = document.getElementById("team-agents-list");
@@ -1208,10 +1224,11 @@ async function launchTeam() {
     let flagsStr = document.getElementById("team-flags").value.trim();
 
     // Permission flag check
-    const permResult = await _checkPermissionFlag(flagsStr);
+    const permResult = await _checkPermissionFlag(flagsStr, agentType);
     if (permResult === null) return;
     if (permResult === 'enable') {
-        flagsStr = (flagsStr ? flagsStr + ' ' : '') + '--dangerously-skip-permissions';
+        const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+        flagsStr = (flagsStr ? flagsStr + ' ' : '') + permFlag;
         const flagsInput = document.getElementById("team-flags");
         if (flagsInput) flagsInput.value = flagsStr;
     }
