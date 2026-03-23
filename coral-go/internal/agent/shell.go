@@ -100,7 +100,7 @@ func PrefixWithPathEnv(binDir string) string {
 	case ShellCmd:
 		return fmt.Sprintf(`set "PATH=%s;%%PATH%%" && `, binDir)
 	default:
-		return fmt.Sprintf(`PATH="%s:$PATH" `, binDir)
+		return fmt.Sprintf(`export PATH="%s:$PATH" && `, binDir)
 	}
 }
 
