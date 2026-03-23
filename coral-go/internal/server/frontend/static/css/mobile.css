@@ -570,7 +570,28 @@
         width: 95vw !important;
         max-width: 95vw !important;
         max-height: 90vh;
-        overflow-y: auto;
+    }
+
+    .modal-header {
+        margin: -24px -24px 0;
+        padding: 20px 20px 14px;
+    }
+
+    .modal-footer {
+        margin: 12px -24px -24px;
+        padding: 14px 20px 20px;
+    }
+
+    .launch-modal-step > h3 {
+        top: -24px;
+        margin: -24px 0 12px;
+        padding: 20px 4px 14px 0;
+    }
+
+    .launch-modal-step > .modal-actions {
+        bottom: -24px;
+        margin: 12px 0 -24px;
+        padding: 14px 4px 20px 0;
     }
 
     /* Team columns stack vertically on mobile */

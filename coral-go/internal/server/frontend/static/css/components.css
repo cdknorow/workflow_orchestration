@@ -442,6 +442,15 @@
     padding: 24px;
     width: 400px;
     max-width: 90vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* When using modal-header/body/footer structure, body scrolls instead */
+.modal-content:has(.modal-body) {
+    overflow: hidden;
 }
 
 .modal-content-wide {
@@ -453,8 +462,44 @@
 }
 
 .modal-content h3 {
-    margin-bottom: 16px;
+    margin: 0;
     font-size: 16px;
+}
+
+.modal-header,
+.modal-footer {
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+}
+
+.modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: -24px -24px 0;
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header > *:last-child {
+    margin-bottom: 0;
+}
+
+.modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-right: -8px;
+}
+
+.modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 16px -24px -24px;
+    padding: 16px 24px 24px;
+    border-top: 1px solid var(--border);
 }
 
 .modal-content label {
@@ -491,6 +536,38 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 20px;
+}
+
+.modal-footer.modal-actions {
+    margin-top: 16px;
+}
+
+.launch-modal-step {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-right: -8px;
+}
+
+.launch-modal-step > h3 {
+    position: sticky;
+    top: -24px;
+    z-index: 1;
+    background: var(--bg-secondary);
+    margin: -24px 0 16px;
+    padding: 24px 4px 16px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.launch-modal-step > .modal-actions {
+    position: sticky;
+    bottom: -24px;
+    z-index: 1;
+    background: var(--bg-secondary);
+    margin: 16px 0 -24px;
+    padding: 16px 4px 24px 0;
+    border-top: 1px solid var(--border);
 }
 
 /* ── Info Grid (modal detail view) ─────────────────────────── */

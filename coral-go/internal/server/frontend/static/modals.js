@@ -28,10 +28,10 @@ export function toggleFlag(inputId, flag) {
 let _launchMode = null;
 
 function _showLaunchStep(step) {
-    document.getElementById("launch-step-chooser").style.display = step === "chooser" ? "" : "none";
-    document.getElementById("launch-step-agent").style.display = step === "agent" ? "" : "none";
-    document.getElementById("launch-step-terminal").style.display = step === "terminal" ? "" : "none";
-    document.getElementById("launch-step-team").style.display = step === "team" ? "" : "none";
+    document.getElementById("launch-step-chooser").style.display = step === "chooser" ? "flex" : "none";
+    document.getElementById("launch-step-agent").style.display = step === "agent" ? "flex" : "none";
+    document.getElementById("launch-step-terminal").style.display = step === "terminal" ? "flex" : "none";
+    document.getElementById("launch-step-team").style.display = step === "team" ? "flex" : "none";
     // Widen the modal for multi-column layouts
     const content = document.querySelector("#launch-modal .modal-content");
     if (content) {
