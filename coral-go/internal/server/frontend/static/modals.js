@@ -151,6 +151,38 @@ async function _checkAgentCLI(agentType) {
 }
 window._checkAgentCLI = _checkAgentCLI;
 
+/** Map agent type to its permission bypass flag. */
+const PERM_FLAGS = {
+    claude: '--dangerously-skip-permissions',
+    codex: '--full-auto',
+    gemini: '--dangerously-skip-permissions',
+};
+
+/** Update permission flag shortcut buttons in the same modal as the agent type select. */
+function _updatePermFlagButtons(selectEl) {
+    const agentType = selectEl.value || 'claude';
+    const flag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+
+    // Find the enclosing modal content and update all flag-shortcut-btn that reference skip-permissions/full-auto
+    const modal = selectEl.closest('.modal-content') || selectEl.closest('.modal');
+    if (!modal) return;
+
+    modal.querySelectorAll('.flag-shortcut-btn').forEach(btn => {
+        const onclick = btn.getAttribute('onclick') || '';
+        // Match buttons that toggle a dangerously- or --full-auto flag
+        if (onclick.includes('dangerously-') || onclick.includes('full-auto')) {
+            // Extract the flag input ID from the onclick
+            const match = onclick.match(/toggleFlag\('([^']+)'/);
+            if (match) {
+                const flagInputId = match[1];
+                btn.setAttribute('onclick', `toggleFlag('${flagInputId}','${flag}')`);
+                btn.textContent = flag;
+            }
+        }
+    });
+}
+window._updatePermFlagButtons = _updatePermFlagButtons;
+
 function _showCLIWarning(el, agentType, available) {
     if (available) {
         el.style.display = 'none';

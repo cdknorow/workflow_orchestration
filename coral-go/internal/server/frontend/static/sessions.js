@@ -66,6 +66,14 @@ export async function selectLiveSession(name, agentType, sessionId) {
     badge.textContent = agentType || "claude";
     badge.className = `badge ${(agentType || "claude").toLowerCase()}`;
 
+    // Update command input placeholder with session target
+    const cmdInput = document.getElementById("command-input");
+    if (cmdInput) {
+        const typeInfo = agentType ? ` (${agentType})` : '';
+        const boardInfo = agentData && agentData.board_project ? ` on ${agentData.board_project}` : '';
+        cmdInput.placeholder = `Sending to: ${displayName || name}${typeInfo}${boardInfo} \u2014 type a command or paste an image...`;
+    }
+
     // Reset summary/status before loading new session detail
     const summaryEl = document.getElementById("session-summary");
     if (summaryEl) summaryEl.style.display = "none";

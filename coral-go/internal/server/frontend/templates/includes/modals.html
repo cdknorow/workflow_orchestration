@@ -102,7 +102,7 @@
                             </ul>
                         </div>
                         <label>Agent Type:
-                            <select id="launch-type" onchange="window._checkAgentCLI && window._checkAgentCLI(this.value)">
+                            <select id="launch-type" onchange="window._checkAgentCLI && window._checkAgentCLI(this.value); window._updatePermFlagButtons && window._updatePermFlagButtons(this)">
                                 <option value="claude">Claude</option>
                                 <option value="gemini">Gemini</option>
                                 <option value="codex">Codex</option>
@@ -242,7 +242,7 @@
                             </ul>
                         </div>
                         <label>Agent Type:
-                            <select id="team-agent-type">
+                            <select id="team-agent-type" onchange="window._updatePermFlagButtons && window._updatePermFlagButtons(this)">
                                 <option value="claude">Claude</option>
                                 <option value="gemini">Gemini</option>
                                 <option value="codex">Codex</option>
@@ -531,7 +531,7 @@
                     <input type="text" id="job-modal-branch" placeholder="main" value="main">
                 </label>
                 <label>Agent Type:
-                    <select id="job-modal-agent">
+                    <select id="job-modal-agent" onchange="window._updatePermFlagButtons && window._updatePermFlagButtons(this)">
                         <option value="claude">Claude</option>
                         <option value="gemini">Gemini</option>
                         <option value="codex">Codex</option>
@@ -660,7 +660,7 @@
                 <textarea id="add-agent-board-prompt" rows="5" placeholder="Describe the agent's role and behavior..."></textarea>
             </label>
             <label>Agent Type:
-                <select id="add-agent-board-type" onchange="window._checkAgentCLI && window._checkAgentCLI(this.value)">
+                <select id="add-agent-board-type" onchange="window._checkAgentCLI && window._checkAgentCLI(this.value); window._updatePermFlagButtons && window._updatePermFlagButtons(this)">
                     <option value="claude">Claude</option>
                     <option value="gemini">Gemini</option>
                     <option value="codex">Codex</option>
