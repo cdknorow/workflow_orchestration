@@ -1,0 +1,15 @@
+#!/bin/bash
+# Pre-push hook: build and test coral-go before pushing.
+# Prevents pushing code that doesn't compile or has failing tests.
+#
+# To install: git config core.hooksPath .githooks
+
+set -e
+
+echo "==> Pre-push: building coral-go..."
+(cd coral-go && go build ./...)
+
+echo "==> Pre-push: running tests..."
+(cd coral-go && go test ./...)
+
+echo "==> Pre-push: all checks passed."

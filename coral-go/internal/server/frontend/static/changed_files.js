@@ -58,23 +58,13 @@ function splitPath(filepath) {
 export function openFilePreview(filepath) {
     if (!state.currentSession || state.currentSession.type !== 'live') return;
     const agentName = state.currentSession.name;
-    const sessionId = state.currentSession.session_id;
 
     const qs = new URLSearchParams({
         agent: agentName,
         file: filepath,
     });
 
-    const width = Math.min(900, Math.round(window.screen.width * 0.6));
-    const height = Math.min(800, Math.round(window.screen.height * 0.75));
-    const left = Math.round((window.screen.width - width) / 2);
-    const top = Math.round((window.screen.height - height) / 2);
-
-    window.open(
-        `/preview?${qs}`,
-        'coral-preview',
-        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`,
-    );
+    _showInlinePreview(`/preview?${qs}`, filepath);
 }
 
 // Basic markdown to HTML renderer (no dependencies)
@@ -130,7 +120,6 @@ export function openFileDiff(filepath) {
     const agentName = state.currentSession.name;
     const sessionId = state.currentSession.session_id;
 
-    // Build the file list for prev/next navigation
     const fileList = _currentFiles.map(f => f.filepath);
 
     const qs = new URLSearchParams({
@@ -140,17 +129,49 @@ export function openFileDiff(filepath) {
     });
     if (sessionId) qs.set('session_id', sessionId);
 
-    const width = Math.min(1200, Math.round(window.screen.width * 0.7));
-    const height = Math.min(900, Math.round(window.screen.height * 0.8));
-    const left = Math.round((window.screen.width - width) / 2);
-    const top = Math.round((window.screen.height - height) / 2);
-
-    window.open(
-        `/diff?${qs}`,
-        'coral-diff',
-        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`,
-    );
+    _showInlinePreview(`/diff?${qs}`, filepath);
 }
+
+/** Show a file preview/diff inline in the right panel */
+function _showInlinePreview(url, filepath) {
+    // Switch to the files tab
+    const { switchAgenticTab } = window;
+    if (switchAgenticTab) switchAgenticTab('files', 'top');
+
+    const panel = document.getElementById('agentic-panel-files');
+    if (!panel) return;
+
+    const filename = filepath.split('/').pop();
+
+    panel.innerHTML = `
+        <div class="inline-preview-header">
+            <button class="btn btn-small" onclick="window._closeInlinePreview()">← Back</button>
+            <span class="inline-preview-filename">${filename}</span>
+        </div>
+        <iframe class="inline-preview-frame" src="${url}&embedded=1" frameborder="0"></iframe>
+    `;
+}
+
+/** Close inline preview and restore the files list */
+window._closeInlinePreview = function() {
+    console.log('[coral] _closeInlinePreview called');
+    const panel = document.getElementById('agentic-panel-files');
+    if (panel) {
+        // Restore the files panel structure
+        panel.innerHTML = `
+            <div class="changed-files-header" id="changed-files-header">
+                <span class="changed-files-title" id="changed-files-title">Loading...</span>
+                <button class="refresh-files-btn" onclick="refreshChangedFiles()" title="Refresh git diff">&#x21bb;</button>
+            </div>
+            <div class="changed-files-list" id="changed-files-list">
+                <div class="file-empty">Loading...</div>
+            </div>
+        `;
+    }
+    if (state.currentSession) {
+        loadChangedFiles(state.currentSession.name, state.currentSession.session_id);
+    }
+};
 
 export async function refreshChangedFiles() {
     if (!state.currentSession || state.currentSession.type !== 'live') return;

@@ -201,8 +201,8 @@ func TestServer_APIDefaultPrompts(t *testing.T) {
 
 	var result map[string]any
 	json.NewDecoder(resp.Body).Decode(&result)
-	if _, ok := result["prompts"]; !ok {
-		t.Error("expected 'prompts' key in response")
+	if _, ok := result["default_prompt_orchestrator"]; !ok {
+		t.Error("expected 'default_prompt_orchestrator' key in response")
 	}
 }
 

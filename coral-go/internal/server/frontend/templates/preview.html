@@ -4,6 +4,30 @@
 <meta charset="utf-8">
 <title>Preview</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+<script type="importmap">
+{
+  "imports": {
+    "codemirror": "https://esm.sh/codemirror@6.0.1",
+    "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.2",
+    "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python@6.1.6",
+    "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html@6.4.9",
+    "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css@6.3.0",
+    "@codemirror/lang-json": "https://esm.sh/@codemirror/lang-json@6.0.1",
+    "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.3.0",
+    "@codemirror/lang-sql": "https://esm.sh/@codemirror/lang-sql@6.8.0",
+    "@codemirror/lang-rust": "https://esm.sh/@codemirror/lang-rust@6.0.1",
+    "@codemirror/lang-cpp": "https://esm.sh/@codemirror/lang-cpp@6.0.2",
+    "@codemirror/lang-java": "https://esm.sh/@codemirror/lang-java@6.0.1",
+    "@codemirror/lang-go": "https://esm.sh/@codemirror/lang-go@6.0.1",
+    "@codemirror/lang-xml": "https://esm.sh/@codemirror/lang-xml@6.1.0",
+    "@codemirror/lang-yaml": "https://esm.sh/@codemirror/lang-yaml@6.1.1",
+    "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark@6.1.2",
+    "@codemirror/search": "https://esm.sh/@codemirror/search@6.5.6",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.33.0",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.1"
+  }
+}
+</script>
 <style>
     :root { color-scheme: dark; }
     body {
@@ -11,6 +35,18 @@
         max-width: 800px; margin: 0 auto; padding: 24px 32px;
         background: #0d1117; color: #e6edf3; line-height: 1.6;
     }
+    html.embedded, body.embedded {
+        max-width: none; padding: 0; margin: 0;
+        height: 100%; display: flex; flex-direction: column; box-sizing: border-box;
+        overflow: hidden;
+    }
+    body.embedded .preview-header { padding: 4px 8px; margin: 0; flex-shrink: 0; border-bottom: 1px solid #30363d; }
+    body.embedded .preview-header h3 { display: none; }
+    body.embedded #editor { flex: 1; min-height: 0; resize: none; border-radius: 0; border: none; margin: 0; }
+    body.embedded #editor-container { flex: 1; min-height: 0; }
+    body.embedded #content { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 12px; }
+    #editor-container .cm-editor { height: 100%; }
+    #editor-container .cm-scroller { overflow: auto; }
     .preview-header {
         display: flex; justify-content: space-between; align-items: center;
         padding: 8px 0 16px; border-bottom: 1px solid #30363d; margin-bottom: 20px;
@@ -48,6 +84,7 @@
 </style>
 </head>
 <body>
+<script>if(new URLSearchParams(location.search).has('embedded')){document.body.classList.add('embedded');document.documentElement.classList.add('embedded');}</script>
     <div id="loading">Loading...</div>
     <div id="preview-container" style="display:none">
         <div class="preview-header">
@@ -57,8 +94,9 @@
                 <button onclick="saveFile()" id="save-btn">Save</button>
             </div>
         </div>
-        <div id="rendered"></div>
-        <textarea id="editor"></textarea>
+        <div id="rendered" id="content"></div>
+        <div id="editor-container" style="display:none;flex:1;min-height:0;overflow:hidden"></div>
+        <textarea id="editor" style="display:none"></textarea>
     </div>
 
 <script>
@@ -148,12 +186,30 @@
 
     function toggleEdit() {
         editing = !editing;
-        document.getElementById('rendered').style.display = editing ? 'none' : 'block';
-        document.getElementById('editor').style.display = editing ? 'block' : 'none';
+        const rendered = document.getElementById('rendered');
+        const editorContainer = document.getElementById('editor-container');
+        const textarea = document.getElementById('editor');
         document.getElementById('edit-btn').textContent = editing ? 'Preview' : 'Edit';
-        if (!editing) {
-            rawContent = document.getElementById('editor').value;
-            const rendered = document.getElementById('rendered');
+
+        if (editing) {
+            rendered.style.display = 'none';
+            if (window._cmReady) {
+                editorContainer.style.display = '';
+                window._initCodeMirror(rawContent, getLangFromPath(filepath));
+            } else {
+                textarea.style.display = 'block';
+                textarea.value = rawContent;
+            }
+        } else {
+            // Read content back from editor
+            if (window._cmReady && window._getCodeMirrorContent) {
+                rawContent = window._getCodeMirrorContent() || rawContent;
+            } else {
+                rawContent = textarea.value;
+            }
+            editorContainer.style.display = 'none';
+            textarea.style.display = 'none';
+            rendered.style.display = '';
             if (isMarkdown(filepath)) {
                 rendered.innerHTML = renderMarkdown(rawContent);
             } else {
@@ -164,7 +220,7 @@
     }
 
     async function saveFile() {
-        const content = document.getElementById('editor').value;
+        const content = (window._cmReady && window._getCodeMirrorContent) ? (window._getCodeMirrorContent() || rawContent) : document.getElementById('editor').value;
         try {
             const qs = new URLSearchParams({ filepath });
             if (sessionId) qs.set('session_id', sessionId);
@@ -186,10 +242,70 @@
 </script>
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 <script>
-    // Re-highlight after hljs loads if content already rendered
     if (window.hljs && document.querySelector('#rendered pre code')) {
         document.querySelectorAll('#rendered pre code').forEach(block => hljs.highlightElement(block));
     }
+</script>
+<script type="module">
+    // CodeMirror 6 integration
+    import { EditorView, basicSetup } from 'codemirror';
+    import { EditorState } from '@codemirror/state';
+    import { oneDark } from '@codemirror/theme-one-dark';
+    import { search } from '@codemirror/search';
+
+    // Language imports (loaded dynamically based on file extension)
+    const langLoaders = {
+        javascript: () => import('@codemirror/lang-javascript').then(m => m.javascript()),
+        typescript: () => import('@codemirror/lang-javascript').then(m => m.javascript({ typescript: true })),
+        jsx: () => import('@codemirror/lang-javascript').then(m => m.javascript({ jsx: true })),
+        tsx: () => import('@codemirror/lang-javascript').then(m => m.javascript({ jsx: true, typescript: true })),
+        python: () => import('@codemirror/lang-python').then(m => m.python()),
+        html: () => import('@codemirror/lang-html').then(m => m.html()),
+        css: () => import('@codemirror/lang-css').then(m => m.css()),
+        json: () => import('@codemirror/lang-json').then(m => m.json()),
+        markdown: () => import('@codemirror/lang-markdown').then(m => m.markdown()),
+        sql: () => import('@codemirror/lang-sql').then(m => m.sql()),
+        rust: () => import('@codemirror/lang-rust').then(m => m.rust()),
+        cpp: () => import('@codemirror/lang-cpp').then(m => m.cpp()),
+        c: () => import('@codemirror/lang-cpp').then(m => m.cpp()),
+        java: () => import('@codemirror/lang-java').then(m => m.java()),
+        go: () => import('@codemirror/lang-go').then(m => m.go()),
+        xml: () => import('@codemirror/lang-xml').then(m => m.xml()),
+        yaml: () => import('@codemirror/lang-yaml').then(m => m.yaml()),
+    };
+
+    let cmView = null;
+
+    window._initCodeMirror = async function(content, langName) {
+        const container = document.getElementById('editor-container');
+        if (!container) return;
+        if (cmView) { cmView.destroy(); cmView = null; }
+
+        const extensions = [basicSetup, oneDark, search(), EditorView.lineWrapping];
+
+        // Load language support
+        const loader = langLoaders[langName];
+        if (loader) {
+            try {
+                const lang = await loader();
+                extensions.push(lang);
+            } catch { /* language not available */ }
+        }
+
+        // Fill container height
+        extensions.push(EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }));
+
+        cmView = new EditorView({
+            state: EditorState.create({ doc: content, extensions }),
+            parent: container,
+        });
+    };
+
+    window._getCodeMirrorContent = function() {
+        return cmView ? cmView.state.doc.toString() : null;
+    };
+
+    window._cmReady = true;
 </script>
 </body>
 </html>

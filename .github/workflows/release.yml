@@ -205,6 +205,8 @@ jobs:
           done
           sed "s/VERSION_PLACEHOLDER/${VERSION}/g" scripts/Info.plist > "$APP/Contents/Info.plist"
           [ -f Coral.icns ] && cp Coral.icns "$APP/Contents/Resources/AppIcon.icns"
+          cp installers/install-cli.sh "$APP/Contents/MacOS/install-cli.sh"
+          chmod +x "$APP/Contents/MacOS/install-cli.sh"
 
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != ''

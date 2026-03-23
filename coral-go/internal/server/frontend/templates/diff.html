@@ -24,6 +24,13 @@
             color: var(--text-primary);
             min-height: 100vh;
         }
+        body.embedded .diff-header { display: none; }
+        body.embedded .diff-nav { display: none; }
+        html.embedded, body.embedded {
+            min-height: auto; height: 100%; margin: 0; padding: 0;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        body.embedded #diff-container { flex: 1; min-height: 0; overflow-y: auto; }
 
         .diff-header {
             display: flex;
@@ -307,6 +314,7 @@
     </style>
 </head>
 <body>
+<script>if(new URLSearchParams(location.search).has('embedded')){document.body.classList.add('embedded');document.documentElement.classList.add('embedded');}</script>
     <div class="diff-header">
         <img src="/static/favicon.png" alt="Coral" class="diff-header-icon">
         <div class="diff-filepath" id="diff-filepath">Loading...</div>
