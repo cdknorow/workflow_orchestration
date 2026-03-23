@@ -1260,6 +1260,26 @@
     margin-top: 2px;
 }
 
+.cli-verify-btn {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 2px 8px;
+}
+
+.cli-verify-result {
+    font-size: 11px;
+    flex-shrink: 0;
+    min-width: 60px;
+}
+
+.cli-verify-ok {
+    color: var(--success);
+}
+
+.cli-verify-fail {
+    color: var(--error);
+}
+
 .toggle-label {
     display: flex;
     align-items: center;

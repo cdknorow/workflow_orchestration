@@ -207,6 +207,37 @@ function _hasPermFlag(flagsStr) {
     return Object.values(PERM_FLAGS).some(f => flagsStr.includes(f));
 }
 
+/** Verify a CLI path by calling the backend check endpoint. */
+window._verifyCLI = async function(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const resultEl = btn.nextElementSibling;
+    if (!input || !resultEl) return;
+
+    const binary = input.value.trim() || input.placeholder;
+    btn.disabled = true;
+    btn.textContent = '...';
+    resultEl.textContent = '';
+    resultEl.className = 'cli-verify-result';
+
+    try {
+        const resp = await fetch(`/api/system/cli-check?binary=${encodeURIComponent(binary)}`);
+        const data = await resp.json();
+        if (data.found) {
+            resultEl.textContent = data.version ? `v${data.version}` : 'Found';
+            resultEl.classList.add('cli-verify-ok');
+        } else {
+            resultEl.textContent = 'Not found';
+            resultEl.classList.add('cli-verify-fail');
+        }
+    } catch {
+        resultEl.textContent = 'Error';
+        resultEl.classList.add('cli-verify-fail');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Verify';
+    }
+};
+
 function _showCLIWarning(el, agentType, available) {
     if (available) {
         el.style.display = 'none';

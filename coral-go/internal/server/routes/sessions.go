@@ -1823,6 +1823,9 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		Capabilities:    capabilities,
 		CLIPath:         cliPath,
 	}
+	if cliPath != "" {
+		log.Printf("[launch] using custom CLI path: %s", cliPath)
+	}
 
 	if backend == "pty" && h.backend != nil {
 		// PTY backend: spawn the agent process directly

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -145,30 +146,65 @@ func (h *SystemHandler) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CLICheck verifies whether the required CLI tool for an agent type is installed.
-// GET /api/system/cli-check?type=claude
+// CLICheck verifies whether a CLI tool is installed and returns its version.
+// GET /api/system/cli-check?type=claude  (check by agent type)
+// GET /api/system/cli-check?binary=/path/to/codex  (check specific path)
 func (h *SystemHandler) CLICheck(w http.ResponseWriter, r *http.Request) {
+	binaryPath := r.URL.Query().Get("binary")
 	agentType := r.URL.Query().Get("type")
-	if agentType == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type parameter required"})
+
+	if binaryPath == "" && agentType == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type or binary parameter required"})
 		return
 	}
 
-	info := agent.GetCLIInfo(agentType)
-	if info == nil {
-		// Unknown agent type — skip check
-		writeJSON(w, http.StatusOK, map[string]any{"available": true, "agent_type": agentType})
-		return
+	var installCmd string
+	if binaryPath == "" {
+		info := agent.GetCLIInfo(agentType)
+		if info == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"found": true, "agent_type": agentType})
+			return
+		}
+		binaryPath = info.Binary
+		installCmd = info.InstallCommand
 	}
 
-	_, err := exec.LookPath(info.Binary)
-	available := err == nil
+	// Try LookPath first, then common install locations
+	resolvedPath, err := exec.LookPath(binaryPath)
+	if err != nil {
+		if found := agent.FindCLIInCommonPaths(binaryPath); found != "" {
+			resolvedPath = found
+		} else {
+			result := map[string]any{
+				"found":      false,
+				"binary":     binaryPath,
+				"agent_type": agentType,
+			}
+			if installCmd != "" {
+				result["install_command"] = installCmd
+			}
+			writeJSON(w, http.StatusOK, result)
+			return
+		}
+	}
+
+	// Try to get version
+	version := ""
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, resolvedPath, "--version").Output(); err == nil {
+		version = strings.TrimSpace(string(out))
+		// Take first line only
+		if idx := strings.IndexByte(version, '\n'); idx > 0 {
+			version = version[:idx]
+		}
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"available":       available,
-		"agent_type":      agentType,
-		"binary":          info.Binary,
-		"install_command": info.InstallCommand,
+		"found":      true,
+		"path":       resolvedPath,
+		"version":    version,
+		"agent_type": agentType,
 	})
 }
 
