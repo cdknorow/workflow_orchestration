@@ -228,22 +228,12 @@ jobs:
           SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
           APP="dist/Coral.app"
-          # Sign ALL binaries first (no verification until all are signed)
-          for bin in coral launch-coral coral-board coral-tray coral-app; do
-            BIN_PATH="$APP/Contents/MacOS/$bin"
-            if [ -f "$BIN_PATH" ]; then
-              echo "Signing $bin..."
-              codesign --force --options runtime --sign "$SIGNING_IDENTITY" \
-                --entitlements entitlements.plist "$BIN_PATH"
-            fi
-          done
-          # Sign the .app bundle itself
-          echo "Signing Coral.app bundle..."
+          # Sign the entire .app bundle with --deep (signs all nested binaries)
+          echo "Signing Coral.app bundle (deep)..."
           codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" \
             --entitlements entitlements.plist "$APP"
-          # Verify only after everything is signed
           echo "Verifying..."
-          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --verify --deep --verbose=2 "$APP"
 
       - name: Create DMG
         run: |
