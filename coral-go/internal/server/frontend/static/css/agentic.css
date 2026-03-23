@@ -1074,6 +1074,22 @@
     overflow: auto;
 }
 
+/* Fallback textarea when CodeMirror is unavailable */
+.inline-preview-fallback-editor {
+    width: 100%;
+    height: 100%;
+    padding: 8px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border: none;
+    resize: none;
+    outline: none;
+    box-sizing: border-box;
+}
+
 #agentic-panel-files:has(.inline-preview-header) {
     padding: 0;
     overflow: hidden;

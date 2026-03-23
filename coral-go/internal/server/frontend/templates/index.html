@@ -20,10 +20,8 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons&display=swap">
-    <!-- CodeMirror 6 — single self-contained bundle (built with esbuild) -->
-    <script type="importmap">
-    { "imports": { "codemirror-bundle": "/static/vendor/codemirror/codemirror-bundle.js" } }
-    </script>
+    <!-- CodeMirror 6 — single IIFE bundle, sets window.CoralCM -->
+    <script src="/static/vendor/codemirror/codemirror-bundle.js"></script>
     <!-- highlight.js (vendored) -->
     <link rel="stylesheet" href="/static/vendor/hljs/github-dark.min.css">
     <script src="/static/vendor/hljs/highlight.min.js"></script>

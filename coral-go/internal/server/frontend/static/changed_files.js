@@ -70,15 +70,16 @@ function _agentName() {
 
 /* ── CodeMirror 6 (lazy-loaded) ─────────────────────────────── */
 
-let _cmModules = null;    // cached CodeMirror imports
 let _cmView = null;       // active EditorView instance (edit mode)
 let _cmMergeView = null;  // active merge view instance (diff mode)
 
-async function _loadCmModules() {
-    if (_cmModules) return _cmModules;
-    const cm = await import('codemirror-bundle');
-    _cmModules = cm;
-    return _cmModules;
+/** Get the CodeMirror module (loaded via IIFE script tag as window.CoralCM). */
+function _getCm() {
+    if (!window.CoralCM) {
+        console.error('[coral] CodeMirror not available — codemirror-bundle.js may not have loaded');
+        return null;
+    }
+    return window.CoralCM;
 }
 
 function _getLangExtension(cm, langName) {
@@ -97,25 +98,32 @@ function _getLangExtension(cm, langName) {
     try { return loader(); } catch { return null; }
 }
 
-async function _createCmEditor(container, content, langName) {
-    const cm = await _loadCmModules();
+/** Create an editable CodeMirror editor. Returns false if CM is unavailable. */
+function _createCmEditor(container, content, langName) {
+    const cm = _getCm();
+    if (!cm) return false;
 
-    const extensions = [
-        cm.basicSetup,
-        cm.oneDark,
-        cm.search(),
-        cm.EditorView.lineWrapping,
-        cm.EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
-    ];
+    try {
+        const extensions = [
+            cm.basicSetup,
+            cm.oneDark,
+            cm.search(),
+            cm.EditorView.lineWrapping,
+            cm.EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
+        ];
 
-    // Load language extension
-    const langExt = _getLangExtension(cm, langName);
-    if (langExt) extensions.push(langExt);
+        const langExt = _getLangExtension(cm, langName);
+        if (langExt) extensions.push(langExt);
 
-    _cmView = new cm.EditorView({
-        state: cm.EditorState.create({ doc: content, extensions }),
-        parent: container,
-    });
+        _cmView = new cm.EditorView({
+            state: cm.EditorState.create({ doc: content, extensions }),
+            parent: container,
+        });
+        return true;
+    } catch (e) {
+        console.error('[coral] CodeMirror editor creation failed:', e);
+        return false;
+    }
 }
 
 function _destroyCmEditor() {
@@ -129,28 +137,36 @@ function _destroyCmEditor() {
     }
 }
 
-async function _createCmMergeView(container, originalContent, currentContent, langName) {
-    const cm = await _loadCmModules();
+/** Create a read-only CodeMirror merge view. Returns false if CM is unavailable. */
+function _createCmMergeView(container, originalContent, currentContent, langName) {
+    const cm = _getCm();
+    if (!cm) return false;
 
-    const extensions = [
-        cm.basicSetup,
-        cm.oneDark,
-        cm.EditorView.lineWrapping,
-        cm.EditorView.editable.of(false),
-        cm.EditorState.readOnly.of(true),
-        cm.EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
-        cm.unifiedMergeView({
-            original: cm.Text.of(originalContent.split('\n')),
-        }),
-    ];
+    try {
+        const extensions = [
+            cm.basicSetup,
+            cm.oneDark,
+            cm.EditorView.lineWrapping,
+            cm.EditorView.editable.of(false),
+            cm.EditorState.readOnly.of(true),
+            cm.EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
+            cm.unifiedMergeView({
+                original: cm.EditorState.create({ doc: originalContent }),
+            }),
+        ];
 
-    const langExt = _getLangExtension(cm, langName);
-    if (langExt) extensions.push(langExt);
+        const langExt = _getLangExtension(cm, langName);
+        if (langExt) extensions.push(langExt);
 
-    _cmMergeView = new cm.EditorView({
-        state: cm.EditorState.create({ doc: currentContent, extensions }),
-        parent: container,
-    });
+        _cmMergeView = new cm.EditorView({
+            state: cm.EditorState.create({ doc: currentContent, extensions }),
+            parent: container,
+        });
+        return true;
+    } catch (e) {
+        console.error('[coral] CodeMirror merge view creation failed:', e);
+        return false;
+    }
 }
 
 function _getCmContent() {
@@ -280,15 +296,21 @@ async function _loadDiffView(filepath, gen) {
 
         _previewState.hasDiff = true;
 
-        // Hide the body div and show merge view in-place
-        body.style.display = 'none';
+        // Try to show merge view; fall back to plain content if CM unavailable
         const cmContainer = document.getElementById('inline-preview-cm');
         if (cmContainer) {
-            cmContainer.style.display = 'block';
             const langName = _getLangFromPath(filepath);
-            await _createCmMergeView(cmContainer, originalContent, currentContent, langName);
+            const ok = await _createCmMergeView(cmContainer, originalContent, currentContent, langName);
+            if (ok) {
+                body.style.display = 'none';
+                cmContainer.style.display = 'block';
+            } else {
+                // Fallback: show current content with syntax highlighting
+                _renderContentView(body, currentContent, filepath);
+            }
         }
     } catch (e) {
+        console.error('[coral] _loadDiffView failed for', filepath, e);
         if (_isStale(gen)) return;
         body.innerHTML = '<div class="inline-preview-error">Failed to load diff</div>';
     }
@@ -378,7 +400,9 @@ window._switchMode = async function(targetMode) {
 
     // Save content from current editor before destroying
     const cmContent = _getCmContent();
+    const fallbackEl = document.getElementById('fallback-editor');
     if (cmContent != null) _previewState.content = cmContent;
+    else if (fallbackEl) _previewState.content = fallbackEl.value;
     _destroyCmEditor();
 
     _previewState.mode = targetMode;
@@ -388,12 +412,24 @@ window._switchMode = async function(targetMode) {
     if (targetMode === 'edit') {
         body.style.display = 'none';
         cmContainer.style.display = 'block';
-        await _createCmEditor(cmContainer, _previewState.content, langName);
+        const ok = await _createCmEditor(cmContainer, _previewState.content, langName);
+        if (!ok) {
+            // Fallback: plain textarea
+            cmContainer.style.display = 'none';
+            body.style.display = '';
+            body.innerHTML = `<textarea class="inline-preview-fallback-editor" id="fallback-editor">${escapeHtml(_previewState.content)}</textarea>`;
+        }
     } else if (targetMode === 'diff') {
         if (_previewState.hasDiff && _previewState.originalContent != null) {
             body.style.display = 'none';
             cmContainer.style.display = 'block';
-            await _createCmMergeView(cmContainer, _previewState.originalContent, _previewState.content, langName);
+            const ok = await _createCmMergeView(cmContainer, _previewState.originalContent, _previewState.content, langName);
+            if (!ok) {
+                // Fallback: show plain content
+                cmContainer.style.display = 'none';
+                body.style.display = '';
+                _renderContentView(body, _previewState.content, _previewState.filepath);
+            }
         } else {
             cmContainer.style.display = 'none';
             body.style.display = '';
@@ -421,7 +457,8 @@ window._savePreviewFile = async function() {
     if (!agentName) return;
 
     const saveBtn = document.getElementById('preview-save-btn');
-    const content = _getCmContent() ?? _previewState.content;
+    const fallbackEditor = document.getElementById('fallback-editor');
+    const content = _getCmContent() ?? (fallbackEditor ? fallbackEditor.value : _previewState.content);
 
     if (saveBtn) { saveBtn.textContent = 'Saving...'; saveBtn.disabled = true; }
 
