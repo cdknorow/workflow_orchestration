@@ -38,12 +38,23 @@ else
 fi
 chmod +x "$APP_DIR/Contents/MacOS/coral"
 
-# Build companion binaries (single arch for now — they're CLI tools)
-echo "==> Compiling launch-coral"
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o "$APP_DIR/Contents/MacOS/launch-coral" ./cmd/launch-coral/
-
-echo "==> Compiling coral-board"
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o "$APP_DIR/Contents/MacOS/coral-board" ./cmd/coral-board/
+# Build all pure-Go companion binaries as universal
+echo "==> Compiling companion CLI binaries (universal)"
+for cmd in launch-coral coral-board coral-hook-agentic-state coral-hook-message-check coral-hook-task-sync; do
+    if [ -d "./cmd/$cmd" ]; then
+        echo "    Building $cmd..."
+        GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o "$DIST_DIR/${cmd}-arm64" ./cmd/$cmd/
+        GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o "$DIST_DIR/${cmd}-amd64" ./cmd/$cmd/
+        if command -v lipo &>/dev/null; then
+            lipo -create -output "$APP_DIR/Contents/MacOS/$cmd" "$DIST_DIR/${cmd}-arm64" "$DIST_DIR/${cmd}-amd64"
+            rm -f "$DIST_DIR/${cmd}-arm64" "$DIST_DIR/${cmd}-amd64"
+        else
+            cp "$DIST_DIR/${cmd}-arm64" "$APP_DIR/Contents/MacOS/$cmd"
+            rm -f "$DIST_DIR/${cmd}-arm64" "$DIST_DIR/${cmd}-amd64"
+        fi
+        chmod +x "$APP_DIR/Contents/MacOS/$cmd"
+    fi
+done
 
 # Build CGO binaries (tray + webview app — require native platform APIs)
 echo "==> Compiling coral-tray + coral-app (CGO required)"
@@ -88,6 +99,10 @@ fi
 if [ -f "$PROJECT_DIR/icons/coral.icns" ]; then
     cp "$PROJECT_DIR/icons/coral.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 fi
+
+# CLI install script (creates symlinks in /usr/local/bin)
+cp "$SCRIPT_DIR/install-cli.sh" "$APP_DIR/Contents/MacOS/install-cli.sh"
+chmod +x "$APP_DIR/Contents/MacOS/install-cli.sh"
 
 # Cleanup temp binaries
 rm -f "$DIST_DIR/coral-arm64" "$DIST_DIR/coral-amd64"

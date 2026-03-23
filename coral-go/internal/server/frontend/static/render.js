@@ -289,9 +289,10 @@ async function _loadBoardPanelChat(boardName) {
             const sameAsPrev = agent === prevAgent;
             const spacing = sameAsPrev ? 'mb-message-grouped' : 'mb-message-first';
             const isLeader = /orchestrator/i.test(agent) || m.session_id === 'dashboard';
-            const indentClass = isLeader ? '' : ' mb-message-worker';
+            const alignClass = isLeader ? ' board-msg-left' : ' board-msg-right';
             const r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
-            return `<div class="mb-message ${spacing}${indentClass}" style="border-left:3px solid rgba(${r},${g},${b},0.55)">
+            
+            return `<div class="mb-message ${spacing}${alignClass}" style="border-left:3px solid rgba(${r},${g},${b},0.55); border-bottom:2px solid rgba(${r},${g},${b},0.3)">
                 <div class="mb-message-header">
                     <span class="mb-agent-name" style="color:${color}">${m.icon ? escapeHtml(m.icon) + ' ' : ''}${escapeHtml(agent)}</span>
                     <span class="mb-message-time">${_formatTime(m.created_at)}</span>

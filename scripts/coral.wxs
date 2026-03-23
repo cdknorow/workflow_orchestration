@@ -54,6 +54,18 @@
         <Component Id="CoralAppExe" Guid="F6A7B8C9-D0E1-2345-FABC-567890123456">
           <File Id="coral_app.exe" Source="$(var.BinDir)\coral-app.exe" KeyPath="yes" />
         </Component>
+
+        <Component Id="HookAgenticState" Guid="A7B8C9D0-E1F2-3456-ABCD-678901234567">
+          <File Id="coral_hook_agentic_state.exe" Source="$(var.BinDir)\coral-hook-agentic-state.exe" KeyPath="yes" />
+        </Component>
+
+        <Component Id="HookTaskSync" Guid="B8C9D0E1-F2A3-4567-BCDE-789012345678">
+          <File Id="coral_hook_task_sync.exe" Source="$(var.BinDir)\coral-hook-task-sync.exe" KeyPath="yes" />
+        </Component>
+
+        <Component Id="HookMessageCheck" Guid="C9D0E1F2-A3B4-5678-CDEF-890123456789">
+          <File Id="coral_hook_message_check.exe" Source="$(var.BinDir)\coral-hook-message-check.exe" KeyPath="yes" />
+        </Component>
       </Directory>
     </StandardDirectory>
 
@@ -87,6 +99,9 @@
       <ComponentRef Id="CoralBoardExe" />
       <ComponentRef Id="CoralTrayExe" />
       <ComponentRef Id="CoralAppExe" />
+      <ComponentRef Id="HookAgenticState" />
+      <ComponentRef Id="HookTaskSync" />
+      <ComponentRef Id="HookMessageCheck" />
       <ComponentRef Id="CoralShortcut" />
     </Feature>
 

@@ -25,7 +25,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p ../dist/linux
-          for cmd in coral launch-coral coral-board; do
+          for cmd in coral launch-coral coral-board coral-hook-agentic-state coral-hook-message-check coral-hook-task-sync; do
+            [ -d "./cmd/$cmd" ] || continue
             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
               -ldflags "-s -w" \
               -o "../dist/linux/$cmd" \
@@ -67,8 +68,10 @@ jobs:
 
           # Pure Go binaries (no CGO)
           $env:CGO_ENABLED = "0"
-          foreach ($cmd in @("coral", "launch-coral", "coral-board")) {
-            go build -ldflags "-s -w" -o "..\dist\windows\bin\$cmd.exe" "./cmd/$cmd/"
+          foreach ($cmd in @("coral", "launch-coral", "coral-board", "coral-hook-agentic-state", "coral-hook-message-check", "coral-hook-task-sync")) {
+            if (Test-Path "./cmd/$cmd") {
+              go build -ldflags "-s -w" -o "..\dist\windows\bin\$cmd.exe" "./cmd/$cmd/"
+            }
           }
 
           # CGO binaries (systray, webview)
@@ -160,7 +163,7 @@ jobs:
         run: |
           mkdir -p ../dist/macos
           # Pure Go binaries (no CGO needed)
-          for cmd in coral launch-coral coral-board; do
+          for cmd in coral launch-coral coral-board coral-hook-agentic-state coral-hook-message-check coral-hook-task-sync; do
             CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o "../dist/macos/${cmd}-arm64" "./cmd/$cmd/"
             CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o "../dist/macos/${cmd}-amd64" "./cmd/$cmd/"
             lipo -create -output "../dist/macos/$cmd" "../dist/macos/${cmd}-arm64" "../dist/macos/${cmd}-amd64"
@@ -195,9 +198,10 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           APP="dist/Coral.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          for cmd in coral launch-coral coral-board coral-tray coral-app; do
-            cp "dist/macos/$cmd" "$APP/Contents/MacOS/$cmd"
-            chmod +x "$APP/Contents/MacOS/$cmd"
+          for cmd in dist/macos/*; do
+            bin=$(basename "$cmd")
+            cp "$cmd" "$APP/Contents/MacOS/$bin"
+            chmod +x "$APP/Contents/MacOS/$bin"
           done
           sed "s/VERSION_PLACEHOLDER/${VERSION}/g" scripts/Info.plist > "$APP/Contents/Info.plist"
           [ -f Coral.icns ] && cp Coral.icns "$APP/Contents/Resources/AppIcon.icns"

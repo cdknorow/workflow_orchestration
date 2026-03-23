@@ -47,6 +47,13 @@ Write-Host "Building coral-board.exe..." -ForegroundColor Yellow
 go build -ldflags "-s -w -X main.version=$Version" -o (Join-Path $BinDir "coral-board.exe") ./cmd/coral-board/
 if ($LASTEXITCODE -ne 0) { throw "Go build failed for coral-board" }
 
+# Hook binaries
+foreach ($hook in @("coral-hook-agentic-state", "coral-hook-task-sync", "coral-hook-message-check")) {
+    Write-Host "Building $hook.exe..." -ForegroundColor Yellow
+    go build -ldflags "-s -w" -o (Join-Path $BinDir "$hook.exe") "./cmd/$hook/"
+    if ($LASTEXITCODE -ne 0) { throw "Go build failed for $hook" }
+}
+
 # CGO binaries (systray, webview)
 $env:CGO_ENABLED = "1"
 
@@ -78,7 +85,7 @@ if (Test-Path $IconSrc) {
 # Code signing
 if ($CertPath -and (Test-Path $CertPath)) {
     Write-Host "Signing executables..." -ForegroundColor Yellow
-    foreach ($exe in @("coral.exe", "launch-coral.exe", "coral-board.exe", "coral-tray.exe", "coral-app.exe")) {
+    foreach ($exe in @("coral.exe", "launch-coral.exe", "coral-board.exe", "coral-hook-agentic-state.exe", "coral-hook-task-sync.exe", "coral-hook-message-check.exe", "coral-tray.exe", "coral-app.exe")) {
         $exePath = Join-Path $BinDir $exe
         if (Test-Path $exePath) {
             $signArgs = @("sign", "/fd", "SHA256", "/tr", $TimestampServer, "/td", "SHA256", "/f", $CertPath)

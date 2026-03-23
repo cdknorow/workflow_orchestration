@@ -942,9 +942,31 @@
 .board-chat-messages {
     flex: 1;
     overflow-y: auto;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
-    padding: 6px 10px;
+    padding: 12px 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.board-chat-messages .mb-message {
+    margin-bottom: 8px;
+}
+
+.board-chat-messages .mb-message-grouped {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.board-chat-messages .board-msg-left {
+    margin-right: 4%;
+}
+
+.board-chat-messages .board-msg-right {
+    margin-left: 4%;
+    border-right: none;
 }
 
 .board-chat-msg {

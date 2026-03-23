@@ -253,6 +253,18 @@
         font-size: 14px;
     }
 
+    /* Panel toggle: hide on mobile (use bottom tab bar Panel tab instead) */
+    #panel-toggle-btn {
+        display: none !important;
+    }
+
+    /* Top bar settings dropdown: ensure it fits on small screens */
+    .top-bar-settings-menu {
+        right: 0;
+        min-width: 160px;
+        max-width: calc(100vw - 24px);
+    }
+
     /* Adjust layout for bottom bar */
     .layout {
         height: calc(100vh - 49px - 56px); /* subtract top bar + bottom tab bar */

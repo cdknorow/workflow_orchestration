@@ -264,9 +264,9 @@ function renderMessages(messages) {
         const sameAsPrev = agent === prevAgent;
         const spacing = sameAsPrev ? 'mb-message-grouped' : 'mb-message-first';
         const isLeader = /orchestrator/i.test(agent) || m.session_id === 'dashboard';
-        const indentClass = isLeader ? '' : ' mb-message-worker';
+        const alignClass = isLeader ? ' board-msg-left' : ' board-msg-right';
         return `
-        <div class="mb-message ${spacing}${indentClass}" style="border-left:3px solid ${_hexToRgba(color.name, 0.55)}">
+        <div class="mb-message ${spacing}${alignClass}" style="border-left:3px solid ${_hexToRgba(color.name, 0.55)}; border-bottom:2px solid ${_hexToRgba(color.name, 0.3)}">
             <div class="mb-message-header">
                 <span class="mb-agent-name" style="color:${color.name}">${m.icon ? escapeHtml(m.icon) + ' ' : ''}${escapeHtml(agent)}</span>
                 <span class="mb-message-time">${formatTime(m.created_at)}</span>
