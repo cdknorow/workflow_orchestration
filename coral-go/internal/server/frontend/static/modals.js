@@ -180,6 +180,18 @@ function _updatePermFlagButtons(selectEl) {
             }
         }
     });
+
+    // Also update the flags input value — replace any known perm flag with the new one
+    const allFlags = Object.values(PERM_FLAGS);
+    modal.querySelectorAll('input[id*=flags]').forEach(input => {
+        let val = input.value;
+        const hadFlag = allFlags.some(f => val.includes(f));
+        if (hadFlag) {
+            allFlags.forEach(f => { val = val.replace(f, ''); });
+            val = val.trim();
+            input.value = val ? val + ' ' + flag : flag;
+        }
+    });
 }
 window._updatePermFlagButtons = _updatePermFlagButtons;
 
