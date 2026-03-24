@@ -105,7 +105,9 @@ PLIST
 fi
 
 # App icon
-if [ -f "$PROJECT_DIR/icons/coral.icns" ]; then
+if [ -f "$PROJECT_DIR/Coral.icns" ]; then
+    cp "$PROJECT_DIR/Coral.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+elif [ -f "$PROJECT_DIR/icons/coral.icns" ]; then
     cp "$PROJECT_DIR/icons/coral.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 fi
 
