@@ -426,6 +426,11 @@ export async function launchSession() {
         }
     }
 
+    // Disable launch button to prevent double-clicks
+    const stepId = _launchMode === "terminal" ? "launch-step-terminal" : "launch-step-agent";
+    const launchBtn = document.querySelector(`#${stepId} .btn-primary`);
+    if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = 'Launching...'; }
+
     try {
         const resp = await fetch("/api/sessions/launch", {
             method: "POST",
@@ -451,6 +456,8 @@ export async function launchSession() {
         }
     } catch (e) {
         showToast("Failed to launch session", true);
+    } finally {
+        if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = 'Launch'; }
     }
 }
 
@@ -779,6 +786,10 @@ export async function launchAgentToBoard() {
 
     const flags = flagsStr ? flagsStr.split(/\s+/) : [];
 
+    // Disable launch button to prevent double-clicks
+    const launchBtn = document.querySelector('#add-agent-board-modal .btn-primary');
+    if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = 'Launching...'; }
+
     try {
         const resp = await fetch("/api/sessions/launch", {
             method: "POST",
@@ -810,6 +821,8 @@ export async function launchAgentToBoard() {
         }
     } catch (e) {
         showToast("Failed to launch agent", "error");
+    } finally {
+        if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = 'Launch'; }
     }
 }
 
@@ -1503,6 +1516,10 @@ async function launchTeam() {
     };
     if (boardServer) payload.board_server = boardServer;
 
+    // Disable launch button to prevent double-clicks
+    const launchBtn = document.querySelector('#launch-step-team .btn-primary');
+    if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = 'Launching...'; }
+
     try {
         const resp = await fetch("/api/sessions/launch-team", {
             method: "POST",
@@ -1553,6 +1570,8 @@ async function launchTeam() {
         }
     } catch (e) {
         showToast("Failed to launch team", true);
+    } finally {
+        if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = 'Launch Team'; }
     }
 }
 window.launchTeam = launchTeam;
