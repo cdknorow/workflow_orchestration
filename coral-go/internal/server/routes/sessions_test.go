@@ -719,3 +719,151 @@ func TestEditionLimits_SleepingAgents_NotCounted(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+// ── Kill Sleeping Sessions Tests ────────────────────────────────────────
+
+func TestKill_SleepingSession_RemovedFromDB(t *testing.T) {
+	server, handler, terminal, ss := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	// Set up board handler so board pause clearing works
+	bh := NewBoardHandler(handler.bs)
+	handler.SetBoardHandler(bh)
+
+	board := "test-board"
+	terminal.addSession("claude-sleeping-1", "/tmp/test")
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-sleeping-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "sleep-sid-1", BoardName: &board, IsSleeping: 1,
+	})
+
+	// Verify session exists in DB
+	count, err := ss.CountBoardSessions(ctx, board)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Kill the sleeping session
+	body := bytes.NewBufferString(`{"agent_type": "claude", "session_id": "sleep-sid-1"}`)
+	resp, err := http.Post(server.URL+"/api/sessions/live/claude-sleeping-1/kill", "application/json", body)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Verify session is removed from DB
+	count, err = ss.CountBoardSessions(ctx, board)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestKill_LastSessionOnBoard_ClearsPauseState(t *testing.T) {
+	server, handler, terminal, ss := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	bh := NewBoardHandler(handler.bs)
+	handler.SetBoardHandler(bh)
+
+	// Pause the board (simulates sleeping state)
+	boardName := "paused-board"
+	bh.SetPaused(boardName, true)
+	assert.True(t, bh.IsPaused(boardName))
+
+	terminal.addSession("claude-paused-1", "/tmp/test")
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-paused-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "paused-sid-1", BoardName: &boardName, IsSleeping: 1,
+	})
+
+	// Kill the last (only) session on the board
+	body := bytes.NewBufferString(`{"agent_type": "claude", "session_id": "paused-sid-1"}`)
+	resp, err := http.Post(server.URL+"/api/sessions/live/claude-paused-1/kill", "application/json", body)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Board pause state should be cleared
+	assert.False(t, bh.IsPaused(boardName))
+}
+
+func TestKill_NotLastSessionOnBoard_KeepsPauseState(t *testing.T) {
+	server, handler, terminal, ss := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	bh := NewBoardHandler(handler.bs)
+	handler.SetBoardHandler(bh)
+
+	boardName := "multi-board"
+	bh.SetPaused(boardName, true)
+
+	// Register 2 sessions on the same board
+	terminal.addSession("claude-multi-1", "/tmp/test")
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-multi-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "multi-sid-1", BoardName: &boardName, IsSleeping: 1,
+	})
+	terminal.addSession("claude-multi-2", "/tmp/test")
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-multi-2", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "multi-sid-2", BoardName: &boardName, IsSleeping: 1,
+	})
+
+	// Kill one session (not the last)
+	body := bytes.NewBufferString(`{"agent_type": "claude", "session_id": "multi-sid-1"}`)
+	resp, err := http.Post(server.URL+"/api/sessions/live/claude-multi-1/kill", "application/json", body)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Board should still be paused (one session remains)
+	assert.True(t, bh.IsPaused(boardName))
+
+	// Verify one session remains
+	count, err := ss.CountBoardSessions(ctx, boardName)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestKill_SleepingBoard_AllSessionsRemoved_NoPTY(t *testing.T) {
+	server, handler, _, ss := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	bh := NewBoardHandler(handler.bs)
+	handler.SetBoardHandler(bh)
+
+	boardName := "sleeping-board"
+	bh.SetPaused(boardName, true)
+
+	// Register 2 sleeping sessions — no terminal sessions exist (sleeping team)
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "sleep-1", BoardName: &boardName, IsSleeping: 1,
+	})
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-2", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "sleep-2", BoardName: &boardName, IsSleeping: 1,
+	})
+
+	// Simulate frontend killBoard: kill each session sequentially
+	for _, sid := range []string{"sleep-1", "sleep-2"} {
+		body := bytes.NewBufferString(fmt.Sprintf(`{"agent_type": "claude", "session_id": "%s"}`, sid))
+		name := "agent-" + sid[len(sid)-1:]
+		resp, err := http.Post(server.URL+"/api/sessions/live/"+name+"/kill", "application/json", body)
+		require.NoError(t, err)
+		resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	}
+
+	// All sessions should be gone from DB
+	count, err := ss.CountBoardSessions(ctx, boardName)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count, "all sleeping sessions should be removed from DB")
+
+	// Board pause state should be cleared
+	assert.False(t, bh.IsPaused(boardName), "board pause should be cleared after all sessions killed")
+
+	// GetSleepingBoardNames should not return this board
+	sleepingBoards, err := ss.GetSleepingBoardNames(ctx)
+	require.NoError(t, err)
+	for _, b := range sleepingBoards {
+		assert.NotEqual(t, boardName, b, "sleeping board should not appear in GetSleepingBoardNames after kill")
+	}
+}

@@ -122,7 +122,7 @@ func Load() *Config {
 
 	// Edition-specific limits
 	if Edition == "forDropbox" {
-		cfg.MaxLiveTeams = 1
+		cfg.MaxLiveTeams = 2
 		cfg.MaxLiveAgents = 10
 	}
 

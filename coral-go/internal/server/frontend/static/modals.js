@@ -307,7 +307,7 @@ function _showDemoLimitModal(message) {
             <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
                 This is a demo edition with the following limits:<br>
                 <strong>Max Live Sessions:</strong> 10<br>
-                <strong>Max Agent Teams:</strong> 1
+                <strong>Max Agent Teams:</strong> 2
             </p>
             <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
                 Please stop existing sessions before launching new ones.

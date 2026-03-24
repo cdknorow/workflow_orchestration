@@ -300,11 +300,11 @@ func runForeground(host string, port int, noBrowser, devMode, debugMode bool, ba
 
 	// Run systray (blocks until quit)
 	systray.Run(func() {
-		hideTrayFromDock()
 		systray.SetTemplateIcon(iconData, iconData)
 		systray.SetTitle("")
 		systray.SetTooltip("Coral Dashboard")
 
+		systray.AddSeparator() // workaround: macOS clips the first item on some configurations
 		mOpenApp := systray.AddMenuItem("Open in App", "Open Coral in native window")
 		mOpenBrowser := systray.AddMenuItem("Open in Browser", "Open Coral in web browser")
 		mUpdate := systray.AddMenuItem("Check for Updates", "Check for new versions")

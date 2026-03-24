@@ -1047,13 +1047,47 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&body)
 
+	// Use a background context for DB operations so they complete even if
+	// the HTTP request context is cancelled (e.g., during tmux command failures).
+	bgCtx := context.Background()
+
+	// Look up the live session before deleting so we can clean up board state
+	var boardName string
+	var wasSleeping bool
+	if body.SessionID != "" {
+		if ls, err := h.ss.GetLiveSession(bgCtx, body.SessionID); err == nil && ls != nil {
+			if ls.BoardName != nil {
+				boardName = *ls.BoardName
+			}
+			wasSleeping = ls.IsSleeping == 1
+		}
+	}
+
+	// Unregister from DB BEFORE killing the tmux/pty session.
+	// This ordering is critical: KillSession may hang or take a long time
+	// (e.g., if the tmux socket is in a bad state), and we must ensure the
+	// DB row is removed so sleeping sessions don't reappear on server restart.
+	if body.SessionID != "" {
+		if err := h.ss.UnregisterLiveSession(bgCtx, body.SessionID); err != nil {
+			log.Printf("[kill] failed to unregister session %s: %v", body.SessionID, err)
+		}
+	}
+
+	// If this was the last session on a board, clear board pause state.
+	// This is especially important for sleeping teams: the board is paused
+	// during sleep, and killing sleeping sessions must unpause it.
+	if boardName != "" && h.boardHandler != nil {
+		remaining, _ := h.ss.CountBoardSessions(bgCtx, boardName)
+		if remaining == 0 {
+			h.boardHandler.SetPaused(boardName, false)
+			if wasSleeping {
+				log.Printf("[kill] cleared board pause state for sleeping board %q (no remaining sessions)", boardName)
+			}
+		}
+	}
+
 	// Kill tmux/pty session (may fail if sleeping — that's expected)
 	h.terminal.KillSession(r.Context(), name, body.AgentType, body.SessionID)
-
-	// Always unregister from DB regardless of kill result
-	if body.SessionID != "" {
-		h.ss.UnregisterLiveSession(r.Context(), body.SessionID)
-	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

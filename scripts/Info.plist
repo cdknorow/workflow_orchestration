@@ -24,8 +24,8 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
-    <!-- LSUIElement removed: coral-tray hides from Dock programmatically,
-         allowing coral-app to appear in the Dock independently. -->
+    <key>LSUIElement</key>
+    <true/>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>
