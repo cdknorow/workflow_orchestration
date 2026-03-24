@@ -550,6 +550,25 @@
     border-color: var(--accent);
 }
 
+.settings-toggle {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+}
+
+.settings-toggle input[type="checkbox"] {
+    width: auto;
+    margin: 2px 0 0;
+    flex-shrink: 0;
+}
+
+.settings-toggle span {
+    flex: 1;
+}
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;
@@ -1628,7 +1647,41 @@
 .team-agents-footer {
     margin-top: 8px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: stretch;
+}
+
+.team-add-agent-btn-full {
+    width: 100%;
+    padding: 10px;
+    font-size: 13px;
+    border-radius: 8px;
+    border: 2px dashed var(--border);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.team-add-agent-btn-full:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.team-template-dropdown-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.team-template-dropdown-label select {
+    margin-top: 4px;
+}
+
+.agent-picker-browse {
+    color: var(--accent) !important;
+    font-style: italic;
 }
 
 .team-agents-scroll {

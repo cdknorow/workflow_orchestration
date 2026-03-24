@@ -170,7 +170,9 @@ func runForeground(host string, port int, noBrowser, devMode, debugMode bool, ba
 	cfg := config.Load()
 	cfg.Host = host
 	cfg.Port = port
-	cfg.DevMode = devMode
+	if devMode {
+		cfg.DevMode = true
+	}
 
 	db, err := store.Open(cfg.DBPath)
 	if err != nil {

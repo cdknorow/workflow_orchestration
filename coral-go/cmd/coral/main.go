@@ -39,7 +39,9 @@ func main() {
 	backendFlag := flag.String("backend", defaultBackend, "Terminal backend: pty or tmux")
 	flag.Parse()
 
-	cfg.DevMode = *devMode
+	if *devMode {
+		cfg.DevMode = true
+	}
 
 	cfg.Host = *host
 	cfg.Port = *port

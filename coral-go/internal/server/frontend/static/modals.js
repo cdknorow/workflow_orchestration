@@ -96,8 +96,10 @@ export function showLaunchModal() {
     // Reset team form
     document.getElementById("team-agents-list").innerHTML = "";
     document.getElementById("team-board-name").value = "";
-    document.getElementById("team-flags").value = "";
-    _syncFlagButtons("team-flags");
+    const teamFlagsEl = document.getElementById("team-flags");
+    if (teamFlagsEl) teamFlagsEl.value = "";
+    const teamAutoPermsEl = document.getElementById("team-auto-permissions");
+    if (teamAutoPermsEl) teamAutoPermsEl.checked = true;
 
     // Pre-fill from global settings
     const s = state.settings || {};
@@ -909,8 +911,10 @@ async function _initTeamForm() {
     // Reset form
     document.getElementById("team-board-name").value = "";
     document.getElementById("team-board-server").value = "";
-    document.getElementById("team-flags").value = _getPermFlag('team-agent-type');
-    _syncFlagButtons("team-flags");
+    const tfEl = document.getElementById("team-flags");
+    if (tfEl) tfEl.value = _getPermFlag('team-agent-type');
+    const tapEl = document.getElementById("team-auto-permissions");
+    if (tapEl) tapEl.checked = true;
     _teamAgentCounter = 0;
     const list = document.getElementById("team-agents-list");
     list.innerHTML = "";
@@ -964,42 +968,44 @@ const BUILTIN_TEAM_TEMPLATES = [
 ];
 
 function _renderTeamTemplateSelector() {
-    const container = document.getElementById("team-template-selector");
-    if (!container) return;
+    const select = document.getElementById("team-template-selector");
+    if (!select) return;
     const saved = _getSavedTeamTemplates();
     const all = [...BUILTIN_TEAM_TEMPLATES, ...saved];
-    if (all.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
 
-    let html = '<div class="team-template-row">';
-    html += '<span class="team-template-label">Templates:</span>';
+    let html = '<option value="">Select a template...</option>';
     for (const t of all) {
-        const isBuiltin = t.builtin;
-        const cls = isBuiltin ? "agent-preset-btn" : "agent-preset-btn agent-preset-saved";
-        const deleteBtn = isBuiltin ? "" : `<span class="agent-preset-delete" onclick="event.stopPropagation(); window._deleteTeamTemplate('${escapeAttr(t.name)}')">×</span>`;
-        html += `<button class="${cls}" onclick="window._loadTeamTemplate('${escapeAttr(t.name)}')">${escapeHtml(t.name)} <span class="team-template-count">${t.agents.length}</span>${deleteBtn}</button>`;
+        const suffix = t.builtin ? '' : ' (saved)';
+        html += `<option value="${escapeAttr(t.name)}">${escapeHtml(t.name)} (${t.agents.length} agents)${suffix}</option>`;
     }
-    html += '</div>';
-    container.innerHTML = html;
+    select.innerHTML = html;
 }
+
+window._loadTeamTemplateFromSelect = function(name) {
+    if (!name) return;
+    _loadTeamTemplate(name);
+    // Reset dropdown to placeholder after loading
+    const select = document.getElementById("team-template-selector");
+    if (select) select.value = "";
+};
 
 function _loadTeamTemplate(name) {
     const all = [...BUILTIN_TEAM_TEMPLATES, ..._getSavedTeamTemplates()];
     const tmpl = all.find(t => t.name === name);
-    if (!tmpl) return;
+    if (!tmpl) { console.warn('[coral] Template not found:', name); return; }
 
     // Clear current agents and load from template
     _teamAgentCounter = 0;
     document.getElementById("team-agents-list").innerHTML = "";
 
     for (const agent of tmpl.agents) {
-        _addTeamAgent(agent.name, agent.prompt, agent.capabilities);
+        const agentName = agent.name || agent.role || '';
+        const agentPrompt = agent.prompt || agent.description || '';
+        _addTeamAgent(agentName, agentPrompt, agent.capabilities);
     }
     if (tmpl.flags) {
-        document.getElementById("team-flags").value = tmpl.flags;
-        _syncFlagButtons("team-flags");
+        const tfEl = document.getElementById("team-flags");
+        if (tfEl) { tfEl.value = tmpl.flags; _syncFlagButtons("team-flags"); }
     }
     showToast(`Loaded template "${name}"`);
 }
@@ -1029,7 +1035,7 @@ async function _saveTeamTemplate() {
     const templateName = prompt("Template name:");
     if (!templateName) return;
 
-    const flags = document.getElementById("team-flags").value.trim();
+    const flags = document.getElementById("team-flags")?.value.trim() || '';
     const templates = _getSavedTeamTemplates();
     const idx = templates.findIndex(t => t.name === templateName);
     const entry = { name: templateName, agents, flags };
@@ -1218,6 +1224,8 @@ function _showAddAgentPicker() {
         html += '<div class="agent-picker-divider"></div>';
     }
     html += `<button class="agent-picker-item agent-picker-custom" onclick="window._addTeamAgent()">+ Create Custom</button>`;
+    html += '<div class="agent-picker-divider"></div>';
+    html += `<button class="agent-picker-item agent-picker-browse" onclick="browseAgentTemplatesNew(); document.getElementById('team-agent-picker').style.display='none'">Browse Community Templates</button>`;
 
     picker.innerHTML = html;
     picker.style.display = "";
@@ -1276,19 +1284,14 @@ async function launchTeam() {
     }
 
     const agentType = document.getElementById("team-agent-type").value;
-    let flagsStr = document.getElementById("team-flags").value.trim();
+    const autoPerms = document.getElementById("team-auto-permissions")?.checked;
 
-    // Permission flag check
-    const permResult = await _checkPermissionFlag(flagsStr, agentType);
-    if (permResult === null) return;
-    if (permResult === 'enable') {
+    // Build flags from checkbox
+    const flags = [];
+    if (autoPerms) {
         const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
-        flagsStr = (flagsStr ? flagsStr + ' ' : '') + permFlag;
-        const flagsInput = document.getElementById("team-flags");
-        if (flagsInput) flagsInput.value = flagsStr;
+        flags.push(permFlag);
     }
-
-    const flags = flagsStr ? flagsStr.split(/\s+/) : [];
 
     // Collect agent definitions
     const rows = document.querySelectorAll("#team-agents-list .team-agent-row");
