@@ -49,8 +49,9 @@ jobs:
           name: coral-linux-amd64
           path: dist/coral-linux-amd64-*.tar.gz
 
-  # ── Windows ────────────────────────────────────────────────────
+  # ── Windows (only for tags containing "-windows" or "-all") ───
   build-windows:
+    if: contains(github.ref_name, '-windows') || contains(github.ref_name, '-all')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -303,6 +304,7 @@ jobs:
 
   # ── Create GitHub Release with all assets ──────────────────────
   release:
+    if: always() && !failure() && !cancelled()
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
