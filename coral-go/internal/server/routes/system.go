@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -436,4 +437,33 @@ func (h *SystemHandler) QRCode(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.Write(png)
+}
+
+// NetworkInfo returns the server's LAN IP addresses and port.
+// GET /api/system/network-info
+func (h *SystemHandler) NetworkInfo(w http.ResponseWriter, r *http.Request) {
+	var ips []string
+	addrs, err := net.InterfaceAddrs()
+	if err == nil {
+		for _, addr := range addrs {
+			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
+				ips = append(ips, ipNet.IP.String())
+			}
+		}
+	}
+	primary := ""
+	for _, ip := range ips {
+		if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
+			primary = ip
+			break
+		}
+	}
+	if primary == "" && len(ips) > 0 {
+		primary = ips[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ips":     ips,
+		"primary": primary,
+		"port":    h.cfg.Port,
+	})
 }

@@ -65,7 +65,7 @@ const authPageHTML = `<!DOCTYPE html>
 <div class="card">
   <h1>Coral</h1>
   <p>Enter your API key to access the dashboard.</p>
-  <form id="auth-form">
+  <form id="auth-form" method="post" action="/auth/key">
     <div class="input-group">
       <input type="text" id="api-key" placeholder="API Key" autocomplete="off" spellcheck="false" required>
     </div>
@@ -83,7 +83,7 @@ const authPageHTML = `<!DOCTYPE html>
     // Strip key from URL for security
     history.replaceState(null, '', window.location.pathname);
     // Auto-submit
-    setTimeout(() => document.getElementById('auth-form').dispatchEvent(new Event('submit')), 100);
+    setTimeout(() => document.getElementById('auth-form').dispatchEvent(new Event('submit', {cancelable: true})), 100);
   }
 
   const form = document.getElementById('auth-form');

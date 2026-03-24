@@ -2134,6 +2134,9 @@ func (h *SessionsHandler) GetFileOriginal(w http.ResponseWriter, r *http.Request
 // SaveFileContent writes content to a file in the agent's working tree.
 // PUT /api/sessions/live/{name}/file-content?filepath=...&session_id=...
 func (h *SessionsHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {
+	// Limit body size to 50MB
+	r.Body = http.MaxBytesReader(w, r.Body, 50<<20)
+
 	name := chi.URLParam(r, "name")
 	fp := r.URL.Query().Get("filepath")
 	sessionID := r.URL.Query().Get("session_id")

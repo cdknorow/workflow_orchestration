@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -201,8 +200,7 @@ func SetSessionCookie(w http.ResponseWriter, token string) {
 func generateToken(length int) string {
 	b := make([]byte, length/2)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback — should never happen
-		return fmt.Sprintf("%x", time.Now().UnixNano())
+		panic("crypto/rand failed: " + err.Error())
 	}
 	return hex.EncodeToString(b)
 }

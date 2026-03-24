@@ -205,6 +205,7 @@ func (s *Server) buildRouter() chi.Router {
 	// Auth endpoints
 	authRoutes := auth.NewRoutes(s.keyStore)
 	r.Get("/auth", authRoutes.AuthPage)
+	r.Post("/auth", authRoutes.ValidateKey)
 	r.Post("/auth/key", authRoutes.ValidateKey)
 	r.Get("/api/system/api-key", authRoutes.GetAPIKey)
 	r.Post("/api/system/api-key/regenerate", authRoutes.RegenerateKey)
@@ -291,6 +292,7 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/system/update-check", sysHandler.UpdateCheck)
 	r.Get("/api/system/cli-check", sysHandler.CLICheck)
 	r.Get("/api/system/qr", sysHandler.QRCode)
+	r.Get("/api/system/network-info", sysHandler.NetworkInfo)
 	r.Get("/api/filesystem/list", sysHandler.ListFilesystem)
 	r.Post("/api/indexer/refresh", sysHandler.RefreshIndexer)
 

@@ -208,7 +208,7 @@ func newMiddlewareTest(t *testing.T) (*KeyStore, http.Handler) {
 
 func TestMiddleware_LocalhostBypass(t *testing.T) {
 	_, handler := newMiddlewareTest(t)
-	r := httptest.NewRequest("GET", "/api/sessions", nil)
+	r := httptest.NewRequest("GET", "http://localhost/api/sessions", nil)
 	r.RemoteAddr = "127.0.0.1:54321"
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)

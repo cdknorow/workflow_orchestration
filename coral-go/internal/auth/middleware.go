@@ -2,6 +2,7 @@ package auth
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -12,9 +13,15 @@ import (
 func Middleware(ks *KeyStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Always allow localhost (zero friction for local development)
+			// Always allow localhost — but validate Host header to prevent
+			// DNS rebinding (attacker domain resolving to 127.0.0.1)
 			if IsLocalhost(r) {
-				next.ServeHTTP(w, r)
+				if isValidLocalhostHost(r.Host) {
+					next.ServeHTTP(w, r)
+					return
+				}
+				// DNS rebinding attempt: localhost IP but external domain Host
+				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
 
@@ -63,6 +70,30 @@ func Middleware(ks *KeyStore) func(http.Handler) http.Handler {
 }
 
 func clientIP(r *http.Request) string {
-	host, _, _ := strings.Cut(r.RemoteAddr, ":")
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
 	return host
+}
+
+// isValidLocalhostHost checks that a localhost request's Host header
+// is actually localhost or an IP, not an external domain (DNS rebinding defense).
+func isValidLocalhostHost(host string) bool {
+	if host == "" {
+		return true
+	}
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	if h == "" || h == "localhost" || h == "127.0.0.1" || h == "::1" {
+		return true
+	}
+	// Allow any IP address (handles 0.0.0.0 binding)
+	if net.ParseIP(h) != nil {
+		return true
+	}
+	// Reject external domain names
+	return false
 }

@@ -2126,8 +2126,19 @@ window._showMobileConnectModal = async function() {
     const modal = document.getElementById('mobile-connect-modal');
     if (!modal) return;
 
-    // Build the server URL from the current page
-    const baseUrl = window.location.origin;
+    // Detect LAN IP — prefer server-reported IP over window.location
+    let baseUrl = window.location.origin;
+    try {
+        const netResp = await fetch('/api/system/network-info');
+        if (netResp.ok) {
+            const netData = await netResp.json();
+            const lanIp = netData.primary || (netData.ips && netData.ips[0]);
+            if (lanIp) {
+                const port = netData.port || window.location.port || '8420';
+                baseUrl = `http://${lanIp}:${port}`;
+            }
+        }
+    } catch { /* fall back to window.location.origin */ }
 
     // Try to fetch the API key to include in the QR URL
     let connectUrl = baseUrl;

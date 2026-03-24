@@ -26,6 +26,7 @@ func (ar *Routes) AuthPage(w http.ResponseWriter, r *http.Request) {
 // ValidateKey validates an API key and sets a session cookie.
 // POST /auth/key
 func (ar *Routes) ValidateKey(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
 	var body struct {
 		Key string `json:"key"`
 	}
