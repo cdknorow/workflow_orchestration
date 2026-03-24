@@ -1370,6 +1370,17 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Edition limits: check max live agents
+	if h.cfg.MaxLiveAgents > 0 {
+		count, err := h.ss.CountLiveSessions(r.Context())
+		if err == nil && count >= h.cfg.MaxLiveAgents {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.cfg.MaxLiveAgents),
+			})
+			return
+		}
+	}
+
 	result, err := h.launchSession(r.Context(), body.WorkingDir, body.AgentType, body.DisplayName,
 		"", body.Flags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, body.Capabilities)
 	if err != nil {
@@ -1413,6 +1424,29 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	// Edition limits: check max live teams
+	if h.cfg.MaxLiveTeams > 0 {
+		teamCount, err := h.ss.CountLiveTeams(ctx)
+		if err == nil && teamCount >= h.cfg.MaxLiveTeams {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": fmt.Sprintf("Demo limit reached: maximum %d team allowed", h.cfg.MaxLiveTeams),
+			})
+			return
+		}
+	}
+
+	// Edition limits: check max live agents
+	if h.cfg.MaxLiveAgents > 0 {
+		agentCount, err := h.ss.CountLiveSessions(ctx)
+		if err == nil && agentCount+len(body.Agents) > h.cfg.MaxLiveAgents {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.cfg.MaxLiveAgents),
+			})
+			return
+		}
+	}
+
 	var launched []map[string]any
 
 	for _, agentDef := range body.Agents {

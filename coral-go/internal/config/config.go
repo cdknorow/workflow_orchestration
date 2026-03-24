@@ -12,6 +12,10 @@ import (
 // should not require license activation (e.g. internal/partner builds).
 var SkipLicense string
 
+// Edition is set at build time via ldflags to enable edition-specific limits.
+// For example, "forDropbox" enables demo edition limits.
+var Edition string
+
 // Config holds all server configuration values.
 type Config struct {
 	// Database
@@ -52,6 +56,10 @@ type Config struct {
 	// History paths
 	ClaudeProjectsDir string
 	GeminiHistoryBase  string
+
+	// Edition limits (0 = unlimited)
+	MaxLiveTeams  int
+	MaxLiveAgents int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -110,6 +118,12 @@ func Load() *Config {
 	// Build-time license skip (e.g. partner/internal builds)
 	if SkipLicense == "true" {
 		cfg.DevMode = true
+	}
+
+	// Edition-specific limits
+	if Edition == "forDropbox" {
+		cfg.MaxLiveTeams = 1
+		cfg.MaxLiveAgents = 10
 	}
 
 	return cfg

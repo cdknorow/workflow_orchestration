@@ -757,6 +757,22 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 	return sessions, err
 }
 
+// CountLiveSessions returns the number of non-sleeping live sessions.
+func (s *SessionStore) CountLiveSessions(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.GetContext(ctx, &count,
+		"SELECT COUNT(*) FROM live_sessions WHERE is_sleeping = 0")
+	return count, err
+}
+
+// CountLiveTeams returns the number of distinct non-sleeping teams (board_name values).
+func (s *SessionStore) CountLiveTeams(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.GetContext(ctx, &count,
+		"SELECT COUNT(DISTINCT board_name) FROM live_sessions WHERE board_name IS NOT NULL AND board_name != '' AND is_sleeping = 0")
+	return count, err
+}
+
 // GetLiveSessionPromptInfo returns prompt, board_name, and board_server for a live session.
 func (s *SessionStore) GetLiveSessionPromptInfo(ctx context.Context, sessionID string) (*LiveSession, error) {
 	var ls LiveSession

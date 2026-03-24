@@ -1118,17 +1118,15 @@ export function renderLiveSessions(sessions) {
             </div>
             <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
 
-        // Apply saved order if any, otherwise sort orchestrator to top
+        // Apply saved order, then always pin orchestrator to top
         const orderedBoard = _sortByOrder(boardSessions);
-        if (!_getSessionOrder().length) {
-            orderedBoard.sort((a, b) => {
-                const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
-                const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
-                if (aOrch && !bOrch) return -1;
-                if (!aOrch && bOrch) return 1;
-                return 0;
-            });
-        }
+        orderedBoard.sort((a, b) => {
+            const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
+            const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
+            if (aOrch && !bOrch) return -1;
+            if (!aOrch && bOrch) return 1;
+            return 0;
+        });
         for (const s of orderedBoard) {
             html += _renderSessionItem(s, boardName, true);
         }
@@ -1300,15 +1298,13 @@ export function renderLiveSessions(sessions) {
                     </div>
                     <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
                 const orderedBoardNested = _sortByOrder(boardSessions);
-                if (!_getSessionOrder().length) {
-                    orderedBoardNested.sort((a, b) => {
-                        const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
-                        const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
-                        if (aOrch && !bOrch) return -1;
-                        if (!aOrch && bOrch) return 1;
-                        return 0;
-                    });
-                }
+                orderedBoardNested.sort((a, b) => {
+                    const aOrch = (a.display_name || a.board_job_title || '').toLowerCase().includes('orchestrator');
+                    const bOrch = (b.display_name || b.board_job_title || '').toLowerCase().includes('orchestrator');
+                    if (aOrch && !bOrch) return -1;
+                    if (!aOrch && bOrch) return 1;
+                    return 0;
+                });
                 for (const s of orderedBoardNested) {
                     html += _renderSessionItem(s, groupName, true);
                 }

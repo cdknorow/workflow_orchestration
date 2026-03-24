@@ -511,3 +511,211 @@ func TestSessionsKeys(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+// setupSessionsTestServerWithConfig creates a test server with custom config.
+func setupSessionsTestServerWithConfig(t *testing.T, cfg *config.Config) (*httptest.Server, *SessionsHandler, *mockSessionTerminal, *store.SessionStore) {
+	t.Helper()
+
+	if cfg.LogDir == "" {
+		cfg.LogDir = t.TempDir()
+	}
+
+	dbPath := t.TempDir() + "/test.db"
+	db, err := store.Open(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+
+	boardDBPath := t.TempDir() + "/board.db"
+	bs, err := board.NewStore(boardDBPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { bs.Close() })
+
+	terminal := newMockTerminal()
+	handler := NewSessionsHandler(db, cfg, nil, terminal, bs)
+	ss := store.NewSessionStore(db)
+
+	r := chi.NewRouter()
+	r.Post("/api/sessions/launch", handler.Launch)
+	r.Post("/api/sessions/launch-team", handler.LaunchTeam)
+
+	server := httptest.NewServer(r)
+	t.Cleanup(server.Close)
+
+	return server, handler, terminal, ss
+}
+
+// ── Edition Limits Tests ────────────────────────────────────────────────
+
+func TestEditionLimits_LaunchTeam_TeamLimitExceeded(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  1,
+		MaxLiveAgents: 5,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register a team (live session with a board_name)
+	board := "existing-team"
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "sid-1", BoardName: &board,
+	})
+
+	// Try to launch a second team — should be rejected
+	body, _ := json.Marshal(map[string]interface{}{
+		"board_name":  "new-team",
+		"working_dir": t.TempDir(),
+		"agents":      []map[string]string{{"name": "dev"}},
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch-team", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Contains(t, result["error"], "Demo limit")
+	assert.Contains(t, result["error"], "team")
+}
+
+func TestEditionLimits_Launch_AgentLimitExceeded(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  1,
+		MaxLiveAgents: 2,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register 2 agents (at the limit)
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-1", AgentType: "claude", WorkingDir: "/tmp", SessionID: "sid-1",
+	})
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-2", AgentType: "claude", WorkingDir: "/tmp", SessionID: "sid-2",
+	})
+
+	// Try to launch another agent — should be rejected
+	body, _ := json.Marshal(map[string]interface{}{
+		"working_dir": t.TempDir(),
+		"agent_type":  "claude",
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Contains(t, result["error"], "Demo limit")
+	assert.Contains(t, result["error"], "agent")
+}
+
+func TestEditionLimits_LaunchTeam_AgentLimitExceeded(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  10,
+		MaxLiveAgents: 3,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register 2 agents
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-1", AgentType: "claude", WorkingDir: "/tmp", SessionID: "sid-1",
+	})
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-2", AgentType: "claude", WorkingDir: "/tmp", SessionID: "sid-2",
+	})
+
+	// Try to launch a team with 2 agents (would exceed limit of 3)
+	body, _ := json.Marshal(map[string]interface{}{
+		"board_name":  "new-team",
+		"working_dir": t.TempDir(),
+		"agents":      []map[string]string{{"name": "dev1"}, {"name": "dev2"}},
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch-team", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Contains(t, result["error"], "Demo limit")
+}
+
+func TestEditionLimits_NoLimits_UnlimitedLaunches(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  0, // unlimited
+		MaxLiveAgents: 0, // unlimited
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register many agents
+	for i := 0; i < 10; i++ {
+		ss.RegisterLiveSession(ctx, &store.LiveSession{
+			AgentName: fmt.Sprintf("agent-%d", i), AgentType: "claude",
+			WorkingDir: "/tmp", SessionID: fmt.Sprintf("sid-%d", i),
+		})
+	}
+
+	// Launch should succeed (no limits)
+	body, _ := json.Marshal(map[string]interface{}{
+		"working_dir": t.TempDir(),
+		"agent_type":  "claude",
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestEditionLimits_Launch_BelowLimit_Succeeds(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  1,
+		MaxLiveAgents: 5,
+	}
+	server, _, _, _ := setupSessionsTestServerWithConfig(t, cfg)
+
+	// Launch with no existing sessions — should succeed
+	body, _ := json.Marshal(map[string]interface{}{
+		"working_dir": t.TempDir(),
+		"agent_type":  "claude",
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestEditionLimits_SleepingAgents_NotCounted(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  1,
+		MaxLiveAgents: 2,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Register 2 agents, but one is sleeping
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-1", AgentType: "claude", WorkingDir: "/tmp", SessionID: "sid-1",
+	})
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "agent-2", AgentType: "claude", WorkingDir: "/tmp", SessionID: "sid-2", IsSleeping: 1,
+	})
+
+	// Launch should succeed since only 1 non-sleeping agent
+	body, _ := json.Marshal(map[string]interface{}{
+		"working_dir": t.TempDir(),
+		"agent_type":  "claude",
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}

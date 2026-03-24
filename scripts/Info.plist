@@ -31,6 +31,14 @@
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
+    <key>NSAppSleepDisabled</key>
+    <true/>
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
+    <key>NSQuitAlwaysKeepsWindows</key>
+    <false/>
+    <key>NSProcessIsServer</key>
+    <true/>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
 </dict>
