@@ -385,7 +385,7 @@ export function restartSession() {
 function showRestartModal() {
     document.getElementById("restart-modal-name").textContent =
         `Session: ${state.currentSession.name}`;
-    document.getElementById("restart-flags").value = "";
+    document.getElementById("restart-flags").value = "--dangerously-skip-permissions";
     document.getElementById("restart-modal").style.display = "flex";
 }
 

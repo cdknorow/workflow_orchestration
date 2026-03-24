@@ -212,7 +212,9 @@ func (c *Client) SendKeysToTarget(ctx context.Context, target, command string) e
 			return err
 		}
 	} else {
-		// Single-line: send as literal text
+		// Single-line: send as literal text.
+		// Note: send-keys -l does NOT trigger bracketed paste wrapping —
+		// tested on tmux 3.6a. The shell receives characters directly.
 		if _, err := c.run(ctx, "send-keys", "-t", target, "-l", command); err != nil {
 			return fmt.Errorf("send-keys failed: %w", err)
 		}
@@ -362,14 +364,7 @@ func (c *Client) HasSession(ctx context.Context, name string) bool {
 // from being prepended to commands sent via send-keys.
 func (c *Client) NewSession(ctx context.Context, name, workDir string) error {
 	_, err := c.run(ctx, "new-session", "-d", "-s", name, "-c", workDir)
-	if err != nil {
-		return err
-	}
-	// Disable bracketed paste mode in the new session.
-	// Shells with bracketed paste enabled wrap pasted text with \e[200~ ... \e[201~
-	// escape sequences, which causes '00~' to leak into commands sent via tmux send-keys.
-	c.disableBracketedPaste(ctx, name+".0")
-	return nil
+	return err
 }
 
 // SetEnvironment sets an environment variable for a tmux session.
@@ -397,20 +392,13 @@ func (c *Client) RenameSession(ctx context.Context, oldName, newName string) err
 }
 
 // RespawnPane kills the running process in a pane and spawns a fresh shell.
-// Automatically disables bracketed paste mode in the new shell.
 func (c *Client) RespawnPane(ctx context.Context, target, workDir string) error {
 	args := []string{"respawn-pane", "-k", "-t", target}
 	if workDir != "" {
 		args = append(args, "-c", workDir)
 	}
 	_, err := c.run(ctx, args...)
-	if err != nil {
-		return err
-	}
-	// New shell will have bracketed paste enabled — disable it
-	time.Sleep(300 * time.Millisecond)
-	c.disableBracketedPaste(ctx, target)
-	return nil
+	return err
 }
 
 // ClearHistory clears the tmux pane scrollback history.
@@ -425,18 +413,6 @@ var (
 	bracketPasteEnd   = []string{"-H", "1b", "-H", "5b", "-H", "32", "-H", "30", "-H", "31", "-H", "7e"}
 )
 
-// disableBracketedPaste sends an escape sequence to disable bracketed paste
-// mode in a tmux pane. This prevents '00~' characters from appearing before
-// commands sent via send-keys.
-func (c *Client) disableBracketedPaste(ctx context.Context, target string) {
-	// Send \e[?2004l as raw hex bytes to disable bracketed paste mode.
-	// Using -H sends the escape sequence directly to the terminal, avoiding
-	// reliance on the shell being ready or the printf command echoing artifacts.
-	// \e[?2004l = ESC [ ? 2 0 0 4 l = 1b 5b 3f 32 30 30 34 6c
-	c.run(ctx, "send-keys", "-t", target,
-		"-H", "1b", "-H", "5b", "-H", "3f", "-H", "32", "-H", "30", "-H", "30", "-H", "34", "-H", "6c")
-	time.Sleep(100 * time.Millisecond)
-}
 
 func (c *Client) sendBracketPasted(ctx context.Context, target, text string) error {
 	args := append([]string{"send-keys", "-t", target}, bracketPasteStart...)

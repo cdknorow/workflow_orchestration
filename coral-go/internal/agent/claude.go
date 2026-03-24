@@ -83,7 +83,10 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 				envMap["PATH"] = macosDir + ":" + existingPath
 			}
 		} else {
-			envMap["PATH"] = macosDir + ":$PATH"
+			// Resolve $PATH from the actual environment — JSON settings files
+			// are not shell-expanded, so literal "$PATH" would be passed as-is.
+			currentPath := os.Getenv("PATH")
+			envMap["PATH"] = macosDir + ":" + currentPath
 		}
 		merged["env"] = envMap
 	}
