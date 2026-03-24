@@ -122,22 +122,54 @@ Build installers for each platform from any OS:
 ```
 
 ### Tagged Release (CI)
-Pushing a tag triggers the GitHub Actions release workflow, which builds all 3 platforms in parallel and uploads artifacts to the GitHub Release.
+Pushing a tag triggers the GitHub Actions release workflow. Tag suffixes control build behavior:
 
+#### Tag Naming Conventions
+
+| Tag Format | License | Demo Limits | Windows Build |
+|---|---|---|---|
+| `v0.x.x` | required | none | skipped |
+| `v0.x.x-dev` | skipped | none | skipped |
+| `v0.x.x-forDropbox` | skipped | 2 teams / 10 agents | skipped |
+| `v0.x.x-windows` | required | none | **built** |
+| `v0.x.x-all` | required | none | **built** |
+
+Suffixes can be combined, e.g. `v0.x.x-dev-windows` builds Windows without license.
+
+- **`-dev`**: Sets `SkipLicense=true` via ldflags. No demo limits. Good for internal testing.
+- **`-forDropbox`**: Sets `SkipLicense=true` and `Edition=forDropbox` via ldflags. Enforces demo limits (max 2 teams, max 10 concurrent agents). Shows a popup when limits are hit.
+- **`-windows`** / **`-all`**: Includes the Windows build (skipped by default to save CI compute).
+
+#### Build-time flags (ldflags)
+- `config.SkipLicense` — set to `"true"` to skip license validation
+- `config.Edition` — set to `"forDropbox"` to enable demo edition limits
+
+#### Local forDropbox build
 ```bash
-# 1. Tag the release
-git tag v0.7.0
+CORAL_EDITION=forDropbox ./installers/build-macos.sh 0.10.15
+```
 
-# 2. Push the tag (pre-push hook runs build + tests first)
+#### Example release flow
+```bash
+# Dev build (no license, no limits, no Windows)
+git tag v0.10.15-dev
 git push origin main --tags
 
-# 3. Create the GitHub Release (uploads happen automatically)
-gh release create v0.7.0 --title "v0.7.0" --generate-notes
+# Demo build for partners (no license, demo limits)
+git tag v0.10.15-forDropbox
+git push origin main --tags
+
+# Full production release (all platforms)
+git tag v0.10.15-all
+git push origin main --tags
+
+# Create the GitHub Release (uploads happen automatically)
+gh release create v0.10.15 --title "v0.10.15" --generate-notes
 ```
 
 The workflow (`.github/workflows/release.yml`) produces:
 - **Linux**: `coral-linux-amd64-<version>.tar.gz`
-- **Windows**: `Coral-<version>-x64.msi` + `Coral-<version>-x64-portable.zip`
+- **Windows** (when included): `Coral-<version>-x64.msi` + `Coral-<version>-x64-portable.zip`
 - **macOS**: `Coral.dmg` (universal binary, signed + notarized if certs configured)
 
 ### Required GitHub Secrets (for signing)
