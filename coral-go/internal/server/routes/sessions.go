@@ -2316,28 +2316,11 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 		}
 		dn := derefStrPtr(ls.DisplayName)
 		bt := derefStrPtr(ls.BoardType)
-		result, err := h.launchSession(ctx, ls.WorkingDir, ls.AgentType, dn,
-			ls.SessionID, flags, prompt, bn, bs, bk, bt, nil)
-		if err != nil {
+		if err := h.wakeExistingSession(ctx, &ls, flags, prompt, bn, bs, bk, bt, dn); err != nil {
 			log.Printf("Failed to wake session %s — keeping asleep: %v", ls.SessionID[:8], err)
 			continue
 		}
 		relaunched++
-		// Only clear sleeping on successful relaunch
-		h.ss.SetSessionSleeping(ctx, ls.SessionID, false)
-
-		// Transfer board subscription cursor and re-subscribe
-		if bn != "" {
-			newSessionID := result["session_id"].(string)
-			newSessionName := result["session_name"].(string)
-			oldSessionName := fmt.Sprintf("%s-%s", ls.AgentType, ls.SessionID)
-			if h.bs != nil && oldSessionName != newSessionName {
-				if err := h.bs.TransferSubscription(ctx, bn, oldSessionName, newSessionName); err != nil {
-					log.Printf("Failed to transfer board subscription cursor from %s to %s: %v", ls.SessionID[:8], newSessionID[:8], err)
-				}
-			}
-			go h.setupBoardAndPrompt(newSessionID, newSessionName, ls.AgentType, bn, dn)
-		}
 	}
 
 	// Unpause board if at least one agent was woken
@@ -2353,6 +2336,77 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 		"sessions_relaunched": relaunched,
 		"board_paused":        boardPaused,
 	})
+}
+
+// wakeExistingSession recreates the tmux/pty session for a sleeping agent
+// using the EXISTING session ID. Preserves display name, board subscriptions, and history.
+func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.LiveSession,
+	flags []string, prompt, boardName, boardServer, backend, boardType, displayName string) error {
+
+	sessionName := fmt.Sprintf("%s-%s", ls.AgentType, ls.SessionID)
+	logFile := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", ls.AgentType, ls.SessionID))
+
+	agentImpl := agent.GetAgent(ls.AgentType)
+	if agentImpl.SupportsResume() {
+		agentImpl.PrepareResume(ls.SessionID, ls.WorkingDir)
+	}
+
+	// Read user settings for prompt overrides and CLI path
+	userSettings, _ := h.ss.GetSettings(ctx)
+	promptOverrides := map[string]string{
+		"default_prompt_orchestrator": userSettings["default_prompt_orchestrator"],
+		"default_prompt_worker":       userSettings["default_prompt_worker"],
+	}
+	cliPath := userSettings[agent.CLIPathSettingKey(ls.AgentType)]
+
+	role := displayName
+	if role == "" {
+		role = ls.AgentType
+	}
+
+	launchParams := agent.LaunchParams{
+		SessionID:       ls.SessionID,
+		ProtocolPath:    h.protocolPath(),
+		ResumeSessionID: ls.SessionID,
+		Flags:           flags,
+		WorkingDir:      ls.WorkingDir,
+		BoardName:       boardName,
+		Role:            role,
+		Prompt:          prompt,
+		PromptOverrides: promptOverrides,
+		BoardType:       boardType,
+		Capabilities:    nil,
+		CLIPath:         cliPath,
+	}
+
+	if ls.AgentType != at.Terminal {
+		cmd := agent.WrapWithBundlePath(agentImpl.BuildLaunchCommand(launchParams))
+
+		// Create tmux session with the EXISTING session name
+		os.WriteFile(logFile, []byte{}, 0644)
+		if err := h.terminal.CreateSession(ctx, sessionName, ls.WorkingDir); err != nil {
+			return fmt.Errorf("create session: %w", err)
+		}
+		h.terminal.StartLogging(ctx, sessionName, logFile)
+
+		folderName := filepath.Base(ls.WorkingDir)
+		titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, ls.AgentType)
+		h.terminal.SendToTarget(ctx, sessionName+".0", titleCmd)
+		time.Sleep(300 * time.Millisecond)
+
+		log.Printf("[wake] session=%s agent=%s cmd=%s", sessionName, ls.AgentType, cmd)
+		h.terminal.SendToTarget(ctx, sessionName+".0", cmd)
+	}
+
+	// Clear sleeping flag on existing row (no new DB row created)
+	h.ss.SetSessionSleeping(ctx, ls.SessionID, false)
+
+	// Re-subscribe to board with existing session name
+	if boardName != "" {
+		go h.setupBoardAndPrompt(ls.SessionID, sessionName, ls.AgentType, boardName, displayName)
+	}
+
+	return nil
 }
 
 // ── Individual Session Sleep/Wake ────────────────────────────────────────
@@ -2421,32 +2475,15 @@ func (h *SessionsHandler) WakeSession(w http.ResponseWriter, r *http.Request) {
 	dn := derefStrPtr(sess.DisplayName)
 	bt := derefStrPtr(sess.BoardType)
 
-	result, err := h.launchSession(ctx, sess.WorkingDir, sess.AgentType, dn,
-		sess.SessionID, flags, prompt, bn, bs, bk, bt, nil)
-	if err != nil {
+	if err := h.wakeExistingSession(ctx, sess, flags, prompt, bn, bs, bk, bt, dn); err != nil {
 		log.Printf("Failed to wake session %s: %v", sessionID[:8], err)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "Failed to relaunch session"})
 		return
 	}
 
-	h.ss.SetSessionSleeping(ctx, sessionID, false)
-
-	// Transfer board subscription cursor and re-subscribe
-	if bn != "" {
-		newSessionID := result["session_id"].(string)
-		newSessionName := result["session_name"].(string)
-		oldSessionName := fmt.Sprintf("%s-%s", sess.AgentType, sessionID)
-		if h.bs != nil && oldSessionName != newSessionName {
-			if err := h.bs.TransferSubscription(ctx, bn, oldSessionName, newSessionName); err != nil {
-				log.Printf("Failed to transfer board subscription cursor: %v", err)
-			}
-		}
-		go h.setupBoardAndPrompt(newSessionID, newSessionName, sess.AgentType, bn, dn)
-
-		// Unpause the board if this agent was on one
-		if h.boardHandler != nil {
-			h.boardHandler.SetPaused(bn, false)
-		}
+	// Unpause the board if this agent was on one
+	if bn != "" && h.boardHandler != nil {
+		h.boardHandler.SetPaused(bn, false)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "sleeping": false})
@@ -2531,25 +2568,12 @@ func (h *SessionsHandler) WakeAll(w http.ResponseWriter, r *http.Request) {
 		dn := derefStrPtr(ls.DisplayName)
 		bt := derefStrPtr(ls.BoardType)
 
-		result, err := h.launchSession(ctx, ls.WorkingDir, ls.AgentType, dn,
-			ls.SessionID, flags, prompt, bn, bs, bk, bt, nil)
-		if err != nil {
+		if err := h.wakeExistingSession(ctx, &ls, flags, prompt, bn, bs, bk, bt, dn); err != nil {
 			log.Printf("Failed to wake session %s — keeping asleep: %v", ls.SessionID[:8], err)
 			continue
 		}
 		relaunched++
-		h.ss.SetSessionSleeping(ctx, ls.SessionID, false)
-
 		if bn != "" {
-			newSessionID := result["session_id"].(string)
-			newSessionName := result["session_name"].(string)
-			oldSessionName := fmt.Sprintf("%s-%s", ls.AgentType, ls.SessionID)
-			if h.bs != nil && oldSessionName != newSessionName {
-				if err := h.bs.TransferSubscription(ctx, bn, oldSessionName, newSessionName); err != nil {
-					log.Printf("Failed to transfer board subscription cursor: %v", err)
-				}
-			}
-			go h.setupBoardAndPrompt(newSessionID, newSessionName, ls.AgentType, bn, dn)
 			boards[bn] = true
 		}
 	}
