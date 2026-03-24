@@ -26,7 +26,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           EXTRA_LDFLAGS=""
           if [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
-            EXTRA_LDFLAGS="-X github.com/cdknorow/coral/internal/config.SkipLicense=true"
+            EXTRA_LDFLAGS="-X github.com/cdknorow/coral/internal/config.SkipLicense=true -X github.com/cdknorow/coral/internal/config.Edition=forDropbox"
           fi
           mkdir -p ../dist/linux
           for cmd in coral launch-coral coral-board coral-hook-agentic-state coral-hook-message-check coral-hook-task-sync; do
@@ -70,7 +70,7 @@ jobs:
           $env:GOARCH = "amd64"
           $extraLdflags = ""
           if ("${{ github.ref_name }}" -match "-forDropbox") {
-            $extraLdflags = "-X github.com/cdknorow/coral/internal/config.SkipLicense=true"
+            $extraLdflags = "-X github.com/cdknorow/coral/internal/config.SkipLicense=true -X github.com/cdknorow/coral/internal/config.Edition=forDropbox"
           }
           New-Item -ItemType Directory -Force -Path ..\dist\windows\bin | Out-Null
 
@@ -171,7 +171,7 @@ jobs:
         run: |
           EXTRA_LDFLAGS=""
           if [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
-            EXTRA_LDFLAGS="-X github.com/cdknorow/coral/internal/config.SkipLicense=true"
+            EXTRA_LDFLAGS="-X github.com/cdknorow/coral/internal/config.SkipLicense=true -X github.com/cdknorow/coral/internal/config.Edition=forDropbox"
           fi
           mkdir -p ../dist/macos
           # Pure Go binaries (no CGO needed)
