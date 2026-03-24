@@ -63,6 +63,9 @@ func main() {
 		log.Println("Creating webview (debug=true for DevTools)")
 	}
 
+	// Show in Dock before creating the webview window
+	showInDock()
+
 	// In debug mode, enable DevTools (pass true to webview.New)
 	w := webview.New(debugMode)
 	defer w.Destroy()

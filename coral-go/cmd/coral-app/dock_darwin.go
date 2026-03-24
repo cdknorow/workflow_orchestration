@@ -8,10 +8,21 @@ package main
 
 #import <Cocoa/Cocoa.h>
 
-// showInDock sets the app to appear in the macOS Dock as a regular application.
-// CLI binaries default to Accessory/Prohibited policy — this overrides to Regular.
+// showInDock sets the app to appear in the macOS Dock as a regular application
+// and loads the app icon from the bundle's Resources directory.
 void showInDock() {
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    NSApplication *app = [NSApplication sharedApplication];
+    [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+
+    // Load the app icon from the bundle
+    NSBundle *bundle = [NSBundle mainBundle];
+    NSString *iconPath = [bundle pathForResource:@"AppIcon" ofType:@"icns"];
+    if (iconPath) {
+        NSImage *icon = [[NSImage alloc] initWithContentsOfFile:iconPath];
+        if (icon) {
+            [app setApplicationIconImage:icon];
+        }
+    }
 }
 
 // raiseWindow brings the app window to front (called when Dock icon is clicked).
@@ -36,11 +47,11 @@ void raiseWindow() {
 */
 import "C"
 
-func init() {
+func showInDock() {
 	C.showInDock()
 }
 
-// RaiseWindow brings the app window to front. Exported for use from main.
+// dockRaiseWindow brings the app window to front.
 func dockRaiseWindow() {
 	C.raiseWindow()
 }

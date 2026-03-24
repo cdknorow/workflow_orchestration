@@ -300,6 +300,7 @@ func runForeground(host string, port int, noBrowser, devMode, debugMode bool, ba
 
 	// Run systray (blocks until quit)
 	systray.Run(func() {
+		hideTrayFromDock()
 		systray.SetTemplateIcon(iconData, iconData)
 		systray.SetTitle("")
 		systray.SetTooltip("Coral Dashboard")
@@ -481,11 +482,12 @@ var coralAppProcess *os.Process
 // launchCoralApp launches coral-app or brings the existing one to front.
 // Returns an error if coral-app is not found or fails to start.
 func launchCoralApp(url string) error {
-	// If already running, don't spawn another
+	// If already running, bring it to front
 	if coralAppProcess != nil {
 		// Check if still alive (signal 0 = no-op, just checks existence)
 		if err := coralAppProcess.Signal(syscall.Signal(0)); err == nil {
-			return nil // already running
+			raiseCoralApp()
+			return nil
 		}
 		// Process exited — clear the reference
 		coralAppProcess = nil
@@ -525,6 +527,20 @@ func findCoralApp() string {
 		return p
 	}
 	return ""
+}
+
+// raiseCoralApp brings the running coral-app window to the front.
+func raiseCoralApp() {
+	if coralAppProcess == nil {
+		return
+	}
+	if runtime.GOOS == "darwin" {
+		script := fmt.Sprintf(
+			`tell application "System Events" to set frontmost of (first process whose unix id is %d) to true`,
+			coralAppProcess.Pid,
+		)
+		exec.Command("osascript", "-e", script).Run()
+	}
 }
 
 func openBrowser(url string) {
