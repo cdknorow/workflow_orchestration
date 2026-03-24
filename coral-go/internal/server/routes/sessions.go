@@ -1872,6 +1872,12 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		if err := h.terminal.CreateSession(ctx, sessionName, absDir); err != nil {
 			return nil, fmt.Errorf("tmux new-session failed: %w", err)
 		}
+		// Set CORAL_SESSION_NAME in the tmux session environment
+		if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
+			if err := tmuxTerm.Client().SetEnvironment(ctx, sessionName, "CORAL_SESSION_NAME", sessionName); err != nil {
+				log.Printf("[launch] failed to set CORAL_SESSION_NAME for %s: %v", sessionName, err)
+			}
+		}
 
 		// Setup pipe-pane logging
 		h.terminal.StartLogging(ctx, sessionName, logFile)

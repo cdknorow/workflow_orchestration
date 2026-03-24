@@ -151,7 +151,7 @@ function _createCmMergeView(container, originalContent, currentContent, langName
             cm.EditorState.readOnly.of(true),
             cm.EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
             cm.unifiedMergeView({
-                original: cm.EditorState.create({ doc: originalContent }),
+                original: cm.Text.of(originalContent.split('\n')),
             }),
         ];
 

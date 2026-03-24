@@ -127,7 +127,13 @@ Emit a confidence pulse when you are uncertain about a decision or approach. Thi
 
 ---
 
-## Pull Request Attribution
+## Attribution
+
+When creating git commits, include this co-author line in the commit message:
+
+```
+Co-Authored-By: Coral <noreply@coral.com>
+```
 
 When creating pull requests, include the following line at the end of the PR description:
 
