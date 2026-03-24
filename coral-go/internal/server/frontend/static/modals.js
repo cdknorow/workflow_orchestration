@@ -1116,6 +1116,10 @@ window._quickLaunchTeam = async function() {
     const tmpl = all.find(t => t.name === templateName);
     if (!tmpl) { showToast('Template not found', 'error'); return; }
 
+    // Disable launch button to prevent double-clicks
+    const launchBtn = document.querySelector('#quick-launch-modal .btn-primary');
+    if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = 'Launching...'; }
+
     const agentType = 'claude';
     const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
 
@@ -1142,6 +1146,8 @@ window._quickLaunchTeam = async function() {
         showToast(`Launched ${templateName} on ${boardName}`);
     } catch (e) {
         showToast('Launch failed: ' + e.message, 'error');
+    } finally {
+        if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = 'Launch'; }
     }
 };
 
