@@ -70,6 +70,24 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		merged["permissions"] = permMap
 	}
 
+	// If running inside a .app bundle, add the MacOS dir to PATH in env settings
+	// so that coral hooks (coral-hook-task-sync, etc.) can be found.
+	if macosDir := appBundleMacOSDir(); macosDir != "" {
+		envMap, _ := merged["env"].(map[string]interface{})
+		if envMap == nil {
+			envMap = make(map[string]interface{})
+		}
+		if existingPath, ok := envMap["PATH"].(string); ok {
+			// Prepend if not already present
+			if !strings.Contains(existingPath, macosDir) {
+				envMap["PATH"] = macosDir + ":" + existingPath
+			}
+		} else {
+			envMap["PATH"] = macosDir + ":$PATH"
+		}
+		merged["env"] = envMap
+	}
+
 	// Write settings to temp file
 	settingsFile := filepath.Join(os.TempDir(), fmt.Sprintf("coral_settings_%s.json", effectiveID))
 	data, _ := json.MarshalIndent(merged, "", "  ")
@@ -247,6 +265,26 @@ func hookEntryExists(groups []interface{}, command string) bool {
 		}
 	}
 	return false
+}
+
+// appBundleMacOSDir returns the Contents/MacOS directory if the current
+// executable is running inside a macOS .app bundle, or "" otherwise.
+// This is needed so that Claude settings.json can include the bundle's
+// MacOS dir on PATH, allowing hooks like coral-hook-task-sync to be found.
+func appBundleMacOSDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return ""
+	}
+	const marker = ".app/Contents/MacOS/"
+	if idx := strings.Index(exe, marker); idx >= 0 {
+		return exe[:idx+len(marker)-1] // include up to "MacOS" (strip trailing slash)
+	}
+	return ""
 }
 
 func copyDir(src, dst string) {
