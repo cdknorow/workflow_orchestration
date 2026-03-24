@@ -1536,7 +1536,7 @@ async function launchTeam() {
             showToast(result.error, true);
         } else {
             // Check for per-agent errors in the launched array
-            const launched = result.launched || [];
+            const launched = result.agents || result.launched || [];
             const failed = launched.filter(a => a.error);
             if (failed.length > 0) {
                 const successCount = launched.length - failed.length;
