@@ -306,7 +306,7 @@ function _showDemoLimitModal(message) {
             <h3 style="margin-bottom:12px">Demo Limit Reached</h3>
             <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
                 This is a demo edition with the following limits:<br>
-                <strong>Max Live Sessions:</strong> 10<br>
+                <strong>Max Live Sessions:</strong> 8<br>
                 <strong>Max Agent Teams:</strong> 2
             </p>
             <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
