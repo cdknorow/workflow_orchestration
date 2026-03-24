@@ -931,6 +931,28 @@ func (s *SessionStore) GetSleepingBoardNames(ctx context.Context) ([]string, err
 	return names, nil
 }
 
+// CleanupOrphanedSleeping removes sleeping session rows where an awake
+// version with the same display_name and board_name already exists.
+// This cleans up duplicates from old wake code that created new sessions.
+func (s *SessionStore) CleanupOrphanedSleeping(ctx context.Context) (int, error) {
+	result, err := s.db.ExecContext(ctx, `
+		DELETE FROM live_sessions WHERE is_sleeping = 1
+		AND session_id IN (
+			SELECT sleeping.session_id FROM live_sessions sleeping
+			INNER JOIN live_sessions awake
+			ON sleeping.board_name = awake.board_name
+			AND sleeping.display_name = awake.display_name
+			AND sleeping.is_sleeping = 1
+			AND awake.is_sleeping = 0
+			AND sleeping.session_id != awake.session_id
+		)`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
+}
+
 // ── Live Session Flags Helper ──────────────────────────────────────────
 
 // ParseFlags deserializes a JSON flags string into a slice.

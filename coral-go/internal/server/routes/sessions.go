@@ -2323,6 +2323,19 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 		relaunched++
 	}
 
+	// Clean up orphaned sleeping rows for this board (from old wake code that created duplicates)
+	cleaned := 0
+	refreshed, _ := h.ss.GetAllLiveSessions(ctx)
+	for _, ls := range refreshed {
+		if ls.IsSleeping == 1 && ls.BoardName != nil && *ls.BoardName == boardName {
+			h.ss.UnregisterLiveSession(ctx, ls.SessionID)
+			cleaned++
+		}
+	}
+	if cleaned > 0 {
+		log.Printf("[wake] cleaned %d orphaned sleeping rows for board %s", cleaned, boardName)
+	}
+
 	// Unpause board if at least one agent was woken
 	boardPaused := true
 	if relaunched > 0 && h.boardHandler != nil {
@@ -2381,21 +2394,32 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 
 	if ls.AgentType != at.Terminal {
 		cmd := agent.WrapWithBundlePath(agentImpl.BuildLaunchCommand(launchParams))
+		log.Printf("[wake] session=%s agent=%s backend=%s cmd=%s", sessionName, ls.AgentType, backend, cmd)
 
-		// Create tmux session with the EXISTING session name
-		os.WriteFile(logFile, []byte{}, 0644)
-		if err := h.terminal.CreateSession(ctx, sessionName, ls.WorkingDir); err != nil {
-			return fmt.Errorf("create session: %w", err)
+		if backend == "pty" && h.backend != nil {
+			// PTY backend: spawn shell, then send command
+			if err := h.backend.Spawn(sessionName, ls.AgentType, ls.WorkingDir, ls.SessionID, "", 200, 50); err != nil {
+				return fmt.Errorf("pty spawn failed: %w", err)
+			}
+			if cmd != "" {
+				time.Sleep(300 * time.Millisecond)
+				h.backend.SendInput(sessionName, []byte(cmd+"\n"))
+			}
+		} else {
+			// tmux backend: create session with the EXISTING session name
+			os.WriteFile(logFile, []byte{}, 0644)
+			if err := h.terminal.CreateSession(ctx, sessionName, ls.WorkingDir); err != nil {
+				return fmt.Errorf("create session: %w", err)
+			}
+			h.terminal.StartLogging(ctx, sessionName, logFile)
+
+			folderName := filepath.Base(ls.WorkingDir)
+			titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, ls.AgentType)
+			h.terminal.SendToTarget(ctx, sessionName+".0", titleCmd)
+			time.Sleep(300 * time.Millisecond)
+
+			h.terminal.SendToTarget(ctx, sessionName+".0", cmd)
 		}
-		h.terminal.StartLogging(ctx, sessionName, logFile)
-
-		folderName := filepath.Base(ls.WorkingDir)
-		titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, ls.AgentType)
-		h.terminal.SendToTarget(ctx, sessionName+".0", titleCmd)
-		time.Sleep(300 * time.Millisecond)
-
-		log.Printf("[wake] session=%s agent=%s cmd=%s", sessionName, ls.AgentType, cmd)
-		h.terminal.SendToTarget(ctx, sessionName+".0", cmd)
 	}
 
 	// Clear sleeping flag on existing row (no new DB row created)

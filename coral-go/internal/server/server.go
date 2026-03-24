@@ -148,11 +148,19 @@ func (s *Server) BoardStore() *board.Store {
 
 // RestoreSleepingBoards restores board pause state for sleeping teams on startup.
 func (s *Server) RestoreSleepingBoards() {
+	ss := store.NewSessionStore(s.db)
+	ctx := context.Background()
+
+	// Clean up orphaned sleeping duplicates (from old wake code that created new rows)
+	cleaned, _ := ss.CleanupOrphanedSleeping(ctx)
+	if cleaned > 0 {
+		log.Printf("Cleaned up %d orphaned sleeping session(s)", cleaned)
+	}
+
 	if s.boardHandler == nil {
 		return
 	}
-	ss := store.NewSessionStore(s.db)
-	boards, err := ss.GetSleepingBoardNames(context.Background())
+	boards, err := ss.GetSleepingBoardNames(ctx)
 	if err != nil || len(boards) == 0 {
 		return
 	}
