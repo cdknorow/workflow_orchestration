@@ -607,13 +607,28 @@ func (h *SessionsHandler) Info(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{
 		"name":       name,
 		"session_id": sessionID,
+		"agent_name": name,
+		"agent_type": agentType,
 	}
 
 	if pane != nil {
-		result["tmux_session"] = pane.SessionName
+		result["tmux_session_name"] = pane.SessionName
 		result["pane_title"] = pane.PaneTitle
-		result["current_path"] = pane.CurrentPath
-		result["attach_command"] = h.terminal.AttachCommand(pane.SessionName)
+		result["working_directory"] = pane.CurrentPath
+		result["tmux_command"] = h.terminal.AttachCommand(pane.SessionName)
+	}
+
+	// Include log path and other metadata from live session record
+	if sessionID != "" {
+		if ls, err := h.ss.GetLiveSession(ctx, sessionID); err == nil && ls != nil {
+			if ls.DisplayName != nil && *ls.DisplayName != "" {
+				result["agent_name"] = *ls.DisplayName
+			}
+			result["agent_type"] = ls.AgentType
+			// Construct log path from agent type + session ID
+			logPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", ls.AgentType, sessionID))
+			result["log_path"] = logPath
+		}
 	}
 
 	// Look up git state by session_id first, then by name
