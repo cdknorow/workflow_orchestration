@@ -476,16 +476,22 @@ function _renderPresetButtons(containerId, onClickFn, opts = {}) {
     if (!container) return;
     const saved = _getSavedPersonas();
 
-    let html = '';
+    let html = `<select class="agent-preset-select" onchange="${onClickFn}(this.value); this.value='';">`;
+    html += `<option value="" disabled selected>Choose a preset or custom...</option>`;
+    html += `<optgroup label="Built-in">`;
     for (const preset of AGENT_PRESETS) {
-        html += `<button class="agent-preset-btn" data-preset="${escapeAttr(preset.name)}" onclick="${onClickFn}('${escapeAttr(preset.name)}')">${escapeHtml(preset.name)}</button>`;
+        html += `<option value="${escapeAttr(preset.name)}">${escapeHtml(preset.name)}</option>`;
     }
+    html += `</optgroup>`;
     if (saved.length > 0) {
+        html += `<optgroup label="Saved Personas">`;
         for (const p of saved) {
-            html += `<button class="agent-preset-btn agent-preset-saved" data-preset="${escapeAttr(p.name)}" onclick="${onClickFn}('${escapeAttr(p.name)}')">${escapeHtml(p.name)}<span class="agent-preset-delete" onclick="event.stopPropagation(); window._deletePersona('${escapeAttr(p.name)}')">×</span></button>`;
+            html += `<option value="${escapeAttr(p.name)}">${escapeHtml(p.name)}</option>`;
         }
+        html += `</optgroup>`;
     }
-    html += `<button class="agent-preset-btn agent-preset-custom" data-preset="" onclick="${onClickFn}('')">Custom</button>`;
+    html += `<option value="">Custom</option>`;
+    html += `</select>`;
     container.innerHTML = html;
 }
 
@@ -808,6 +814,36 @@ const AGENT_PRESETS = [
         prompt: "You are a technical writer. Write documentation, API guides, and READMEs. Coordinate with the team via the message board.",
         capabilities: { allow: ['file_read', 'file_write'] },
     },
+    {
+        name: "Content Writer",
+        prompt: "You are an expert content writer. Write blog posts, social media copy, email campaigns, and landing page content. Focus on clear, engaging writing that drives action. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write', 'web_access'] },
+    },
+    {
+        name: "SEO Strategist",
+        prompt: "You are an SEO and analytics expert. Research keywords, analyze competitors, optimize content for search engines, and provide data-driven recommendations. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'web_access'] },
+    },
+    {
+        name: "Design Director",
+        prompt: "You are a creative director focused on visual design. Create design briefs, review visual assets, ensure brand consistency, and provide art direction. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write', 'web_access'] },
+    },
+    {
+        name: "Research Analyst",
+        prompt: "You are a thorough research analyst. Find information, summarize documents, compare options, and provide well-sourced answers. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'web_access'] },
+    },
+    {
+        name: "Writer & Editor",
+        prompt: "You are a skilled writer and editor. Draft emails, documents, presentations, and reports. Polish and proofread content for clarity and professionalism. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write'] },
+    },
+    {
+        name: "Scheduler & Planner",
+        prompt: "You are an organizational expert. Help plan projects, create timelines, track deadlines, and organize information into actionable plans. Coordinate with the team via the message board.",
+        capabilities: { allow: ['file_read', 'file_write'] },
+    },
 ];
 
 // ── Permissions Editor ─────────────────────────────────────────────────
@@ -1011,10 +1047,49 @@ window._loadTeamTemplateFromSelect = function(name) {
 
 /** Launch a team preset from the welcome screen — opens the team modal pre-filled. */
 window._launchTeamPreset = function(templateName) {
-    showLaunchModal();
-    if (window._selectLaunchType) window._selectLaunchType('team');
-    // Wait for the team form to initialize, then load the template
-    setTimeout(() => _loadTeamTemplate(templateName), 100);
+    const modal = document.getElementById('quick-launch-modal');
+    if (!modal) return;
+    document.getElementById('quick-launch-template').value = templateName;
+    document.getElementById('quick-launch-title').textContent = `Launch ${templateName}`;
+    document.getElementById('quick-launch-board-name').value = '';
+    document.getElementById('quick-launch-board-name').placeholder = templateName.toLowerCase().replace(/\s+/g, '-');
+    modal.style.display = '';
+};
+
+window._quickLaunchTeam = async function() {
+    const templateName = document.getElementById('quick-launch-template').value;
+    const boardName = document.getElementById('quick-launch-board-name').value.trim() ||
+        document.getElementById('quick-launch-board-name').placeholder;
+    const workDir = document.getElementById('quick-launch-workdir').value.trim();
+
+    if (!workDir) { showToast('Working directory is required', 'error'); return; }
+
+    const all = [...BUILTIN_TEAM_TEMPLATES, ..._getSavedTeamTemplates()];
+    const tmpl = all.find(t => t.name === templateName);
+    if (!tmpl) { showToast('Template not found', 'error'); return; }
+
+    const agentType = 'claude';
+    const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+
+    try {
+        const resp = await fetch('/api/sessions/launch-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                board_name: boardName,
+                working_dir: workDir,
+                agent_type: agentType,
+                flags: [permFlag],
+                agents: tmpl.agents.map(a => ({ name: a.name, prompt: a.prompt, capabilities: a.capabilities })),
+            }),
+        });
+        const data = await resp.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        document.getElementById('quick-launch-modal').style.display = 'none';
+        showToast(`Launched ${templateName} on ${boardName}`);
+    } catch (e) {
+        showToast('Launch failed: ' + e.message, 'error');
+    }
 };
 
 function _loadTeamTemplate(name) {
