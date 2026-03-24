@@ -297,6 +297,32 @@ function _showCLINotFoundModal(agentType) {
     });
 }
 
+function _showDemoLimitModal(message) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-content" style="width:480px;text-align:center">
+            <h3 style="margin-bottom:12px">Demo Limit Reached</h3>
+            <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
+                This is a demo edition with the following limits:<br>
+                <strong>Max Live Sessions:</strong> 10<br>
+                <strong>Max Agent Teams:</strong> 1
+            </p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
+                Please stop existing sessions before launching new ones.
+            </p>
+            <div class="modal-actions" style="justify-content:center">
+                <button class="btn btn-primary" data-action="close">OK</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+        if (e.target.dataset?.action === 'close' || e.target === modal) modal.remove();
+    });
+}
+
 function _checkPermissionFlag(flagsStr, agentType) {
     const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
     return new Promise((resolve) => {
@@ -406,6 +432,11 @@ export async function launchSession() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
         const result = await resp.json();
         if (result.error) {
             if (result.error.includes('not found') && result.error.includes('CLI')) {
@@ -761,6 +792,11 @@ export async function launchAgentToBoard() {
                 board_name: boardName,
             }),
         });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
         const result = await resp.json();
         if (result.error) {
             if (result.error.includes('not found') && result.error.includes('CLI')) {
@@ -1095,6 +1131,11 @@ window._quickLaunchTeam = async function() {
                 agents: tmpl.agents.map(a => ({ name: a.name, prompt: a.prompt, capabilities: a.capabilities })),
             }),
         });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
         const data = await resp.json();
         if (data.error) { showToast(data.error, 'error'); return; }
         document.getElementById('quick-launch-modal').style.display = 'none';
@@ -1462,6 +1503,11 @@ async function launchTeam() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
         const result = await resp.json();
         if (result.error) {
             showToast(result.error, true);
