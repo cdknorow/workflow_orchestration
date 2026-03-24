@@ -206,11 +206,6 @@ func (c *Client) SendKeys(ctx context.Context, agentName, command, agentType, se
 
 // SendKeysToTarget sends a command to a specific tmux target.
 func (c *Client) SendKeysToTarget(ctx context.Context, target, command string) error {
-	// Disable bracketed paste before each send — the shell may have re-enabled it
-	// since session creation. Without this, tmux send-keys -l wraps text in
-	// \e[200~ ... \e[201~ sequences, causing '00~' to leak into the command.
-	c.disableBracketedPaste(ctx, target)
-
 	if strings.Contains(command, "\n") {
 		// Multi-line: wrap in bracket paste
 		if err := c.sendBracketPasted(ctx, target, command); err != nil {
@@ -505,6 +500,22 @@ func (c *Client) SendTerminalInputToTarget(ctx context.Context, target, data str
 	// Single-line literal text
 	_, err := c.run(ctx, "send-keys", "-t", target, "-l", data)
 	return err
+}
+
+// AttachCommand returns the full tmux attach command string including -S flag
+// if a custom socket path is configured. Used for display and osascript.
+func (c *Client) AttachCommand(sessionName string) string {
+	if c.SocketPath != "" {
+		return fmt.Sprintf("tmux -S %s attach -t %s", c.SocketPath, sessionName)
+	}
+	return fmt.Sprintf("tmux attach -t %s", sessionName)
+}
+
+// SetPaneTitle sets a tmux pane's title using select-pane -T.
+// This is a native tmux command that doesn't go through the shell,
+// avoiding printf echo issues.
+func (c *Client) SetPaneTitle(ctx context.Context, target, title string) {
+	c.run(ctx, "select-pane", "-t", target, "-T", title)
 }
 
 // ResizePaneTarget resizes a tmux pane width by target address.

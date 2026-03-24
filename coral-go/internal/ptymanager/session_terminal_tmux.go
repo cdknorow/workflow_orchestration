@@ -102,6 +102,10 @@ func (t *TmuxSessionTerminal) ResizeTarget(ctx context.Context, target string, c
 	return t.client.ResizePaneTarget(ctx, target, columns)
 }
 
+func (t *TmuxSessionTerminal) SetPaneTitle(ctx context.Context, target, title string) {
+	t.client.SetPaneTitle(ctx, target, title)
+}
+
 func (t *TmuxSessionTerminal) StartLogging(ctx context.Context, target, logPath string) error {
 	return t.client.PipePane(ctx, target, logPath)
 }
@@ -128,4 +132,8 @@ func (t *TmuxSessionTerminal) FindTarget(ctx context.Context, name, agentType, s
 
 func (t *TmuxSessionTerminal) CaptureRawOutput(ctx context.Context, target string, lines int, visibleOnly bool) (string, error) {
 	return t.client.CapturePaneRawTarget(ctx, target, lines, visibleOnly)
+}
+
+func (t *TmuxSessionTerminal) AttachCommand(sessionName string) string {
+	return t.client.AttachCommand(sessionName)
 }

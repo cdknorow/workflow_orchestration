@@ -116,12 +116,16 @@ func main() {
 	if len(sessionNames) > 0 {
 		fmt.Println("Quick attach commands:")
 		for _, sn := range sessionNames {
-			fmt.Printf("  tmux attach -t %s\n", sn)
+			fmt.Printf("  %s\n", tc.AttachCommand(sn))
 		}
 		fmt.Println()
 		fmt.Println("Kill all agents:")
-		fmt.Printf("  for sn in %s; do tmux kill-session -t $sn 2>/dev/null; done\n",
-			strings.Join(sessionNames, " "))
+		socketFlag := ""
+		if tc.SocketPath != "" {
+			socketFlag = fmt.Sprintf("-S %s ", tc.SocketPath)
+		}
+		fmt.Printf("  for sn in %s; do tmux %skill-session -t $sn 2>/dev/null; done\n",
+			strings.Join(sessionNames, " "), socketFlag)
 	}
 
 	<-ctx.Done()
@@ -188,10 +192,8 @@ func launchAgentSessions(ctx context.Context, tc *tmux.Client, targetDir, agentT
 			log.Printf("Warning: failed to set up pipe-pane for %s: %v", sessionName, err)
 		}
 
-		// Set pane title
-		tc.SendKeysToTarget(ctx, sessionName+".0",
-			fmt.Sprintf("printf '\\033]2;%s — %s\\033\\\\'", folderName, agentType))
-		time.Sleep(200 * time.Millisecond)
+		// Set pane title using native tmux command (avoids shell echo issues)
+		tc.SetPaneTitle(ctx, sessionName+".0", fmt.Sprintf("%s — %s", folderName, agentType))
 
 		// Build and send the launch command
 		launchCmd := agent.WrapWithBundlePath(ag.BuildLaunchCommand(agent.LaunchParams{
@@ -203,13 +205,13 @@ func launchAgentSessions(ctx context.Context, tc *tmux.Client, targetDir, agentT
 
 		// Open a terminal window attached to this session
 		if !isSSH() {
-			openAgentTerminal(sessionName, fmt.Sprintf("%s — %s", folderName, agentType))
+			openAgentTerminal(tc, sessionName, fmt.Sprintf("%s — %s", folderName, agentType))
 		}
 
 		fmt.Printf("  [+] Session : %s\n", sessionName)
 		fmt.Printf("      Dir     : %s\n", dir)
 		fmt.Printf("      Log     : %s\n", logFile)
-		fmt.Printf("      Attach  : tmux attach -t %s\n\n", sessionName)
+		fmt.Printf("      Attach  : %s\n\n", tc.AttachCommand(sessionName))
 
 		sessionNames = append(sessionNames, sessionName)
 	}
@@ -313,21 +315,22 @@ func isSSH() bool {
 	return os.Getenv("SSH_CONNECTION") != ""
 }
 
-func openAgentTerminal(session, title string) {
+func openAgentTerminal(tc *tmux.Client, session, title string) {
+	attachCmd := tc.AttachCommand(session)
 	switch runtime.GOOS {
 	case "darwin":
 		// macOS: try iTerm2 first, then Terminal.app
 		script := fmt.Sprintf(`tell application "iTerm2"
-    create window with default profile command "tmux attach -t %s"
-end tell`, session)
+    create window with default profile command "%s"
+end tell`, attachCmd)
 		cmd := exec.Command("osascript", "-e", script)
 		if err := cmd.Run(); err == nil {
 			return
 		}
 		script = fmt.Sprintf(`tell application "Terminal"
-    do script "tmux attach -t %s"
+    do script "%s"
     set custom title of front window to "%s"
-end tell`, session, title)
+end tell`, attachCmd, title)
 		exec.Command("osascript", "-e", script).Run()
 
 	case "windows":
@@ -344,12 +347,12 @@ end tell`, session, title)
 		// Linux: try terminal emulators
 		for _, term := range []string{"x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal"} {
 			if path, err := exec.LookPath(term); err == nil {
-				cmd := exec.Command(path, "-e", fmt.Sprintf("tmux attach -t %s", session))
+				cmd := exec.Command(path, "-e", attachCmd)
 				cmd.Start()
 				return
 			}
 		}
-		fmt.Printf("  [~] No supported terminal emulator found (use: tmux attach -t %s)\n", session)
+		fmt.Printf("  [~] No supported terminal emulator found (use: %s)\n", attachCmd)
 	}
 }
 

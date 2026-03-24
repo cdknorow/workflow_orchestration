@@ -613,7 +613,7 @@ func (h *SessionsHandler) Info(w http.ResponseWriter, r *http.Request) {
 		result["tmux_session"] = pane.SessionName
 		result["pane_title"] = pane.PaneTitle
 		result["current_path"] = pane.CurrentPath
-		result["attach_command"] = fmt.Sprintf("tmux attach -t %s", pane.SessionName)
+		result["attach_command"] = h.terminal.AttachCommand(pane.SessionName)
 	}
 
 	// Look up git state by session_id first, then by name
@@ -1146,11 +1146,9 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	os.WriteFile(newLogPath, []byte{}, 0644)
 	h.terminal.StartLogging(ctx, target, newLogPath)
 
-	// Set pane title
+	// Set pane title using native tmux command (avoids shell echo)
 	folderName := filepath.Base(strings.TrimRight(pane.CurrentPath, "/"))
-	titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, agentType)
-	h.terminal.SendToTarget(ctx, target, titleCmd)
-	time.Sleep(300 * time.Millisecond)
+	h.terminal.SetPaneTitle(ctx, target, fmt.Sprintf("%s — %s", folderName, agentType))
 
 	// Load stored flags, prompt, board_name, board_server from the DB
 	agentImpl := agent.GetAgent(agentType)
@@ -1349,8 +1347,9 @@ func (h *SessionsHandler) Attach(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Open Terminal.app attached to the tmux session (macOS)
+	attachCmd := h.terminal.AttachCommand(pane.SessionName)
 	go func() {
-		cmd := fmt.Sprintf(`tell application "Terminal" to do script "tmux attach -t %s"`, pane.SessionName)
+		cmd := fmt.Sprintf(`tell application "Terminal" to do script "%s"`, attachCmd)
 		exec.Command("osascript", "-e", cmd).Run()
 	}()
 
@@ -1948,10 +1947,8 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		// Setup pipe-pane logging
 		h.terminal.StartLogging(ctx, sessionName, logFile)
 
-		// Set pane title
-		titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, agentType)
-		h.terminal.SendToTarget(ctx, sessionName+".0", titleCmd)
-		time.Sleep(300 * time.Millisecond)
+		// Set pane title using native tmux command (avoids shell echo)
+		h.terminal.SetPaneTitle(ctx, sessionName+".0", fmt.Sprintf("%s — %s", folderName, agentType))
 
 		// Launch the agent (unless terminal)
 		if !isTerminal {
@@ -2480,9 +2477,7 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 			h.terminal.StartLogging(ctx, sessionName, logFile)
 
 			folderName := filepath.Base(ls.WorkingDir)
-			titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, ls.AgentType)
-			h.terminal.SendToTarget(ctx, sessionName+".0", titleCmd)
-			time.Sleep(300 * time.Millisecond)
+			h.terminal.SetPaneTitle(ctx, sessionName+".0", fmt.Sprintf("%s — %s", folderName, ls.AgentType))
 
 			h.terminal.SendToTarget(ctx, sessionName+".0", cmd)
 		}

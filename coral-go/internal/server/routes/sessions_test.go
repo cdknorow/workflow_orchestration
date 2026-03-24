@@ -156,6 +156,10 @@ func (m *mockSessionTerminal) CaptureRawOutput(_ context.Context, _ string, _ in
 	return "", nil
 }
 
+func (m *mockSessionTerminal) SetPaneTitle(_ context.Context, _, _ string) {}
+
+func (m *mockSessionTerminal) AttachCommand(_ string) string { return "" }
+
 // addSession adds a mock session for testing.
 func (m *mockSessionTerminal) addSession(name, workDir string) {
 	m.mu.Lock()
@@ -866,4 +870,116 @@ func TestKill_SleepingBoard_AllSessionsRemoved_NoPTY(t *testing.T) {
 	for _, b := range sleepingBoards {
 		assert.NotEqual(t, boardName, b, "sleeping board should not appear in GetSleepingBoardNames after kill")
 	}
+}
+
+// ── Demo Edition: All-or-Nothing Team Launch Tests ──────────────────────
+
+func TestEditionLimits_TeamLaunch_ExceedsAgentCap_NoPartialLaunch(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  10,
+		MaxLiveAgents: 8,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register 4 agents
+	for i := 0; i < 4; i++ {
+		ss.RegisterLiveSession(ctx, &store.LiveSession{
+			AgentName: fmt.Sprintf("existing-%d", i), AgentType: "claude",
+			WorkingDir: "/tmp", SessionID: fmt.Sprintf("existing-sid-%d", i),
+		})
+	}
+
+	// Attempt to launch a 5-agent team (4+5=9 > 8, should be rejected)
+	agents := make([]map[string]string, 5)
+	for i := 0; i < 5; i++ {
+		agents[i] = map[string]string{"name": fmt.Sprintf("new-agent-%d", i)}
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"board_name":  "test-team",
+		"working_dir": t.TempDir(),
+		"agents":      agents,
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch-team", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "should reject team that would exceed agent cap")
+
+	// Verify no partial launches: still only 4 sessions in DB
+	count, err := ss.CountLiveSessions(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 4, count, "no new sessions should be created on rejection")
+}
+
+func TestEditionLimits_TeamLaunch_ExactlyAtCap_Succeeds(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  10,
+		MaxLiveAgents: 8,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register 4 agents
+	for i := 0; i < 4; i++ {
+		ss.RegisterLiveSession(ctx, &store.LiveSession{
+			AgentName: fmt.Sprintf("existing-%d", i), AgentType: "claude",
+			WorkingDir: "/tmp", SessionID: fmt.Sprintf("existing-sid-%d", i),
+		})
+	}
+
+	// Launch a 4-agent team (4+4=8, exactly at cap, should succeed)
+	agents := make([]map[string]string, 4)
+	for i := 0; i < 4; i++ {
+		agents[i] = map[string]string{"name": fmt.Sprintf("team-agent-%d", i)}
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"board_name":  "ok-team",
+		"working_dir": t.TempDir(),
+		"agents":      agents,
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch-team", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "team launch at exact cap should succeed")
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	launched, ok := result["agents"].([]interface{})
+	assert.True(t, ok, "response should contain agents array")
+	assert.Equal(t, 4, len(launched), "all 4 agents should be launched")
+}
+
+func TestEditionLimits_SingleLaunch_AtExactCap_Blocked(t *testing.T) {
+	cfg := &config.Config{
+		MaxLiveTeams:  10,
+		MaxLiveAgents: 8,
+	}
+	server, _, _, ss := setupSessionsTestServerWithConfig(t, cfg)
+	ctx := context.Background()
+
+	// Pre-register exactly 8 agents (at the cap)
+	for i := 0; i < 8; i++ {
+		ss.RegisterLiveSession(ctx, &store.LiveSession{
+			AgentName: fmt.Sprintf("agent-%d", i), AgentType: "claude",
+			WorkingDir: "/tmp", SessionID: fmt.Sprintf("sid-%d", i),
+		})
+	}
+
+	// Attempt to launch 1 more agent — should be blocked
+	body, _ := json.Marshal(map[string]interface{}{
+		"working_dir": t.TempDir(),
+		"agent_type":  "claude",
+	})
+	resp, err := http.Post(server.URL+"/api/sessions/launch", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "single launch at cap should be blocked")
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	assert.Contains(t, result["error"], "Demo limit", "error message should mention demo limit")
+	assert.Contains(t, result["error"], "8", "error message should mention the limit number")
 }

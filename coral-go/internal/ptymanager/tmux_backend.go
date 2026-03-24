@@ -54,11 +54,10 @@ func (b *TmuxBackend) Spawn(name, agentType, workDir, sessionID, command string,
 	// Setup pipe-pane logging
 	b.client.PipePane(ctx, tmuxName, logPath)
 
-	// Set pane title
+	// Set pane title using tmux native command (avoids shell echo issues)
 	folderName := filepath.Base(strings.TrimRight(workDir, "/"))
-	titleCmd := fmt.Sprintf(`printf '\033]2;%s — %s\033\\'`, folderName, agentType)
-	b.client.SendKeysToTarget(ctx, tmuxName+".0", titleCmd)
-	time.Sleep(300 * time.Millisecond)
+	paneTitle := fmt.Sprintf("%s — %s", folderName, agentType)
+	b.client.SetPaneTitle(ctx, tmuxName+".0", paneTitle)
 
 	// Launch the agent command
 	if command != "" {

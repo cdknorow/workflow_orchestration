@@ -6,7 +6,6 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/cdknorow/coral/internal/tmux"
 )
@@ -46,9 +45,7 @@ func (r *TmuxRuntime) SpawnAgent(ctx context.Context, name, workDir, logFile, co
 		agentType = parts[0]
 	}
 	folderName := filepath.Base(strings.TrimRight(workDir, "/"))
-	titleCmd := fmt.Sprintf("printf '\\033]2;%s \\xe2\\x80\\x94 %s\\033\\\\'", folderName, agentType)
-	r.client.SendKeysToTarget(ctx, target, titleCmd)
-	time.Sleep(300 * time.Millisecond)
+	r.client.SetPaneTitle(ctx, target, fmt.Sprintf("%s — %s", folderName, agentType))
 
 	if command != "" {
 		log.Printf("[launch] session=%s agent=%s cmd=%s", name, agentType, command)

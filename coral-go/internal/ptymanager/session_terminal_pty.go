@@ -138,6 +138,10 @@ func (p *PTYSessionTerminal) ResizeTarget(_ context.Context, target string, colu
 	return p.backend.Resize(target, uint16(columns), 50)
 }
 
+func (p *PTYSessionTerminal) SetPaneTitle(_ context.Context, _, _ string) {
+	// No-op for PTY backend — pane titles are a tmux concept
+}
+
 func (p *PTYSessionTerminal) StartLogging(_ context.Context, _, _ string) error {
 	// PTY backend already logs via the session's readLoop → logFile writer
 	return nil
@@ -181,6 +185,10 @@ func (p *PTYSessionTerminal) FindTarget(_ context.Context, name, agentType, sess
 
 func (p *PTYSessionTerminal) CaptureRawOutput(_ context.Context, target string, _ int, _ bool) (string, error) {
 	return p.backend.CaptureContent(target)
+}
+
+func (p *PTYSessionTerminal) AttachCommand(_ string) string {
+	return "" // PTY backend doesn't use tmux attach
 }
 
 // Verify interface compliance at compile time.
