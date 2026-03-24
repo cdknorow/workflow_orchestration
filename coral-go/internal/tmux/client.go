@@ -41,6 +41,17 @@ type Client struct {
 // Uses ~/.coral/tmux.sock as the fixed socket with fallback to the default socket.
 func NewClient() *Client {
 	c := &Client{TmuxBin: "tmux", FallbackToDefault: true, sessionSockets: make(map[string]string)}
+
+	// Find tmux binary if not on PATH (native app may not have /opt/homebrew/bin)
+	if _, err := exec.LookPath(c.TmuxBin); err != nil {
+		for _, p := range []string{"/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux"} {
+			if _, err := os.Stat(p); err == nil {
+				c.TmuxBin = p
+				break
+			}
+		}
+	}
+
 	if sp := os.Getenv("CORAL_TMUX_SOCKET"); sp != "" {
 		c.SocketPath = sp
 	} else {
