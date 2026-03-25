@@ -36,7 +36,7 @@ import {
 } from './webhooks.js';
 import { initLiveJobs, renderLiveJobs, selectLiveJobRun } from './live_jobs.js';
 import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js';
-import { initMessageBoard, selectBoardProject, showMessageBoardProjects, postBoardMessage, deleteMessageBoardProject, toggleBoardPause, toggleBoardSleep, deleteBoardMessage } from './message_board.js';
+import { initMessageBoard, selectBoardProject, showMessageBoardProjects, postBoardMessage, deleteMessageBoardProject, toggleBoardPause, toggleBoardSleep, deleteBoardMessage, showExportBoardModal, doExportBoard } from './message_board.js';
 import { loadAllFolderTags, showFolderTagDropdown, hideFolderTagDropdown, addFolderTag, removeFolderTag, createAndAddFolderTag } from './folder_tags.js';
 import { initMobile, syncMobileAgentList } from './mobile.js';
 
@@ -100,6 +100,7 @@ Object.assign(window, {
     selectBoardProject, showMessageBoardProjects, postBoardMessage,
     deleteMessageBoardProject, confirmDeleteBoard: deleteMessageBoardProject,
     toggleBoardPause, toggleBoardSleep, deleteBoardMessage,
+    showExportBoardModal, doExportBoard,
     // folder_tags
     showFolderTagDropdown, hideFolderTagDropdown, addFolderTag, removeFolderTag, createAndAddFolderTag,
     // utils

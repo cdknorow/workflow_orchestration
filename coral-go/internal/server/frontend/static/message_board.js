@@ -79,6 +79,7 @@ export function selectBoardProject(project) {
     const backBtn = document.getElementById('mb-back-btn');
     if (backBtn) backBtn.style.display = '';
     document.getElementById('mb-pause-btn').style.display = '';
+    document.getElementById('mb-export-btn').style.display = '';
     const sleepBtn = document.getElementById('mb-sleep-btn');
     if (sleepBtn) sleepBtn.style.display = '';
     document.getElementById('mb-delete-btn').style.display = '';
@@ -523,6 +524,317 @@ export function toggleBoardSleep() {
     } else {
         doIt();
     }
+}
+
+// ── Export ────────────────────────────────────────────────────────────────
+
+export async function showExportBoardModal() {
+    if (!currentProject) return;
+
+    // Fetch subscribers to build the agent selection list
+    const subs = await fetchSubscribers(currentProject);
+
+    // Build modal HTML
+    const agentCheckboxes = subs.map(s => {
+        const role = escapeHtml(s.job_title || s.session_id);
+        const sid = escapeAttr(s.session_id);
+        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+            <input type="checkbox" class="export-agent-cb" value="${sid}" data-role="${escapeAttr(s.job_title || s.session_id)}">
+            <span style="font-weight:600;font-size:13px">${role}</span>
+            <span style="font-size:11px;color:var(--text-muted)">${escapeHtml(s.session_id).substring(0, 20)}...</span>
+        </label>`;
+    }).join('');
+
+    const modal = document.getElementById('confirm-modal');
+    const content = modal.querySelector('.modal-content');
+    if (content) content.classList.add('modal-content-wide');
+    const title = modal.querySelector('.modal-title') || modal.querySelector('h3');
+    const body = modal.querySelector('.modal-body') || modal.querySelector('.confirm-body');
+    const actions = modal.querySelector('.modal-actions') || modal.querySelector('.confirm-actions');
+
+    title.textContent = 'Export Board Chat';
+    body.innerHTML = `
+        <div style="margin-bottom:16px">
+            <p style="margin:0 0 8px;font-size:14px">Export <strong>${escapeHtml(currentProject)}</strong> board messages.</p>
+            <p style="margin:0 0 12px;font-size:13px;color:var(--text-muted)">Optionally include individual agent chat histories, interleaved by timestamp.</p>
+        </div>
+        <div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <label style="font-weight:600;font-size:13px">Include agent chats:</label>
+                <div style="display:flex;gap:8px">
+                    <button class="mb-action-btn" onclick="document.querySelectorAll('.export-agent-cb').forEach(c=>c.checked=true)" style="font-size:11px;padding:2px 8px">All</button>
+                    <button class="mb-action-btn" onclick="document.querySelectorAll('.export-agent-cb').forEach(c=>c.checked=false)" style="font-size:11px;padding:2px 8px">None</button>
+                </div>
+            </div>
+            <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px 12px">
+                ${agentCheckboxes || '<p style="font-size:13px;color:var(--text-muted)">No subscribers</p>'}
+            </div>
+        </div>
+        <div style="margin-bottom:8px">
+            <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px">Format:</label>
+            <select id="export-format-select" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:13px">
+                <option value="html">HTML (styled, shareable)</option>
+                <option value="json">JSON (canonical data)</option>
+                <option value="markdown">Markdown</option>
+            </select>
+        </div>
+    `;
+    actions.innerHTML = `
+        <button class="btn" onclick="closeConfirmModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="doExportBoard()">Export</button>
+    `;
+    modal.style.display = 'flex';
+}
+
+export async function doExportBoard() {
+    const format = document.getElementById('export-format-select').value;
+    const selectedAgents = Array.from(document.querySelectorAll('.export-agent-cb:checked'))
+        .map(cb => ({ sessionId: cb.value, role: cb.dataset.role }));
+
+    // Close modal and show progress
+    const modal = document.getElementById('confirm-modal');
+    const actions = modal.querySelector('.modal-actions') || modal.querySelector('.confirm-actions');
+    actions.innerHTML = '<span style="color:var(--text-muted);font-size:13px">Exporting...</span>';
+
+    try {
+        // 1. Fetch all board messages
+        const boardResp = await fetch(`/api/board/${encodeURIComponent(currentProject)}/messages/all?limit=10000`);
+        const boardMessages = await boardResp.json();
+
+        // 2. Fetch subscribers
+        const subsResp = await fetch(`/api/board/${encodeURIComponent(currentProject)}/subscribers`);
+        const subscribers = await subsResp.json();
+
+        // 3. Build entries from board messages
+        const entries = boardMessages.map(m => ({
+            timestamp: (m.created_at || '').substring(0, 16),
+            role: m.job_title || m.session_id || 'unknown',
+            content: m.content || '',
+            source: 'board',
+        }));
+
+        // 4. Fetch live sessions to get working directories and names
+        const liveResp = await fetch('/api/sessions/live');
+        const liveSessions = await liveResp.json();
+
+        // 5. Fetch selected agent chat histories and merge
+        for (const agent of selectedAgents) {
+            try {
+                // Find the live session for this subscriber to get name + working_directory
+                const live = liveSessions.find(s => s.session_id === agent.sessionId.replace('claude-', ''));
+                let histData;
+                if (live) {
+                    // Use live chat endpoint (has working_directory for JSONL resolution)
+                    const params = new URLSearchParams({
+                        agent_type: live.agent_type || 'claude',
+                        session_id: live.session_id,
+                        working_directory: live.working_directory || '',
+                        after: '0',
+                        limit: '10000',
+                    });
+                    const chatResp = await fetch(`/api/sessions/live/${encodeURIComponent(live.name)}/chat?${params}`);
+                    histData = await chatResp.json();
+                } else {
+                    // Fallback to history endpoint for completed sessions
+                    const histResp = await fetch(`/api/sessions/history/${encodeURIComponent(agent.sessionId)}`);
+                    histData = await histResp.json();
+                }
+                if (histData.messages && histData.messages.length) {
+                    const parsed = parseAgentHistory(histData.messages, agent.role);
+                    entries.push(...parsed);
+                }
+            } catch (e) {
+                console.warn(`Failed to load history for ${agent.sessionId}:`, e);
+            }
+        }
+
+        // 5. Sort by timestamp
+        entries.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+        // 6. Build export data
+        const exportData = {
+            project: currentProject,
+            exported_at: new Date().toISOString(),
+            subscribers: subscribers.map(s => ({
+                session_id: s.session_id,
+                role: s.job_title || s.session_id,
+            })),
+            messages: entries,
+            stats: {
+                total: entries.length,
+                board: entries.filter(e => e.source === 'board').length,
+                agent_chat: entries.filter(e => e.source === 'agent-chat').length,
+            },
+        };
+
+        // 7. Render and download
+        let output, filename, mime;
+        if (format === 'json') {
+            output = JSON.stringify(exportData, null, 2);
+            filename = `${currentProject}-export.json`;
+            mime = 'application/json';
+        } else if (format === 'markdown') {
+            output = renderExportMarkdown(exportData);
+            filename = `${currentProject}-export.md`;
+            mime = 'text/markdown';
+        } else {
+            output = renderExportHTML(exportData);
+            filename = `${currentProject}-export.html`;
+            mime = 'text/html';
+        }
+
+        // Trigger download
+        const blob = new Blob([output], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        modal.style.display = 'none';
+        showToast(`Exported ${entries.length} messages as ${format}`);
+    } catch (e) {
+        console.error('Export failed:', e);
+        actions.innerHTML = `<span style="color:var(--error)">Export failed: ${escapeHtml(e.message)}</span>
+            <button class="btn" onclick="closeConfirmModal()">Close</button>`;
+    }
+}
+
+// ── Agent History Parsers ─────────────────────────────────────────────────
+// Modular parsers for different agent JSONL formats. Each returns an array
+// of { timestamp, role, content, source } entries.
+
+function parseAgentHistory(messages, agentRole) {
+    const entries = [];
+    for (const msg of messages) {
+        const ts = (msg.timestamp || '').substring(0, 16);
+        if (!ts) continue;
+
+        if (msg.type === 'user') {
+            // Human/operator message to this agent
+            const content = typeof msg.content === 'string' ? msg.content : '';
+            if (!content.trim()) continue;
+            // Skip system notifications (board read reminders, task notifications)
+            if (content.startsWith('You have ') && content.includes('unread message')) continue;
+            if (content.startsWith('<task-notification>')) continue;
+            entries.push({
+                timestamp: ts,
+                role: `Operator → ${agentRole}`,
+                content: content.trim(),
+                source: 'agent-chat',
+            });
+        } else if (msg.type === 'assistant') {
+            // Agent's text response (skip tool-only messages)
+            const text = (msg.text || '').trim();
+            if (!text) continue;
+            entries.push({
+                timestamp: ts,
+                role: agentRole,
+                content: text,
+                source: 'agent-chat',
+            });
+        }
+        // Skip tool_result messages — they're tool output, not conversation
+    }
+    return entries;
+}
+
+function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function agentHue(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xFFFFFF;
+    return h % 360;
+}
+
+function renderExportMarkdown(d) {
+    let out = `# Board Chat Export: ${d.project}\n\n`;
+    out += `**Exported**: ${d.exported_at}\n`;
+    out += `**Messages**: ${d.stats.total}\n`;
+    if (d.stats.agent_chat > 0) {
+        out += `**Board**: ${d.stats.board} | **Agent chats**: ${d.stats.agent_chat}\n`;
+    }
+    if (d.subscribers.length) {
+        out += `**Subscribers**: ${d.subscribers.length}\n\n`;
+        out += '| Agent | Role |\n|-------|------|\n';
+        d.subscribers.forEach(s => { out += `| ${s.session_id} | ${s.role} |\n`; });
+    }
+    out += '\n---\n\n## Messages\n\n';
+    d.messages.forEach(e => {
+        const tag = e.source === 'agent-chat' ? ' (agent chat)' : '';
+        out += `**[${e.timestamp}] ${e.role}${tag}:**\n\n${e.content}\n\n---\n\n`;
+    });
+    return out;
+}
+
+function renderExportHTML(d) {
+    const msgs = d.messages.map(e => {
+        const cls = e.source === 'agent-chat' ? 'msg side-chat' : 'msg';
+        const color = `hsl(${agentHue(e.role)}, 60%, 45%)`;
+        const tag = e.source === 'agent-chat' ? '<span class="msg-tag">AGENT CHAT</span>' : '';
+        return `<div class="${cls}">
+  <div class="msg-header">
+    <span class="msg-role" style="color:${color}">${esc(e.role)}</span>
+    <span class="msg-time">${esc(e.timestamp)}</span>
+    ${tag}
+  </div>
+  <div class="msg-content">${esc(e.content)}</div>
+</div>`;
+    }).join('\n');
+
+    const subList = d.subscribers.map(s =>
+        `<div class="sub-chip"><span class="role">${esc(s.role)}</span></div>`
+    ).join('\n');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Board Chat Export: ${esc(d.project)}</title>
+<style>
+  :root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --side-chat: #1a1a2e; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  .stats { color: var(--muted); margin-bottom: 1.5rem; font-size: 0.9rem; }
+  .stats span { margin-right: 1.5rem; }
+  .subscribers { margin-bottom: 2rem; }
+  .subscribers summary { cursor: pointer; color: var(--accent); font-weight: 600; margin-bottom: 0.5rem; }
+  .sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; padding: 0.5rem 0; }
+  .sub-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+  .sub-chip .role { font-weight: 600; }
+  .messages { display: flex; flex-direction: column; gap: 0.75rem; }
+  .msg { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; border-left: 3px solid var(--accent); }
+  .msg.side-chat { background: var(--side-chat); border-left-color: #f0883e; }
+  .msg-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .msg-role { font-weight: 700; font-size: 0.95rem; }
+  .msg-time { color: var(--muted); font-size: 0.8rem; }
+  .msg-tag { background: #f0883e33; color: #f0883e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 10px; font-weight: 600; }
+  .msg-content { white-space: pre-wrap; word-wrap: break-word; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>${esc(d.project)}</h1>
+<div class="stats">
+  <span>Exported: ${esc(d.exported_at)}</span>
+  <span>Messages: ${d.stats.total}</span>
+  ${d.stats.agent_chat > 0 ? `<span>Board: ${d.stats.board}</span><span>Agent chats: ${d.stats.agent_chat}</span>` : ''}
+</div>
+${d.subscribers.length ? `<details class="subscribers"><summary>${d.subscribers.length} Subscribers</summary><div class="sub-grid">${subList}</div></details>` : ''}
+<div class="messages">
+${msgs}
+</div>
+</div>
+</body>
+</html>`;
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────
