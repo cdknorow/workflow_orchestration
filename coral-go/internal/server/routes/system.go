@@ -461,3 +461,133 @@ func (h *SystemHandler) NetworkInfo(w http.ResponseWriter, r *http.Request) {
 		"port":    h.cfg.Port,
 	})
 }
+
+// ── Team Import ─────────────────────────────────────────────────────────
+
+// ImportTeam parses a folder-based team definition and returns team config JSON.
+// POST /api/teams/import
+//
+// The folder structure is:
+//
+//	my-team/
+//	  SKILL.md         → Orchestrator agent (frontmatter: name, description)
+//	  agents/
+//	    agent-name.md  → Worker agents (frontmatter: name, description)
+//
+// Each .md file has YAML frontmatter (---\nkey: value\n---) followed by the prompt body.
+func (h *SystemHandler) ImportTeam(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Path == "" {
+		errBadRequest(w, "path is required")
+		return
+	}
+
+	info, err := os.Stat(body.Path)
+	if err != nil || !info.IsDir() {
+		errBadRequest(w, "path does not exist or is not a directory")
+		return
+	}
+
+	teamName := filepath.Base(body.Path)
+	var agents []map[string]any
+
+	// Parse SKILL.md as orchestrator
+	skillPath := filepath.Join(body.Path, "SKILL.md")
+	if data, err := os.ReadFile(skillPath); err == nil {
+		name, description, prompt := parseFrontmatterMD(string(data))
+		if name == "" {
+			name = "Orchestrator"
+		}
+		agentDef := map[string]any{
+			"name":   name,
+			"role":   "orchestrator",
+			"prompt": prompt,
+		}
+		if description != "" {
+			agentDef["description"] = description
+		}
+		agents = append(agents, agentDef)
+	}
+
+	// Parse agents/*.md as workers
+	agentsDir := filepath.Join(body.Path, "agents")
+	if entries, err := os.ReadDir(agentsDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(agentsDir, entry.Name()))
+			if err != nil {
+				continue
+			}
+			name, description, prompt := parseFrontmatterMD(string(data))
+			if name == "" {
+				name = strings.TrimSuffix(entry.Name(), ".md")
+			}
+			agentDef := map[string]any{
+				"name":   name,
+				"prompt": prompt,
+			}
+			if description != "" {
+				agentDef["description"] = description
+			}
+			agents = append(agents, agentDef)
+		}
+	}
+
+	if len(agents) == 0 {
+		errBadRequest(w, "no agent definitions found in directory")
+		return
+	}
+
+	teamConfig := map[string]any{
+		"name":   teamName,
+		"agents": agents,
+	}
+
+	writeJSON(w, http.StatusOK, teamConfig)
+}
+
+// parseFrontmatterMD extracts YAML frontmatter (name, description) and body from markdown.
+// Returns (name, description, body). If no frontmatter, body is the full content.
+func parseFrontmatterMD(content string) (name, description, body string) {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "---") {
+		return "", "", content
+	}
+
+	// Find closing ---
+	rest := content[3:]
+	idx := strings.Index(rest, "\n---")
+	if idx < 0 {
+		return "", "", content
+	}
+
+	frontmatter := rest[:idx]
+	body = strings.TrimSpace(rest[idx+4:])
+
+	// Simple YAML parsing for name and description fields
+	for _, line := range strings.Split(frontmatter, "\n") {
+		line = strings.TrimSpace(line)
+		if k, v, ok := strings.Cut(line, ":"); ok {
+			k = strings.TrimSpace(k)
+			v = strings.TrimSpace(v)
+			// Remove surrounding quotes if present
+			v = strings.Trim(v, `"'`)
+			switch k {
+			case "name":
+				name = v
+			case "description":
+				description = v
+			}
+		}
+	}
+
+	return name, description, body
+}

@@ -127,8 +127,10 @@ function _renderSearchResults(files) {
 
 export function initFileSearch() {
     const input = document.getElementById('files-search-input');
-    if (!input) return;
-    input.addEventListener('input', () => {
+    if (!input || input.dataset.searchBound) return;
+    input.dataset.searchBound = '1';
+
+    function onSearchInput() {
         clearTimeout(_searchTimeout);
         const q = input.value.trim();
         if (!q) {
@@ -137,7 +139,11 @@ export function initFileSearch() {
             return;
         }
         _searchTimeout = setTimeout(() => searchRepoFiles(q), 200);
-    });
+    }
+
+    // Use both input and keyup — some WebKit webviews don't fire input reliably
+    input.addEventListener('input', onSearchInput);
+    input.addEventListener('keyup', onSearchInput);
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             input.value = '';

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -645,6 +646,73 @@ func htmlEscape(s string) string {
 	return s
 }
 
+var (
+	reCodeBlock   = regexp.MustCompile("(?s)```(\\w*)\\n(.*?)```")
+	reHeading     = regexp.MustCompile(`(?m)^(#{1,4})\s+(.+)$`)
+	reBold        = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	reItalic      = regexp.MustCompile(`(?:^|[^*])\*([^*]+?)\*(?:[^*]|$)`)
+	reInlineCode  = regexp.MustCompile("`([^`]+)`")
+	reUlItem      = regexp.MustCompile(`(?m)^[-*]\s+(.+)$`)
+	reOlItem      = regexp.MustCompile(`(?m)^\d+\.\s+(.+)$`)
+	reBlockquote  = regexp.MustCompile(`(?m)^>\s*(.+)$`)
+)
+
+// simpleMarkdownToHTML converts common markdown to HTML for the CLI export.
+func simpleMarkdownToHTML(s string) string {
+	// Code blocks first (before escaping)
+	var codeBlocks []string
+	s = reCodeBlock.ReplaceAllStringFunc(s, func(match string) string {
+		parts := reCodeBlock.FindStringSubmatch(match)
+		placeholder := fmt.Sprintf("\x00CODEBLOCK%d\x00", len(codeBlocks))
+		codeBlocks = append(codeBlocks, "<pre><code>"+htmlEscape(parts[2])+"</code></pre>")
+		return placeholder
+	})
+
+	// Inline code (before escaping)
+	var inlineCodes []string
+	s = reInlineCode.ReplaceAllStringFunc(s, func(match string) string {
+		parts := reInlineCode.FindStringSubmatch(match)
+		placeholder := fmt.Sprintf("\x00INLINECODE%d\x00", len(inlineCodes))
+		inlineCodes = append(inlineCodes, "<code>"+htmlEscape(parts[1])+"</code>")
+		return placeholder
+	})
+
+	s = htmlEscape(s)
+
+	// Headings
+	s = reHeading.ReplaceAllStringFunc(s, func(match string) string {
+		parts := reHeading.FindStringSubmatch(match)
+		level := len(parts[1])
+		return fmt.Sprintf("<h%d>%s</h%d>", level, parts[2], level)
+	})
+
+	// Bold and italic
+	s = reBold.ReplaceAllString(s, "<strong>$1</strong>")
+	s = reItalic.ReplaceAllString(s, "<em>$1</em>")
+
+	// Blockquotes
+	s = reBlockquote.ReplaceAllString(s, "<blockquote>$1</blockquote>")
+
+	// Lists (simple single-level)
+	s = reUlItem.ReplaceAllString(s, "<li>$1</li>")
+	s = reOlItem.ReplaceAllString(s, "<li>$1</li>")
+
+	// Restore code blocks and inline code
+	for i, block := range codeBlocks {
+		s = strings.ReplaceAll(s, fmt.Sprintf("\x00CODEBLOCK%d\x00", i), block)
+	}
+	for i, code := range inlineCodes {
+		s = strings.ReplaceAll(s, fmt.Sprintf("\x00INLINECODE%d\x00", i), code)
+	}
+
+	// Paragraphs: convert double newlines
+	s = strings.ReplaceAll(s, "\n\n", "</p><p>")
+	s = "<p>" + s + "</p>"
+	s = strings.ReplaceAll(s, "<p></p>", "")
+
+	return s
+}
+
 // agentColor returns a consistent HSL color for an agent name.
 func agentColor(name string) string {
 	h := 0
@@ -682,9 +750,17 @@ func renderHTML(buf *bytes.Buffer, d *exportData) {
   .msg-role { font-weight: 700; font-size: 0.95rem; }
   .msg-time { color: var(--muted); font-size: 0.8rem; }
   .msg-tag { background: #f0883e33; color: #f0883e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 10px; font-weight: 600; }
-  .msg-content { white-space: pre-wrap; word-wrap: break-word; font-size: 0.9rem; }
+  .msg-content { word-wrap: break-word; font-size: 0.9rem; }
+  .msg-content p { margin: 0.4em 0; }
+  .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 { margin: 0.8em 0 0.3em; }
   .msg-content code { background: #1a1e24; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85em; }
   .msg-content pre { background: #1a1e24; padding: 0.8rem; border-radius: 6px; overflow-x: auto; margin: 0.5rem 0; }
+  .msg-content ul, .msg-content ol { padding-left: 1.5em; margin: 0.3em 0; }
+  .msg-content li { margin: 0.2em 0; }
+  .msg-content blockquote { border-left: 3px solid var(--border); padding-left: 0.8em; color: var(--muted); margin: 0.5em 0; }
+  .msg-content strong { font-weight: 700; }
+  .msg-content table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+  .msg-content th, .msg-content td { border: 1px solid var(--border); padding: 0.4em 0.6em; text-align: left; font-size: 0.85em; }
   .msg-content pre code { background: none; padding: 0; }
 </style>
 </head>
@@ -726,7 +802,7 @@ func renderHTML(buf *bytes.Buffer, d *exportData) {
 			buf.WriteString("    <span class=\"msg-tag\">SIDE CHAT</span>\n")
 		}
 		buf.WriteString("  </div>\n")
-		buf.WriteString(fmt.Sprintf("  <div class=\"msg-content\">%s</div>\n", htmlEscape(e.Content)))
+		buf.WriteString(fmt.Sprintf("  <div class=\"msg-content\">%s</div>\n", simpleMarkdownToHTML(e.Content)))
 		buf.WriteString("</div>\n")
 	}
 	buf.WriteString("</div>\n</div>\n</body>\n</html>\n")

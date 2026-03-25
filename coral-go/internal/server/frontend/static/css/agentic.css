@@ -957,6 +957,14 @@
     padding: 4px 0;
 }
 
+#files-search-results,
+#starred-files-list {
+    flex: none;
+    max-height: 40%;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--border);
+}
+
 .file-empty {
     text-align: center;
     padding: 20px 0;

@@ -771,6 +771,14 @@ function renderExportMarkdown(d) {
     return out;
 }
 
+function _renderMd(text) {
+    if (typeof marked !== 'undefined') {
+        const html = marked.parse(text || '');
+        return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+    }
+    return esc(text);
+}
+
 function renderExportHTML(d) {
     const msgs = d.messages.map(e => {
         const cls = e.source === 'agent-chat' ? 'msg side-chat' : 'msg';
@@ -782,7 +790,7 @@ function renderExportHTML(d) {
     <span class="msg-time">${esc(e.timestamp)}</span>
     ${tag}
   </div>
-  <div class="msg-content">${esc(e.content)}</div>
+  <div class="msg-content">${_renderMd(e.content)}</div>
 </div>`;
     }).join('\n');
 
@@ -816,7 +824,21 @@ function renderExportHTML(d) {
   .msg-role { font-weight: 700; font-size: 0.95rem; }
   .msg-time { color: var(--muted); font-size: 0.8rem; }
   .msg-tag { background: #f0883e33; color: #f0883e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 10px; font-weight: 600; }
-  .msg-content { white-space: pre-wrap; word-wrap: break-word; font-size: 0.9rem; }
+  .msg-content { word-wrap: break-word; font-size: 0.9rem; }
+  .msg-content p { margin: 0.4em 0; }
+  .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 { margin: 0.8em 0 0.3em; font-size: 1.1em; }
+  .msg-content h2 { font-size: 1.05em; }
+  .msg-content h3 { font-size: 1em; }
+  .msg-content code { background: rgba(255,255,255,0.08); padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+  .msg-content pre { background: rgba(0,0,0,0.3); padding: 0.8em; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
+  .msg-content pre code { background: none; padding: 0; }
+  .msg-content ul, .msg-content ol { padding-left: 1.5em; margin: 0.3em 0; }
+  .msg-content li { margin: 0.2em 0; }
+  .msg-content strong { font-weight: 700; }
+  .msg-content blockquote { border-left: 3px solid var(--border); padding-left: 0.8em; color: var(--muted); margin: 0.5em 0; }
+  .msg-content table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+  .msg-content th, .msg-content td { border: 1px solid var(--border); padding: 0.4em 0.6em; text-align: left; font-size: 0.85em; }
+  .msg-content th { background: rgba(0,0,0,0.2); font-weight: 600; }
 </style>
 </head>
 <body>

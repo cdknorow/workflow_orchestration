@@ -233,7 +233,9 @@
                             </label>
                             <div class="team-template-actions">
                                 <button class="btn btn-small btn-subtle" onclick="importTeamTemplates()" title="Import team templates from file">Import Template</button>
+                                <button class="btn btn-small btn-subtle" onclick="window._importTeamFromFolder()" title="Import team from a folder with .md agent files">Import from Folder</button>
                                 <button class="btn btn-small btn-subtle" onclick="window._saveTeamTemplate()" title="Save team configuration as reusable template">Save as Template</button>
+                                <input type="file" id="team-folder-input" webkitdirectory directory multiple style="display:none" onchange="window._handleTeamFolderImport(this)">
                             </div>
                             <div class="team-agents-header">
                                 <strong style="font-size:14px">Team Agents</strong>

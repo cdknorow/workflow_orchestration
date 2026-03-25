@@ -317,6 +317,7 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/system/network-info", sysHandler.NetworkInfo)
 	r.Get("/api/filesystem/list", sysHandler.ListFilesystem)
 	r.Post("/api/indexer/refresh", sysHandler.RefreshIndexer)
+	r.Post("/api/teams/import", sysHandler.ImportTeam)
 
 	// Tags
 	r.Get("/api/tags", sysHandler.ListTags)

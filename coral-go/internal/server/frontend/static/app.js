@@ -112,6 +112,70 @@ Object.assign(window, {
     loadHistoryPage,
 });
 
+// ── Import team from folder ───────────────────────────────────────────
+window._importTeamFromFolder = function() {
+    const input = document.getElementById('team-folder-input');
+    if (input) { input.value = ''; input.click(); }
+};
+
+window._handleTeamFolderImport = async function(input) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    // Parse YAML frontmatter from markdown content
+    function parseFrontmatter(text) {
+        const match = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+        if (!match) return { meta: {}, body: text.trim() };
+        const meta = {};
+        match[1].split('\n').forEach(line => {
+            const m = line.match(/^(\w[\w-]*):\s*(.+)$/);
+            if (m) meta[m[1].trim()] = m[2].trim().replace(/^["']|["']$/g, '');
+        });
+        return { meta, body: match[2].trim() };
+    }
+
+    // Find SKILL.md (orchestrator) and agents/*.md
+    let orchestrator = null;
+    const agents = [];
+
+    for (const file of files) {
+        if (!file.name.endsWith('.md')) continue;
+        const path = file.webkitRelativePath || file.name;
+        const text = await file.text();
+        const { meta, body } = parseFrontmatter(text);
+
+        if (path.match(/SKILL\.md$/i)) {
+            orchestrator = { name: meta.name || 'Orchestrator', prompt: body };
+        } else if (path.match(/agents\//i)) {
+            const name = meta.name || file.name.replace(/\.md$/, '').replace(/-/g, ' ');
+            agents.push({ name, prompt: body });
+        }
+    }
+
+    if (!orchestrator && agents.length === 0) {
+        const { showToast } = await import('./utils.js');
+        showToast('No valid .md files found (expected SKILL.md and/or agents/*.md)', true);
+        return;
+    }
+
+    // Clear existing agents and populate
+    const list = document.getElementById('team-agents-list');
+    if (list) list.innerHTML = '';
+
+    if (orchestrator) {
+        const prompt = orchestrator.prompt + '\n\nCoordinate with the team via the message board.';
+        if (window._addTeamAgent) window._addTeamAgent(orchestrator.name, prompt);
+    }
+    for (const agent of agents) {
+        const prompt = agent.prompt + '\n\nCoordinate with the team via the message board.';
+        if (window._addTeamAgent) window._addTeamAgent(agent.name, prompt);
+    }
+
+    const { showToast } = await import('./utils.js');
+    const count = (orchestrator ? 1 : 0) + agents.length;
+    showToast(`Imported ${count} agent${count !== 1 ? 's' : ''} from folder`);
+};
+
 // Inline helpers that need custom logic (can't be simple re-exports)
 window.toggleSendMenu = function(btn) {
     const menu = btn.parentElement.querySelector('.send-btn-menu');
