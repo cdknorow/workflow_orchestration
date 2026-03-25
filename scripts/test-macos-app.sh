@@ -73,7 +73,7 @@ sleep 1
 # ── Phase 3: Launch coral-tray ─────────────────────────────────────
 echo ""
 info "Launching coral-tray on port $TEST_PORT..."
-"$APP/Contents/MacOS/coral-tray" --foreground --no-browser --dev --debug --port "$TEST_PORT" &
+"$APP/Contents/MacOS/coral-tray" --foreground --no-browser --dev --debug --port "$TEST_PORT" --backend pty &
 TRAY_PID=$!
 info "coral-tray PID: $TRAY_PID"
 
