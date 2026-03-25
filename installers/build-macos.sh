@@ -17,11 +17,12 @@ APP_DIR="$DIST_DIR/Coral.app"
 
 echo "==> Building coral-go for macOS (universal) v${VERSION}"
 
-# Build ldflags — always strip symbols; optionally set Edition/SkipLicense
+# Build ldflags — always strip symbols; inject PostHog key and version for all builds
 LDFLAGS="-s -w"
 POSTHOG_KEY="${CORAL_POSTHOG_KEY:-phc_qXGp75qwDNcETkBDDsptPuP8qAV4nNQPDmTdAC8K9h2}"
+LDFLAGS="$LDFLAGS -X github.com/cdknorow/coral/internal/config.PostHogKey=$POSTHOG_KEY -X github.com/cdknorow/coral/internal/config.Version=$VERSION"
 if [ -n "$CORAL_EDITION" ]; then
-    LDFLAGS="$LDFLAGS -X github.com/cdknorow/coral/internal/config.SkipLicense=true -X github.com/cdknorow/coral/internal/config.Edition=$CORAL_EDITION -X github.com/cdknorow/coral/internal/config.PostHogKey=$POSTHOG_KEY -X github.com/cdknorow/coral/internal/config.Version=$VERSION"
+    LDFLAGS="$LDFLAGS -X github.com/cdknorow/coral/internal/config.SkipLicense=true -X github.com/cdknorow/coral/internal/config.Edition=$CORAL_EDITION"
     echo "==> Edition: $CORAL_EDITION (license skipped)"
 elif [ "${CORAL_DEV:-}" = "1" ]; then
     LDFLAGS="$LDFLAGS -X github.com/cdknorow/coral/internal/config.SkipLicense=true"

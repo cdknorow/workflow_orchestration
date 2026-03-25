@@ -8,7 +8,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/cdknorow/coral/internal/background"
@@ -66,6 +70,42 @@ func Start(ctx context.Context, cfg *config.Config, opts Options) (*RunningServe
 		opts.BackendType = "tmux"
 	}
 
+	// Ensure ~/.coral directory exists before any file operations
+	coralDir := cfg.CoralDir()
+	if err := os.MkdirAll(coralDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create data directory %s: %w", coralDir, err)
+	}
+
+	// Ensure DB parent directory exists (may differ from coralDir if overridden)
+	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %w", err)
+	}
+
+	// Check if tmux is available when using tmux backend
+	if opts.BackendType == "tmux" {
+		if _, err := exec.LookPath("tmux"); err != nil {
+			// Try common install locations
+			found := false
+			for _, p := range []string{"/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux"} {
+				if _, err := os.Stat(p); err == nil {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("tmux is required but not found. Install it with: brew install tmux")
+			}
+		}
+	}
+
+	// Check if port is available
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("port %d is already in use: %w", cfg.Port, err)
+	}
+	ln.Close()
+
 	// Open database
 	db, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -79,7 +119,7 @@ func Start(ctx context.Context, cfg *config.Config, opts Options) (*RunningServe
 	srv := server.New(cfg, db, backend, terminal)
 	srv.RestoreSleepingBoards()
 
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpServer := &http.Server{
 		Addr:         addr,
 		Handler:      srv.Router(),

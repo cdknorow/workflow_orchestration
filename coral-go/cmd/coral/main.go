@@ -19,6 +19,25 @@ import (
 )
 
 func main() {
+	// Panic recovery — write crash info to stderr and ~/.coral/crash.log
+	defer func() {
+		if r := recover(); r != nil {
+			msg := fmt.Sprintf("[CRASH] panic: %v\n", r)
+			os.Stderr.WriteString(msg)
+			home, _ := os.UserHomeDir()
+			if home != "" {
+				crashDir := fmt.Sprintf("%s/.coral", home)
+				os.MkdirAll(crashDir, 0755)
+				f, err := os.OpenFile(crashDir+"/crash.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+				if err == nil {
+					f.WriteString(fmt.Sprintf("%s %s", time.Now().Format(time.RFC3339), msg))
+					f.Close()
+				}
+			}
+			os.Exit(1)
+		}
+	}()
+
 	cfg := config.Load()
 
 	// CLI flags override config
