@@ -538,10 +538,9 @@ export async function showExportBoardModal() {
     const agentCheckboxes = subs.map(s => {
         const role = escapeHtml(s.job_title || s.session_id);
         const sid = escapeAttr(s.session_id);
-        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+        return `<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;white-space:nowrap">
             <input type="checkbox" class="export-agent-cb" value="${sid}" data-role="${escapeAttr(s.job_title || s.session_id)}">
-            <span style="font-weight:600;font-size:13px">${role}</span>
-            <span style="font-size:11px;color:var(--text-muted)">${escapeHtml(s.session_id).substring(0, 20)}...</span>
+            <span style="font-weight:600;font-size:12px">${role}</span>
         </label>`;
     }).join('');
 
