@@ -118,9 +118,14 @@
                             <!-- Files tab -->
                             <div id="agentic-panel-files" class="agentic-panel active">
                                 <div class="changed-files-header" id="changed-files-header">
+                                    <div class="files-search-row">
+                                        <input type="search" id="files-search-input" class="files-search-input" placeholder="Search files..." autocomplete="off">
+                                        <button class="refresh-files-btn" onclick="refreshChangedFiles()" title="Refresh git diff">&#x21bb;</button>
+                                    </div>
                                     <span class="changed-files-title" id="changed-files-title">0 files changed</span>
-                                    <button class="refresh-files-btn" onclick="refreshChangedFiles()" title="Refresh git diff">&#x21bb;</button>
                                 </div>
+                                <div id="files-search-results" class="changed-files-list" style="display:none"></div>
+                                <div id="starred-files-list" class="changed-files-list" style="display:none"></div>
                                 <div class="changed-files-list" id="changed-files-list">
                                     <div class="file-empty">No changed files</div>
                                 </div>

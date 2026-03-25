@@ -4,6 +4,148 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 
 let _currentFiles = [];
+let _searchTimeout = null;
+
+/* ── Starred files (persisted in localStorage per session) ── */
+
+function _starKey() {
+    const sid = state.currentSession && state.currentSession.session_id;
+    return sid ? `coral-starred-files-${sid}` : null;
+}
+
+function _getStarredFiles() {
+    const key = _starKey();
+    if (!key) return [];
+    try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+}
+
+function _setStarredFiles(files) {
+    const key = _starKey();
+    if (key) localStorage.setItem(key, JSON.stringify(files));
+}
+
+export function toggleStarFile(filepath) {
+    const starred = _getStarredFiles();
+    const idx = starred.indexOf(filepath);
+    if (idx >= 0) {
+        starred.splice(idx, 1);
+    } else {
+        starred.push(filepath);
+    }
+    _setStarredFiles(starred);
+    renderStarredFiles();
+    renderChangedFiles();
+    // Re-render search results if visible
+    const searchResults = document.getElementById('files-search-results');
+    if (searchResults && searchResults.style.display !== 'none') {
+        const items = searchResults.querySelectorAll('.file-star-btn');
+        const starredSet = new Set(starred);
+        items.forEach(btn => {
+            const fp = btn.dataset.filepath;
+            btn.classList.toggle('starred', starredSet.has(fp));
+            btn.textContent = starredSet.has(fp) ? '★' : '☆';
+        });
+    }
+}
+
+export function renderStarredFiles() {
+    const container = document.getElementById('starred-files-list');
+    if (!container) return;
+    const starred = _getStarredFiles();
+    if (starred.length === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    container.style.display = '';
+    container.innerHTML = `<div class="starred-section-label">★ Starred</div>` +
+        starred.map(filepath => {
+            const { dir, name } = splitPath(filepath);
+            const escapedPath = escapeHtml(filepath).replace(/'/g, "\\'");
+            const starBtn = `<button class="file-star-btn starred" data-filepath="${escapeHtml(filepath)}" onclick="event.stopPropagation(); toggleStarFile('${escapedPath}')" title="Unstar">★</button>`;
+            const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview"><span class="material-icons">visibility</span></button>`;
+            const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit"><span class="material-icons">edit</span></button>`;
+            return `<div class="file-item file-starred" onclick="openFilePreview('${escapedPath}')">
+                ${starBtn}
+                <div class="file-path-wrap">
+                    <span class="file-name">${escapeHtml(name)}</span>
+                    ${dir ? `<span class="file-dir">${escapeHtml(dir)}</span>` : ''}
+                </div>
+                <div class="file-action-btns">${previewBtn}${editBtn}</div>
+            </div>`;
+        }).join('');
+}
+
+/* ── File search ── */
+
+export async function searchRepoFiles(query) {
+    if (!query || !state.currentSession || state.currentSession.type !== 'live') {
+        const el = document.getElementById('files-search-results');
+        if (el) el.style.display = 'none';
+        return;
+    }
+    const agentName = state.currentSession.name;
+    const params = new URLSearchParams({ q: query });
+    const sid = state.currentSession.session_id;
+    if (sid) params.set('session_id', sid);
+    try {
+        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/search-files?${params}`);
+        const data = await resp.json();
+        _renderSearchResults(data.files || []);
+    } catch {
+        _renderSearchResults([]);
+    }
+}
+
+function _renderSearchResults(files) {
+    const container = document.getElementById('files-search-results');
+    if (!container) return;
+    if (files.length === 0) {
+        container.style.display = '';
+        container.innerHTML = '<div class="file-empty">No matches</div>';
+        return;
+    }
+    const starred = new Set(_getStarredFiles());
+    container.style.display = '';
+    container.innerHTML = files.slice(0, 50).map(filepath => {
+        const { dir, name } = splitPath(filepath);
+        const escapedPath = escapeHtml(filepath).replace(/'/g, "\\'");
+        const isStarred = starred.has(filepath);
+        const starBtn = `<button class="file-star-btn ${isStarred ? 'starred' : ''}" data-filepath="${escapeHtml(filepath)}" onclick="event.stopPropagation(); toggleStarFile('${escapedPath}')" title="${isStarred ? 'Unstar' : 'Star'}">` +
+            `${isStarred ? '★' : '☆'}</button>`;
+        const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview"><span class="material-icons">visibility</span></button>`;
+        return `<div class="file-item" onclick="openFilePreview('${escapedPath}')">
+            ${starBtn}
+            <div class="file-path-wrap">
+                <span class="file-name">${escapeHtml(name)}</span>
+                ${dir ? `<span class="file-dir">${escapeHtml(dir)}</span>` : ''}
+            </div>
+            <div class="file-action-btns">${previewBtn}</div>
+        </div>`;
+    }).join('');
+}
+
+export function initFileSearch() {
+    const input = document.getElementById('files-search-input');
+    if (!input) return;
+    input.addEventListener('input', () => {
+        clearTimeout(_searchTimeout);
+        const q = input.value.trim();
+        if (!q) {
+            const el = document.getElementById('files-search-results');
+            if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+            return;
+        }
+        _searchTimeout = setTimeout(() => searchRepoFiles(q), 200);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            input.value = '';
+            const el = document.getElementById('files-search-results');
+            if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+        }
+    });
+}
 
 export async function loadChangedFiles(agentName, sessionId) {
     if (!agentName) return;
@@ -18,6 +160,7 @@ export async function loadChangedFiles(agentName, sessionId) {
     } catch (e) {
         _currentFiles = [];
     }
+    renderStarredFiles();
     renderChangedFiles();
 }
 
@@ -547,6 +690,7 @@ export async function refreshChangedFiles() {
         if (resp.ok) {
             const data = await resp.json();
             _currentFiles = data.files || [];
+            renderStarredFiles();
             renderChangedFiles();
         } else {
             await loadChangedFiles(agentName, sessionId);
@@ -578,6 +722,7 @@ export function renderChangedFiles() {
         return;
     }
 
+    const starred = new Set(_getStarredFiles());
     list.innerHTML = files.map((f) => {
         const { dir, name } = splitPath(f.filepath);
         const statusCls = getStatusClass(f.status);
@@ -587,12 +732,15 @@ export function renderChangedFiles() {
         const stats = (adds || dels) ? `<span class="file-stats">${adds}${dels}</span>` : '';
         const statusIcon = f.status === '??' ? '?' : f.status === 'A' || f.status === 'AM' ? '+' : f.status === 'D' ? '-' : '~';
         const escapedPath = escapeHtml(f.filepath).replace(/'/g, "\\'");
+        const isStarred = starred.has(f.filepath);
+        const starBtn = `<button class="file-star-btn ${isStarred ? 'starred' : ''}" data-filepath="${escapeHtml(f.filepath)}" onclick="event.stopPropagation(); toggleStarFile('${escapedPath}')" title="${isStarred ? 'Unstar' : 'Star'}">${isStarred ? '★' : '☆'}</button>`;
         const diffBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileDiff('${escapedPath}')" title="Diff"><span class="material-icons">difference</span></button>`;
         const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview"><span class="material-icons">visibility</span></button>`;
         const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit"><span class="material-icons">edit</span></button>`;
 
         return `<div class="file-item ${statusCls}" title="${escapeHtml(f.filepath)} (${statusLabel})"
                      onclick="openFileDiff('${escapedPath}')">
+            ${starBtn}
             <span class="file-status-icon">${statusIcon}</span>
             <div class="file-path-wrap">
                 <span class="file-name">${escapeHtml(name)}</span>

@@ -19,7 +19,7 @@ import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown
 import { loadSessionCommits } from './commits.js';
 import { showTemplateBrowser } from './template_browser.js';
 import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle } from './tasks.js';
-import { loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles } from './changed_files.js';
+import { loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles, toggleStarFile, searchRepoFiles, renderStarredFiles, initFileSearch } from './changed_files.js';
 import { initFileMention } from './file_mention.js';
 import { initCommandMention } from './command_mention.js';
 import { loadAgentNotes, initNotesMd } from './agent_notes.js';
@@ -71,6 +71,7 @@ Object.assign(window, {
     loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag,
     // changed_files
     loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles,
+    toggleStarFile, searchRepoFiles, renderStarredFiles,
     // tasks
     loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle,
     // agent_notes
@@ -620,6 +621,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Image drag-and-drop on command pane
     initImageDrop();
+
+    // File search in files panel
+    initFileSearch();
 
     // @file mention autocomplete
     initFileMention();
