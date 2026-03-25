@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/cdknorow/coral/internal/background"
@@ -29,7 +30,7 @@ type Options struct {
 	BackendType string
 
 	// OnServerError is called when ListenAndServe fails (non-ErrServerClosed).
-	// If nil, log.Fatalf is used.
+	// If nil, log.Printf is used.
 	OnServerError func(err error)
 }
 
@@ -134,7 +135,7 @@ func Start(ctx context.Context, cfg *config.Config, opts Options) (*RunningServe
 	// Start HTTP server in background goroutine
 	onErr := opts.OnServerError
 	if onErr == nil {
-		onErr = func(err error) { log.Fatalf("Server error: %v", err) }
+		onErr = func(err error) { log.Printf("[FATAL] Server error: %v", err) }
 	}
 	go func() {
 		log.Printf("Coral dashboard: http://localhost:%d", cfg.Port)
@@ -163,6 +164,42 @@ func selectBackend(backendType, logDir string) (ptymanager.TerminalBackend, back
 	return tmuxBackend, background.NewTmuxRuntime(tmuxClient), ptymanager.NewTmuxSessionTerminal(tmuxClient)
 }
 
+// safeGo runs fn in a goroutine with panic recovery. If fn panics, the panic
+// and stack trace are logged, and fn is restarted after a short delay. This
+// prevents a single background service crash from taking down the entire
+// server process. When the context is cancelled (normal shutdown), the
+// goroutine exits without restarting.
+func safeGo(ctx context.Context, name string, fn func()) {
+	go func() {
+		for {
+			panicked := false
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						panicked = true
+						log.Printf("[CRASH] background service %q panicked: %v\n%s", name, r, debug.Stack())
+					}
+				}()
+				fn()
+			}()
+			// Normal shutdown — don't restart.
+			if ctx.Err() != nil {
+				return
+			}
+			if !panicked {
+				// fn returned without panic and context isn't done — unexpected.
+				log.Printf("[WARN] background service %q returned unexpectedly", name)
+			}
+			log.Printf("[RESTART] background service %q restarting in 5s...", name)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}()
+}
+
 func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Config, srv *server.Server, agentRT background.AgentRuntime) {
 	gitStore := store.NewGitStore(db)
 	webhookStore := store.NewWebhookStore(db)
@@ -178,7 +215,7 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 
 	// Git poller
 	gitPoller := background.NewGitPoller(gitStore, agentRT, time.Duration(cfg.GitPollerIntervalS)*time.Second)
-	go gitPoller.Run(ctx)
+	safeGo(ctx, "git_poller", func() { gitPoller.Run(ctx) })
 
 	// Session indexer
 	indexer := background.NewSessionIndexer(
@@ -186,18 +223,18 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 		time.Duration(cfg.IndexerIntervalS)*time.Second,
 		time.Duration(cfg.IndexerStartupDelayS)*time.Second,
 	)
-	go indexer.Run(ctx)
+	safeGo(ctx, "session_indexer", func() { indexer.Run(ctx) })
 	srv.SetIndexer(indexer)
 
 	// Idle detector
 	idleDetector := background.NewIdleDetector(taskStore, webhookStore, time.Duration(cfg.IdleDetectorIntervalS)*time.Second)
 	idleDetector.SetSessionStore(sessStore)
 	idleDetector.SetDiscoverFn(discoverFn)
-	go idleDetector.Run(ctx)
+	safeGo(ctx, "idle_detector", func() { idleDetector.Run(ctx) })
 
 	// Webhook dispatcher
 	webhookDispatcher := background.NewWebhookDispatcher(webhookStore, time.Duration(cfg.WebhookDispatcherIntervalS)*time.Second)
-	go webhookDispatcher.Run(ctx)
+	safeGo(ctx, "webhook_dispatcher", func() { webhookDispatcher.Run(ctx) })
 
 	// Job scheduler
 	scheduler := background.NewJobScheduler(schedStore, 30*time.Second)
@@ -206,7 +243,7 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	scheduler.SetSessionStore(sessStore)
 	scheduler.SetRuntime(agentRT)
 	scheduler.SetNextFireTimeFn(background.NextFireTime)
-	go scheduler.Run(ctx)
+	safeGo(ctx, "job_scheduler", func() { scheduler.Run(ctx) })
 	srv.SetScheduler(scheduler)
 
 	// Board notifier
@@ -215,17 +252,17 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	if bh := srv.BoardHandler(); bh != nil {
 		boardNotifier.SetIsPausedFn(bh.IsPaused)
 	}
-	go boardNotifier.Run(ctx)
+	safeGo(ctx, "board_notifier", func() { boardNotifier.Run(ctx) })
 
 	// Remote board poller
 	remotePoller := background.NewRemoteBoardPoller(rbStore, agentRT, 30*time.Second)
 	remotePoller.SetDiscoverFn(discoverFn)
-	go remotePoller.Run(ctx)
+	safeGo(ctx, "remote_board_poller", func() { remotePoller.Run(ctx) })
 
 	// Batch summarizer
 	summarizeFn := background.BuildSummarizeFn(sessStore)
 	batchSummarizer := background.NewBatchSummarizer(sessStore, summarizeFn)
-	go batchSummarizer.Run(ctx)
+	safeGo(ctx, "batch_summarizer", func() { batchSummarizer.Run(ctx) })
 	srv.SetSummarizeFn(summarizeFn)
 
 	log.Printf("Started 8 background services (git poller, indexer, idle detector, webhook dispatcher, scheduler, board notifier, remote board poller, batch summarizer)")

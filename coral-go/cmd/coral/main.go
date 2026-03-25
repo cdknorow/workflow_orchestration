@@ -8,7 +8,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -18,25 +20,37 @@ import (
 	"github.com/cdknorow/coral/internal/tracking"
 )
 
+// setupCrashLogging redirects log output to ~/.coral/coral.log so that panics
+// and errors are captured even when the server runs in the background.
+func setupCrashLogging() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	logDir := filepath.Join(home, ".coral")
+	os.MkdirAll(logDir, 0755)
+	logFile := filepath.Join(logDir, "coral.log")
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	log.SetOutput(f)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+}
+
 func main() {
-	// Panic recovery — write crash info to stderr and ~/.coral/crash.log
+	setupCrashLogging()
+
+	// Global panic recovery — log the full stack trace before exiting
 	defer func() {
 		if r := recover(); r != nil {
-			msg := fmt.Sprintf("[CRASH] panic: %v\n", r)
-			os.Stderr.WriteString(msg)
-			home, _ := os.UserHomeDir()
-			if home != "" {
-				crashDir := fmt.Sprintf("%s/.coral", home)
-				os.MkdirAll(crashDir, 0755)
-				f, err := os.OpenFile(crashDir+"/crash.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-				if err == nil {
-					f.WriteString(fmt.Sprintf("%s %s", time.Now().Format(time.RFC3339), msg))
-					f.Close()
-				}
-			}
+			log.Printf("[FATAL] panic in main: %v\n%s", r, debug.Stack())
 			os.Exit(1)
 		}
 	}()
+
+	log.Printf("[STARTUP] coral server starting pid=%d go=%s os=%s arch=%s",
+		os.Getpid(), runtime.Version(), runtime.GOOS, runtime.GOARCH)
 
 	cfg := config.Load()
 
