@@ -134,6 +134,8 @@ func main() {
 		cmdLeave()
 	case "delete":
 		cmdDelete()
+	case "export":
+		cmdExport()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		printUsage()
@@ -153,6 +155,7 @@ Commands:
   subscribers                  List board subscribers
   leave                        Unsubscribe from board
   delete                       Delete board and messages
+  export [--output FILE]       Export full chat as markdown
 
 Environment:
   CORAL_URL   Server URL (default http://localhost:8420)
@@ -372,4 +375,93 @@ func cmdDelete() {
 	apiCall("DELETE", "/"+st.Project, nil)
 	deleteState()
 	fmt.Printf("Deleted board '%s'\n", st.Project)
+}
+
+func cmdExport() {
+	st := loadState()
+	if st == nil {
+		fmt.Fprintln(os.Stderr, "Not subscribed to any board.")
+		os.Exit(1)
+	}
+
+	// Parse --output flag
+	outputFile := ""
+	for i, arg := range os.Args {
+		if arg == "--output" && i+1 < len(os.Args) {
+			outputFile = os.Args[i+1]
+		}
+	}
+
+	// Fetch all messages
+	resp, err := http.Get(serverURL + "/api/board/" + st.Project + "/messages/all?limit=10000")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	data, _ := io.ReadAll(resp.Body)
+	var messages []map[string]any
+	json.Unmarshal(data, &messages)
+
+	if len(messages) == 0 {
+		fmt.Fprintln(os.Stderr, "No messages to export.")
+		os.Exit(0)
+	}
+
+	// Get subscribers for context
+	subsResp, _ := http.Get(serverURL + "/api/board/" + st.Project + "/subscribers")
+	var subscribers []map[string]any
+	if subsResp != nil {
+		subsData, _ := io.ReadAll(subsResp.Body)
+		subsResp.Body.Close()
+		json.Unmarshal(subsData, &subscribers)
+	}
+
+	// Build markdown
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("# Board Chat Export: %s\n\n", st.Project))
+	buf.WriteString(fmt.Sprintf("**Exported**: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	buf.WriteString(fmt.Sprintf("**Messages**: %d\n", len(messages)))
+
+	if len(subscribers) > 0 {
+		buf.WriteString(fmt.Sprintf("**Subscribers**: %d\n\n", len(subscribers)))
+		buf.WriteString("| Agent | Role |\n|-------|------|\n")
+		for _, s := range subscribers {
+			sid, _ := s["session_id"].(string)
+			role, _ := s["job_title"].(string)
+			if role == "" {
+				role = sid
+			}
+			buf.WriteString(fmt.Sprintf("| %s | %s |\n", sid, role))
+		}
+	}
+
+	buf.WriteString("\n---\n\n## Messages\n\n")
+
+	for _, m := range messages {
+		ts, _ := m["created_at"].(string)
+		if len(ts) > 16 {
+			ts = ts[:16]
+		}
+		role, _ := m["job_title"].(string)
+		if role == "" {
+			role, _ = m["session_id"].(string)
+		}
+		content, _ := m["content"].(string)
+
+		buf.WriteString(fmt.Sprintf("**[%s] %s:**\n\n", ts, role))
+		buf.WriteString(content)
+		buf.WriteString("\n\n---\n\n")
+	}
+
+	if outputFile != "" {
+		if err := os.WriteFile(outputFile, buf.Bytes(), 0644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Exported %d messages to %s\n", len(messages), outputFile)
+	} else {
+		fmt.Print(buf.String())
+	}
 }
