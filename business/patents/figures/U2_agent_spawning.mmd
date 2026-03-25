@@ -1,0 +1,43 @@
+%% FIGURE U2 — Agent Spawning Flowchart
+%% Patent: System and Method for Multi-Agent AI Orchestration
+%% Method flow for Claim 1 — Dynamic AI Agent Team Formation
+
+flowchart TD
+    START([START:<br/>User submits team<br/>configuration via<br/>dashboard UI])
+    --> PARSE["Parse team configuration:<br/>team identifier, agent definitions<br/>(role + behavior prompt each)"]
+    --> LOOP{More agents<br/>to provision?}
+
+    LOOP -->|Yes| PROVISION["Provision isolated<br/>execution environment:<br/>create or select a<br/>version-controlled<br/>working copy branched<br/>from shared repository"]
+    --> ASSIGN_ID["Assign unique<br/>session identifier<br/>(canonical reference across<br/>all system components)"]
+    --> CREATE_TERM["Create terminal<br/>multiplexer session<br/>rooted in agent's<br/>working directory"]
+    --> CONFIG_OUTPUT["Configure output capture:<br/>redirect terminal output<br/>to persistent log stream"]
+    --> WRITE_STATE["Write communication<br/>state file with<br/>project name, role,<br/>and session identifier"]
+    --> LAUNCH["Launch agent process<br/>with merged configuration:<br/>protocol specification +<br/>session ID + behavior prompt +<br/>monitoring hooks"]
+    --> REGISTER["Register session in<br/>persistent data store<br/>(type, environment path,<br/>prompt, board assignment)"]
+    --> SUBSCRIBE{"Agent is part<br/>of a team?"}
+
+    SUBSCRIBE -->|Yes| CHOOSE_MODE{"Agent role is<br/>leadership?"}
+    CHOOSE_MODE -->|Yes| SUB_ALL["Subscribe to message board<br/>with receive mode:<br/><b>all messages</b>"]
+    CHOOSE_MODE -->|No| SUB_MENTIONS["Subscribe to message board<br/>with receive mode:<br/><b>mentions only</b>"]
+
+    SUB_ALL --> SEND_PROMPT["Transmit behavior prompt<br/>to agent process<br/>(agent adopts assigned role)"]
+    SUB_MENTIONS --> SEND_PROMPT
+
+    SUBSCRIBE -->|No| SEND_PROMPT_SOLO["Transmit behavior prompt<br/>to agent process"]
+    SEND_PROMPT_SOLO --> LOOP
+
+    SEND_PROMPT --> LOOP
+
+    LOOP -->|No, all<br/>agents provisioned| RENDER["Render unified team<br/>representation in dashboard:<br/>collapsible group element with<br/>accent-colored border,<br/>member count, and<br/>collective controls<br/>(sleep / wake / terminate)"]
+    --> DONE([END:<br/>Team active and<br/>visible in dashboard])
+
+    %% Styling
+    classDef startEnd fill:#2B4C7E,stroke:#1A365D,color:#FFFFFF,stroke-width:2px
+    classDef process fill:#3D6098,stroke:#2B4C7E,color:#FFFFFF,stroke-width:1px
+    classDef decision fill:#8B6914,stroke:#6B4F10,color:#FFFFFF,stroke-width:2px
+    classDef subscribe fill:#4A7C59,stroke:#2D5A3D,color:#FFFFFF,stroke-width:1px
+
+    class START,DONE startEnd
+    class PARSE,PROVISION,ASSIGN_ID,CREATE_TERM,CONFIG_OUTPUT,WRITE_STATE,LAUNCH,REGISTER,SEND_PROMPT,SEND_PROMPT_SOLO,RENDER process
+    class LOOP,SUBSCRIBE,CHOOSE_MODE decision
+    class SUB_ALL,SUB_MENTIONS subscribe

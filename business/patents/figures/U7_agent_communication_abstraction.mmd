@@ -1,0 +1,78 @@
+%% FIGURE U7 — Agent Communication Abstraction Layer
+%% Patent: System and Method for Multi-Agent AI Orchestration
+%% Illustrates Claims 26 (Self-Contained Behavior Prompts) and 27 (CLI Abstraction Layer)
+%% Key message: Any AI agent that can run CLI commands can participate
+%% without understanding the orchestration infrastructure.
+
+graph TB
+    subgraph CLAIM26["CLAIM 26 — SELF-CONTAINED BEHAVIOR PROMPT"]
+        direction TB
+
+        ROLE["Role Designation<br/><i>'Lead Developer'</i>"]
+        TASK["Task Scope<br/><i>'Build the auth<br/>middleware'</i>"]
+        CLI_INST["Communication<br/>Instructions<br/><i>'Use read/post<br/>commands to<br/>coordinate'</i>"]
+        COLLAB["Collaboration<br/>Protocol<br/><i>'Check for messages<br/>from teammates'</i>"]
+
+        MERGE(("MERGE<br/>INTO<br/>SINGLE<br/>PROMPT"))
+
+        ROLE --> MERGE
+        TASK --> MERGE
+        CLI_INST --> MERGE
+        COLLAB --> MERGE
+
+        PROMPT["Self-Contained<br/>Behavior Prompt<br/>━━━━━━━━━━━━━━━━<br/>Contains everything<br/>the agent needs:<br/>• Who it is<br/>• What to do<br/>• How to communicate<br/>• How to collaborate<br/>━━━━━━━━━━━━━━━━<br/><b>No system knowledge<br/>required</b>"]
+
+        MERGE --> PROMPT
+    end
+
+    subgraph CLAIM27A["CLAIM 27 — STATE FILE PRE-CONFIGURATION"]
+        direction TB
+
+        SYS["Orchestration<br/>System"]
+        STATE["State File<br/>━━━━━━━━━━━━━━━━<br/>• Server address<br/>• Session identifier<br/>• Project name<br/>━━━━━━━━━━━━━━━━<br/><i>Written BEFORE<br/>agent launches</i>"]
+
+        SYS -->|"Writes<br/>automatically"| STATE
+
+        AGENT_CLI["Agent's CLI Commands<br/>━━━━━━━━━━━━━━━━<br/><b>read</b> — get new messages<br/><b>post</b> — send a message<br/><b>subscribers</b> — see teammates<br/>━━━━━━━━━━━━━━━━<br/><i>No URLs, no IDs, no<br/>project names needed</i>"]
+
+        STATE -->|"CLI reads<br/>params from<br/>state file"| AGENT_CLI
+    end
+
+    subgraph CLAIM27B["CLAIM 27 — SERVER-SIDE CURSOR MANAGEMENT"]
+        direction TB
+
+        AGENT_READ["Agent calls:<br/><b>read</b>"]
+        SERVER["Server handles<br/>transparently:<br/>━━━━━━━━━━━━━━━━<br/>1. Retrieve cursor position<br/>2. Query new messages<br/>3. Filter out self-messages<br/>4. Advance cursor<br/>5. Return results<br/>━━━━━━━━━━━━━━━━<br/><i>Agent never sees<br/>cursor state</i>"]
+        MESSAGES["Agent receives:<br/><b>New messages<br/>from teammates</b>"]
+
+        AGENT_READ --> SERVER --> MESSAGES
+    end
+
+    subgraph RESULT["ANY AI AGENT CAN PARTICIPATE"]
+        direction TB
+        R1["The agent receives a<br/><b>self-contained prompt</b><br/>(Claim 26)"]
+        R2["Connection params are<br/><b>pre-configured</b> via state file<br/>(Claim 27)"]
+        R3["Cursor management is<br/><b>handled server-side</b><br/>(Claim 27)"]
+        R4["<b>Result:</b> Any AI model that<br/>can run CLI commands can<br/>join a team and collaborate<br/>— zero system knowledge,<br/>zero integration required"]
+    end
+
+    PROMPT -->|"Transmitted<br/>to agent<br/>at launch"| AGENT_CLI
+    AGENT_CLI --> AGENT_READ
+    MESSAGES -.->|"Agent operates<br/>autonomously in<br/>its assigned role"| R4
+
+    %% Styling
+    classDef input fill:#3D6098,stroke:#2B4C7E,color:#FFFFFF,stroke-width:1px
+    classDef merge fill:#8B6914,stroke:#6B4F10,color:#FFFFFF,stroke-width:2px
+    classDef prompt fill:#4A7C59,stroke:#2D5A3D,color:#FFFFFF,stroke-width:2px
+    classDef system fill:#2B4C7E,stroke:#1A365D,color:#FFFFFF,stroke-width:1px
+    classDef cli fill:#6B5B73,stroke:#4A3D52,color:#FFFFFF,stroke-width:1px
+    classDef server fill:#3D6098,stroke:#2B4C7E,color:#FFFFFF,stroke-width:1px
+    classDef result fill:#1a3a1a,stroke:#2D5A3D,color:#FFFFFF,stroke-width:2px
+
+    class ROLE,TASK,CLI_INST,COLLAB input
+    class MERGE merge
+    class PROMPT prompt
+    class SYS,STATE system
+    class AGENT_CLI,AGENT_READ cli
+    class SERVER server
+    class MESSAGES,R1,R2,R3,R4 result

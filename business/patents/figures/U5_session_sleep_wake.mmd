@@ -1,0 +1,55 @@
+%% FIGURE U5 — Session Sleep/Wake State Diagram
+%% Patent: System and Method for Multi-Agent AI Orchestration
+%% State diagram for Claim 4 — Agent Session Persistence with Team State Replay
+
+stateDiagram-v2
+    [*] --> Active: Agent spawned and registered
+
+    Active --> Sleeping: Sleep Command
+    Sleeping --> Active: Wake Command
+    Active --> Terminated: Terminate Command
+    Sleeping --> Terminated: Terminate Command
+    Terminated --> [*]
+
+    state Active {
+        [*] --> Running
+        Running: Agent process executing
+    }
+
+    state Sleeping {
+        [*] --> Suspended
+        Suspended: Process not running, session record preserved
+    }
+
+    state Terminated {
+        [*] --> Archived
+        Archived: Session in history store
+    }
+
+    note right of Active
+        Running state:
+        - Board subscribed and reading
+        - Status events being extracted
+        - Visible in dashboard
+        - Responding to commands
+    end note
+
+    note right of Sleeping
+        Preserved on sleep:
+        - Session record
+        - Behavior prompt
+        - Board subscription
+        - Read cursor position
+        - Execution environment path
+
+        Available on wake:
+        - All messages posted during suspension
+        - Cursor-based catch-up read
+    end note
+
+    note right of Terminated
+        Archived state:
+        - Full-text search indexed
+        - Activity timeline preserved
+        - No active process or subscription
+    end note

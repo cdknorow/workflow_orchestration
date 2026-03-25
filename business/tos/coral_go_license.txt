@@ -1,0 +1,8 @@
+Copyright (c) 2026 Subgentic.ai. All Rights Reserved.
+
+This software is proprietary and confidential. Unauthorized copying,
+distribution, modification, or use of this software, via any medium,
+is strictly prohibited.
+
+Use of this software is subject to the End User License Agreement (EULA)
+available at [EULA URL].

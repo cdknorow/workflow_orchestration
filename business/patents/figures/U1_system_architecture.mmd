@@ -1,0 +1,101 @@
+%% FIGURE U1 — System Architecture Diagram
+%% Patent: System and Method for Multi-Agent AI Orchestration
+%% Block diagram showing major system components and data flow
+
+graph TB
+    subgraph OPERATOR["OPERATOR INTERFACE"]
+        WD["Web Dashboard<br/><i>Real-Time Monitoring &amp; Control</i>"]
+    end
+
+    subgraph CORE["ORCHESTRATION ENGINE"]
+        APM["Agent Process<br/>Manager"]
+        ISEE["Inline Status<br/>Extraction Engine"]
+        SPL["Session Persistence<br/>Layer"]
+        MBS["Message Board<br/>System"]
+    end
+
+    subgraph AGENTS["AGENT EXECUTION LAYER"]
+        subgraph ENV1["Isolated Execution<br/>Environment 1"]
+            A1["Agent Process<br/>(Type A)"]
+            TS1["Terminal<br/>Session"]
+            LS1["Log<br/>Stream"]
+        end
+        subgraph ENV2["Isolated Execution<br/>Environment 2"]
+            A2["Agent Process<br/>(Type A)"]
+            TS2["Terminal<br/>Session"]
+            LS2["Log<br/>Stream"]
+        end
+        subgraph ENV3["Isolated Execution<br/>Environment N"]
+            A3["Agent Process<br/>(Type B)"]
+            TS3["Terminal<br/>Session"]
+            LS3["Log<br/>Stream"]
+        end
+    end
+
+    subgraph STORAGE["PERSISTENT DATA STORE"]
+        DB[("Session Records<br/>Event History<br/>Message Board Data")]
+    end
+
+    subgraph VCS["VERSION-CONTROLLED REPOSITORY"]
+        REPO["Shared Repository"]
+        WC1["Working Copy 1<br/>(Branch A)"]
+        WC2["Working Copy 2<br/>(Branch B)"]
+        WC3["Working Copy N<br/>(Branch C)"]
+    end
+
+    %% Operator interactions
+    WD -->|"Commands &amp;<br/>Team Config"| APM
+    WD <-->|"Push-Based<br/>Real-Time Updates"| ISEE
+    WD <-->|"Board Messages<br/>&amp; Status"| MBS
+
+    %% Agent Process Manager flows
+    APM -->|"Spawn &amp;<br/>Configure"| TS1
+    APM -->|"Spawn &amp;<br/>Configure"| TS2
+    APM -->|"Spawn &amp;<br/>Configure"| TS3
+    APM <-->|"Register &amp;<br/>Query Sessions"| SPL
+
+    %% Terminal to Log Stream
+    A1 --- TS1
+    TS1 -->|"Output<br/>Capture"| LS1
+    A2 --- TS2
+    TS2 -->|"Output<br/>Capture"| LS2
+    A3 --- TS3
+    TS3 -->|"Output<br/>Capture"| LS3
+
+    %% Status extraction
+    LS1 -->|"Scan &amp;<br/>Extract"| ISEE
+    LS2 -->|"Scan &amp;<br/>Extract"| ISEE
+    LS3 -->|"Scan &amp;<br/>Extract"| ISEE
+
+    %% Message board communication
+    A1 <-->|"CLI"| MBS
+    A2 <-->|"CLI"| MBS
+    A3 <-->|"CLI"| MBS
+
+    %% Persistence
+    SPL <-->|"Read/Write"| DB
+    ISEE -->|"Store Events"| DB
+    MBS <-->|"Store/Query<br/>Messages"| DB
+
+    %% Version control
+    REPO --- WC1
+    REPO --- WC2
+    REPO --- WC3
+    WC1 -.- ENV1
+    WC2 -.- ENV2
+    WC3 -.- ENV3
+
+    %% Styling
+    classDef operator fill:#2B4C7E,stroke:#1A365D,color:#FFFFFF,stroke-width:2px
+    classDef core fill:#3D6098,stroke:#2B4C7E,color:#FFFFFF,stroke-width:2px
+    classDef agent fill:#4A7C59,stroke:#2D5A3D,color:#FFFFFF,stroke-width:2px
+    classDef terminal fill:#5C8A6B,stroke:#4A7C59,color:#FFFFFF,stroke-width:1px
+    classDef storage fill:#8B6914,stroke:#6B4F10,color:#FFFFFF,stroke-width:2px
+    classDef vcs fill:#6B5B73,stroke:#4A3D52,color:#FFFFFF,stroke-width:2px
+
+    class WD operator
+    class APM,ISEE,SPL,MBS core
+    class A1,A2,A3 agent
+    class TS1,TS2,TS3,LS1,LS2,LS3 terminal
+    class DB storage
+    class REPO,WC1,WC2,WC3 vcs
