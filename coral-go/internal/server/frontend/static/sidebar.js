@@ -307,6 +307,7 @@ export function initAgenticBlockResize() {
         handle.classList.remove('dragging');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        fitTerminal();
     });
 
     // Restore saved ratio
