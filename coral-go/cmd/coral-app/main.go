@@ -133,10 +133,16 @@ func main() {
 	setupNativeTitlebar()
 	log.Println("[WEBVIEW] titlebar setup complete")
 
-	// Inject native app flag so frontend can adjust styling (title bar padding, drag regions)
-	// Also intercept external links and open them in the system browser.
+	// Inject native app flag and apply classes SYNCHRONOUSLY on <html> element.
+	// documentElement exists before CSS is evaluated, ensuring -webkit-app-region: drag
+	// and WKWebView layout fixes are active from the first layout pass.
+	// Also applies on <body> at DOMContentLoaded as a safety net.
 	log.Println("[WEBVIEW] injecting native app JS (class flags, external link handler)")
-	w.Init(`window.__CORAL_APP__ = true; document.addEventListener('DOMContentLoaded', function() {
+	w.Init(`window.__CORAL_APP__ = true;
+	document.documentElement.classList.add('native-app');
+	if (navigator.platform && navigator.platform.indexOf('Mac') !== -1) document.documentElement.classList.add('native-macos');
+	if (navigator.platform && navigator.platform.indexOf('Win') !== -1) document.documentElement.classList.add('native-windows');
+	document.addEventListener('DOMContentLoaded', function() {
 		document.body.classList.add('native-app');
 		if (navigator.platform && navigator.platform.indexOf('Mac') !== -1) document.body.classList.add('native-macos');
 		if (navigator.platform && navigator.platform.indexOf('Win') !== -1) document.body.classList.add('native-windows');
