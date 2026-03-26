@@ -325,33 +325,21 @@ export function initAgenticBlockResize() {
 
 export function initAgenticBlockCollapse() {
     const blocks = document.querySelectorAll('.agentic-block');
-    const STORAGE = 'coral-block-collapsed';
 
-    function getSaved() {
-        try { return JSON.parse(localStorage.getItem(STORAGE) || '{}'); } catch { return {}; }
-    }
-
-    const saved = getSaved();
+    // Clear any stale collapsed state from localStorage — the hidden
+    // double-click-to-collapse behavior confused users into permanently
+    // hiding the panel with no obvious way to restore it.
+    localStorage.removeItem('coral-block-collapsed');
 
     for (const block of blocks) {
         const tabs = block.querySelector('.agentic-state-tabs');
         if (!tabs) continue;
 
-        const id = block.id;
-
-        // Restore saved state
-        if (saved[id]) {
-            block.classList.add('collapsed');
-        }
-
         tabs.addEventListener('dblclick', (e) => {
             // Don't toggle if clicking a specific tab button
             if (e.target.closest('.agentic-tab')) return;
-
-            const isCollapsed = block.classList.toggle('collapsed');
-            const state = getSaved();
-            state[id] = isCollapsed;
-            localStorage.setItem(STORAGE, JSON.stringify(state));
+            // Toggle collapsed state (session-only, not persisted)
+            block.classList.toggle('collapsed');
         });
     }
 }

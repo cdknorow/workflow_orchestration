@@ -404,6 +404,8 @@ export function switchAgenticTab(tabName, blockId) {
         : document.getElementById(`agentic-tab-${tabName}`)?.closest('.agentic-block');
 
     if (block) {
+        // Clicking a tab means the user wants to see content — uncollapse
+        block.classList.remove('collapsed');
         block.querySelectorAll('.agentic-tab').forEach(btn => btn.classList.remove('active'));
         block.querySelectorAll('.agentic-panel').forEach(panel => panel.classList.remove('active'));
     }
