@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 
 	"github.com/go-chi/chi/v5"
@@ -232,8 +233,13 @@ func (s *Server) buildRouter() chi.Router {
 
 	// License endpoints (ungated — must be accessible to activate)
 	licRoutes := license.NewRoutes(s.licenseMgr)
+	if secret := os.Getenv("CORAL_LS_WEBHOOK_SECRET"); secret != "" {
+		licRoutes.SetWebhookSecret(secret)
+	}
 	r.Post("/api/license/activate", licRoutes.Activate)
+	r.Post("/api/license/deactivate", licRoutes.Deactivate)
 	r.Get("/api/license/status", licRoutes.Status)
+	r.Post("/api/license/webhook", licRoutes.Webhook)
 
 	// Auth endpoints
 	authRoutes := auth.NewRoutes(s.keyStore)

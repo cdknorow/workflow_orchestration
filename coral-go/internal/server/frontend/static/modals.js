@@ -1950,7 +1950,63 @@ export async function showSettingsModal() {
     const scrollbarsCheck = document.getElementById("settings-show-scrollbars");
     if (scrollbarsCheck) scrollbarsCheck.checked = s.show_scrollbars !== false;
 
+    // License status
+    _loadLicenseStatus();
+
     document.getElementById("settings-modal").style.display = "flex";
+}
+
+async function _loadLicenseStatus() {
+    const container = document.getElementById('license-status-display');
+    if (!container) return;
+    try {
+        const resp = await fetch('/api/license/status');
+        if (!resp.ok) throw new Error('fetch failed');
+        const data = await resp.json();
+        if (data.activated && data.valid) {
+            const email = escapeHtml(data.customer_email || '');
+            const name = escapeHtml(data.customer_name || '');
+            const activated = data.activated_at ? new Date(data.activated_at).toLocaleDateString() : '';
+            const validated = data.last_validated ? new Date(data.last_validated).toLocaleDateString() : '';
+            const revalDays = data.days_until_revalidation;
+            const revalText = revalDays != null ? `${revalDays} day${revalDays !== 1 ? 's' : ''}` : '';
+            const machineId = escapeHtml(data.machine_id || '');
+            container.innerHTML = `
+                <dl class="info-grid" style="margin:0">
+                    <dt>Status</dt><dd><span style="color:var(--green, #4caf50);font-weight:600">Active</span></dd>
+                    ${name ? `<dt>Name</dt><dd>${name}</dd>` : ''}
+                    ${email ? `<dt>Email</dt><dd>${email}</dd>` : ''}
+                    ${activated ? `<dt>Activated</dt><dd>${activated}</dd>` : ''}
+                    ${validated ? `<dt>Last Validated</dt><dd>${validated}</dd>` : ''}
+                    ${revalText ? `<dt>Next Revalidation</dt><dd>${revalText}</dd>` : ''}
+                    ${machineId ? `<dt>Machine ID</dt><dd><code style="font-size:11px;color:var(--text-secondary)">${machineId}</code></dd>` : ''}
+                </dl>
+                <button class="btn btn-small" onclick="_deactivateLicense()" style="margin-top:8px;color:var(--text-secondary)">Deactivate</button>`;
+        } else if (data.activated && !data.valid) {
+            container.innerHTML = `<span style="color:var(--red, #f44336);font-size:13px;font-weight:600">License expired or invalid</span>
+                <button class="btn btn-small" onclick="_deactivateLicense()" style="margin-top:8px">Deactivate</button>`;
+        } else {
+            container.innerHTML = `<span style="color:var(--text-secondary);font-size:13px">Not activated</span>`;
+        }
+    } catch {
+        container.innerHTML = `<span style="color:var(--text-secondary);font-size:13px">Unable to check license</span>`;
+    }
+}
+
+export async function deactivateLicense() {
+    if (!confirm('Deactivate this license? You can reactivate on another machine.')) return;
+    try {
+        const resp = await fetch('/api/license/deactivate', { method: 'POST' });
+        if (resp.ok) {
+            showToast('License deactivated');
+            _loadLicenseStatus();
+        } else {
+            const data = await resp.json().catch(() => ({}));
+            showToast(data.error || 'Deactivation failed', true);
+        }
+    } catch {
+        showToast('Deactivation failed', true);
+    }
 }
 
 export function hideSettingsModal() {

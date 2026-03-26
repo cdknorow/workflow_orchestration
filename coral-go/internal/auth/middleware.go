@@ -25,10 +25,11 @@ func Middleware(ks *KeyStore) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Allow auth page, static assets, and manifest
+			// Allow auth page, static assets, manifest, and license webhook
 			path := r.URL.Path
 			if path == "/auth" || strings.HasPrefix(path, "/static/") ||
-				path == "/manifest.json" || path == "/favicon.ico" {
+				path == "/manifest.json" || path == "/favicon.ico" ||
+				path == "/api/license/webhook" {
 				next.ServeHTTP(w, r)
 				return
 			}
