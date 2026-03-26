@@ -57,10 +57,12 @@ type JobScheduler struct {
 	maxConcurrent  int
 	interval       time.Duration
 	logger         *slog.Logger
+	parentCtx      context.Context // set by Run(); used by launchAndWatch for shutdown
 	runningMu      sync.Mutex
 	running        map[int64]context.CancelFunc // run_id -> cancel func for watchdog
 	launchFn       func(ctx context.Context, job store.ScheduledJob, runID int64) error
 	nextFireTimeFn func(cronExpr, tz string, after time.Time) (time.Time, error)
+	webhookSem     chan struct{} // limits concurrent webhook dispatch goroutines
 }
 
 // NewJobScheduler creates a new JobScheduler.
@@ -77,6 +79,7 @@ func NewJobScheduler(schedStore *store.ScheduleStore, interval time.Duration) *J
 		interval:      interval,
 		logger:        slog.Default().With("service", "job_scheduler"),
 		running:       make(map[int64]context.CancelFunc),
+		webhookSem:    make(chan struct{}, 10), // limit to 10 concurrent webhook dispatches
 	}
 }
 
@@ -109,6 +112,7 @@ func (s *JobScheduler) RunningCount() int {
 
 // Run starts the scheduler loop.
 func (s *JobScheduler) Run(ctx context.Context) error {
+	s.parentCtx = ctx // store for launchAndWatch goroutines
 	s.logger.Info("scheduler started", "interval", s.interval, "max_concurrent", s.maxConcurrent)
 
 	// Reap stale runs from a previous crash
@@ -403,7 +407,12 @@ func (s *JobScheduler) KillRun(ctx context.Context, runID int64) bool {
 // launchAndWatch is the core goroutine that creates worktrees, launches agents,
 // monitors via watchdog, fires webhooks, and cleans up.
 func (s *JobScheduler) launchAndWatch(runID int64, job store.ScheduledJob, rc runConfig) {
-	ctx := context.Background()
+	// Use the scheduler's parent context so goroutines cancel on shutdown.
+	// Falls back to Background if Run() hasn't been called (e.g., FireOneshot).
+	ctx := s.parentCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	maxDur := rc.maxDurationS
 	if maxDur == 0 {
 		maxDur = 3600
@@ -588,6 +597,10 @@ func (s *JobScheduler) fireWebhookForRun(runID int64) {
 	}
 
 	go func() {
+		// Acquire semaphore to limit concurrent webhook goroutines
+		s.webhookSem <- struct{}{}
+		defer func() { <-s.webhookSem }()
+
 		body, err := json.Marshal(payload)
 		if err != nil {
 			return

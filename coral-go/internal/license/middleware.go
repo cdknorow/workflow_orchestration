@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -141,9 +142,10 @@ func (lr *Routes) Status(w http.ResponseWriter, r *http.Request) {
 // Deactivate handles POST /api/license/deactivate
 func (lr *Routes) Deactivate(w http.ResponseWriter, r *http.Request) {
 	if err := lr.mgr.Deactivate(); err != nil {
+		log.Printf("[license] deactivation failed: %v", err)
 		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":    false,
-			"error": err.Error(),
+			"error": "deactivation failed — check your network connection and try again",
 		})
 		return
 	}

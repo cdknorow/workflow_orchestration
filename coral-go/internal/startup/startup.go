@@ -129,10 +129,11 @@ func Start(ctx context.Context, cfg *config.Config, opts Options) (*RunningServe
 	reconcileOrphanedSessions(ctx, db, agentRT)
 
 	httpServer := &http.Server{
-		Handler:      srv.Router(),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 0, // Disabled for WebSocket/SSE
-		IdleTimeout:  60 * time.Second,
+		Handler:           srv.Router(),
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second, // Prevents slowloris attacks
+		WriteTimeout:      0,                // Disabled for WebSocket/SSE
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// Start all background services
