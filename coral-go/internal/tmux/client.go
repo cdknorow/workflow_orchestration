@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -34,7 +35,9 @@ type Client struct {
 	FallbackToDefault bool
 	// sessionSockets caches which socket each session was found on.
 	// Populated by ListPanes, used by runForTarget to route commands.
+	// Protected by socketsMu since multiple goroutines access this map.
 	sessionSockets map[string]string
+	socketsMu      sync.RWMutex
 }
 
 // NewClient creates a new tmux Client.
@@ -85,9 +88,11 @@ func (c *Client) ListPanes(ctx context.Context) ([]Pane, error) {
 	}
 
 	// Cache which socket each session lives on
+	c.socketsMu.Lock()
 	for _, p := range panes {
 		c.sessionSockets[p.SessionName] = p.SocketPath
 	}
+	c.socketsMu.Unlock()
 
 	return panes, nil
 }
@@ -506,7 +511,10 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 			if arg == "-t" && i+1 < len(args) {
 				target := args[i+1]
 				session := sessionFromTarget(target)
-				if socket, ok := c.sessionSockets[session]; ok && socket != c.SocketPath {
+				c.socketsMu.RLock()
+				socket, ok := c.sessionSockets[session]
+				c.socketsMu.RUnlock()
+				if ok && socket != c.SocketPath {
 					return c.runOnSocket(ctx, socket, args...)
 				}
 				break
