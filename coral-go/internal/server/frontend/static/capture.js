@@ -77,8 +77,12 @@ export async function refreshCapture() {
     // Skip this check in native apps — WKWebView can report document.hidden=true
     // permanently due to NSWindowStyleMaskFullSizeContentView, which blocks all
     // subsequent polls and leaves the agentic state panel blank.
-    if (!platform.isNative && document.hidden && _refreshCaptureHasRun) return;
+    if (!platform.isNative && document.hidden && _refreshCaptureHasRun) {
+        console.log('[CORAL-DEBUG] refreshCapture skipped: hidden=' + document.hidden + ' native=' + platform.isNative);
+        return;
+    }
     _refreshCaptureHasRun = true;
+    console.log('[CORAL-DEBUG] refreshCapture running: hidden=' + document.hidden + ' native=' + platform.isNative);
 
     try {
         const params = new URLSearchParams();

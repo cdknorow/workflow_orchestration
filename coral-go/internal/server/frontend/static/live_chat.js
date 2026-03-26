@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
+import { platform } from './platform/detect.js';
 
 let historyPollInterval = null;
 let historyMessageCount = 0;
@@ -188,7 +189,7 @@ function renderMessage(msg, container) {
 
 export async function refreshLiveHistory() {
     if (!state.currentSession || state.currentSession.type !== "live") return;
-    if (document.hidden) return;
+    if (!platform.isNative && document.hidden) return;
 
     const session = state.currentSession;
     if (!session.session_id) return;

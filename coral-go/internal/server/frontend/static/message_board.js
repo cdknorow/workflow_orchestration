@@ -2,6 +2,7 @@
 
 import { escapeHtml, escapeAttr, showView } from './utils.js';
 import { loadLiveSessions } from './api.js';
+import { platform } from './platform/detect.js';
 
 let currentProject = null;
 let pollTimer = null;
@@ -451,7 +452,7 @@ function startBoardPoll() {
     stopBoardPoll();
     _pollCount = 0;
     pollTimer = setInterval(() => {
-        if (currentProject && !document.hidden) {
+        if (currentProject && (platform.isNative || !document.hidden)) {
             _pollNewMessages();
             // Refresh subscribers less often (every 30s instead of every 10s)
             _pollCount++;

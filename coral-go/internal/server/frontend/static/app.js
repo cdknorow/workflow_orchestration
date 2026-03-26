@@ -527,6 +527,7 @@ window._goHome = function() {
 document.addEventListener("DOMContentLoaded", () => {
     // Initialize platform detection and platform-specific behavior
     platform.init();
+    console.log('[CORAL-DEBUG] platform:', { isNative: platform.isNative, isMacOS: platform.isMacOS, engine: platform.engine, hidden: document.hidden });
     if (platform.isNative) {
         initNative();
         if (platform.isMacOS)   initMacOS();
@@ -810,12 +811,15 @@ document.addEventListener("DOMContentLoaded", () => {
     initBoardChatResize();
     restoreAgenticTabs();
 
-    // Pause polling when tab is hidden; refresh immediately when visible again
-    document.addEventListener("visibilitychange", () => {
-        if (!document.hidden && state.currentSession && state.currentSession.type === "live") {
-            refreshCapture();
-        }
-    });
+    // Pause polling when tab is hidden; refresh immediately when visible again.
+    // Skip in native apps — WKWebView may report document.hidden=true permanently.
+    if (!platform.isNative) {
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden && state.currentSession && state.currentSession.type === "live") {
+                refreshCapture();
+            }
+        });
+    }
 
     // Sync tmux pane width on window resize and panel drag
     let resizeDebounce;

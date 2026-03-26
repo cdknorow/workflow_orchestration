@@ -5,6 +5,7 @@ import { platform } from './detect.js';
 
 export function initNative() {
     if (!platform.isNative) return;
+    console.log('[CORAL-DEBUG] initNative called, isMacOS=' + platform.isMacOS + ', html classes:', document.documentElement.classList.toString());
 
     // Apply classes on both <html> and <body> for CSS selector compatibility.
     // w.Init() applies them on <html> synchronously (before CSS evaluation),
