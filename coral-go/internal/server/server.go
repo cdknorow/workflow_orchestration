@@ -219,6 +219,14 @@ func (s *Server) buildRouter() chi.Router {
 	// Debug request logger (session/ws calls only, when CORAL_DEBUG=1)
 	r.Use(routes.DebugRequestLogger)
 
+	// Health check — the native app polls this every 5s to detect crashes.
+	// Auth middleware bypasses localhost; license middleware ungates this path.
+	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
+
 	// License endpoints (ungated — must be accessible to activate)
 	licRoutes := license.NewRoutes(s.licenseMgr)
 	r.Post("/api/license/activate", licRoutes.Activate)

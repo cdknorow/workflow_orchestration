@@ -46,6 +46,10 @@ func isUngatedPath(path string) bool {
 	if strings.HasPrefix(path, "/static/") {
 		return true
 	}
+	// Health check (polled by native app before login)
+	if path == "/api/health" {
+		return true
+	}
 	// Root page (serves activation UI when unlicensed)
 	if path == "/" {
 		return true

@@ -135,6 +135,7 @@ func main() {
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("Failed to start background process: %v", err)
 	}
+	lf.Close() // Child has inherited the FD; parent no longer needs it.
 
 	fmt.Printf("Coral tray started in background (dashboard on port %d)\n", *port)
 	fmt.Printf("  Home: %s\n", home)
@@ -149,6 +150,14 @@ func runForeground(host string, port int, noBrowser, devMode, debugMode bool, ba
 	if lf, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 		log.SetOutput(lf)
 		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+
+		// Redirect OS-level stderr (fd 2) to the log file. CGO crashes
+		// (systray, Cocoa) write to stderr, not Go's log package. Without
+		// this, those crash messages vanish when running as a .app bundle
+		// or background process with no terminal attached.
+		redirectStderr(lf)
+		// lf intentionally NOT closed — log.SetOutput and dup2'd stderr
+		// need the FD open for the process lifetime. OS cleans up on exit.
 	}
 
 	// Global panic recovery — log the full stack trace before exiting
@@ -225,13 +234,26 @@ func runForeground(host string, port int, noBrowser, devMode, debugMode bool, ba
 	// Heartbeat — write timestamp+PID to ~/.coral/heartbeat every 10s.
 	// This is the only way to detect SIGKILL (which can't be caught).
 	// Post-mortem, the last heartbeat timestamp shows when the process died.
+	// Also logs resource usage every 5 minutes to help diagnose memory
+	// pressure kills (macOS Jetsam).
 	go func() {
 		heartbeatPath := filepath.Join(dataDir, "heartbeat")
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
+		resourceLogCounter := 0
 		writeHeartbeat := func() {
-			data := fmt.Sprintf("%d %d\n", time.Now().Unix(), os.Getpid())
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			data := fmt.Sprintf("%d %d %d %d\n",
+				time.Now().Unix(), os.Getpid(), m.Sys, runtime.NumGoroutine())
 			os.WriteFile(heartbeatPath, []byte(data), 0644)
+
+			// Log resource usage every ~5 minutes (30 ticks × 10s)
+			resourceLogCounter++
+			if resourceLogCounter%30 == 0 {
+				log.Printf("[HEALTH] goroutines=%d heap_alloc=%dMB sys=%dMB",
+					runtime.NumGoroutine(), m.HeapAlloc/1024/1024, m.Sys/1024/1024)
+			}
 		}
 		writeHeartbeat() // Write immediately on start
 		for {

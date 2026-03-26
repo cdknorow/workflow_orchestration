@@ -8,6 +8,10 @@ import (
 	"syscall"
 )
 
+// redirectStderr is a no-op on Windows — CGO crash output is already captured
+// by the log file redirect in the background spawn path.
+func redirectStderr(f *os.File) {}
+
 // detachProcessAttrs returns SysProcAttr for running a detached background process on Windows.
 // CREATE_NEW_PROCESS_GROUP detaches the child from the parent's console.
 func detachProcessAttrs() *syscall.SysProcAttr {

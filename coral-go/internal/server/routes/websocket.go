@@ -360,12 +360,13 @@ func (h *SessionsHandler) WSTerminal(w http.ResponseWriter, r *http.Request) {
 
 	// Try PTY streaming mode first
 	if h.backend != nil {
-		ch, err := h.backend.Subscribe(name, fmt.Sprintf("ws-%d", time.Now().UnixNano()))
+		subID := fmt.Sprintf("ws-%d", time.Now().UnixNano())
+		ch, err := h.backend.Subscribe(name, subID)
 		if err == nil && ch != nil {
 			if debugEnabled() {
 				slog.Info("[debug] ws/terminal using PTY streaming", "name", name)
 			}
-			h.wsTerminalStreaming(ctx, conn, name, ch)
+			h.wsTerminalStreaming(ctx, conn, name, ch, subID)
 			return
 		}
 	}
@@ -378,11 +379,12 @@ func (h *SessionsHandler) WSTerminal(w http.ResponseWriter, r *http.Request) {
 }
 
 // wsTerminalStreaming handles the WebSocket using PTY streaming (zero-polling).
-func (h *SessionsHandler) wsTerminalStreaming(ctx context.Context, conn *websocket.Conn, name string, dataCh <-chan []byte) {
+// subscriberID is the ID used to subscribe in the caller — we reuse it for cleanup
+// to avoid leaking the original subscription.
+func (h *SessionsHandler) wsTerminalStreaming(ctx context.Context, conn *websocket.Conn, name string, dataCh <-chan []byte, subscriberID string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	subscriberID := fmt.Sprintf("ws-%d", time.Now().UnixNano())
 	defer func() {
 		if h.backend != nil {
 			h.backend.Unsubscribe(name, subscriberID)
@@ -651,6 +653,13 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 	// Initial snapshot
 	doCapture()
 
+	// Use a ticker instead of time.After to avoid creating a new timer every
+	// iteration (reduces GC pressure with many concurrent WebSocket clients).
+	statTicker := time.NewTicker(100 * time.Millisecond)
+	defer statTicker.Stop()
+	slowTicker := time.NewTicker(3 * time.Second)
+	defer slowTicker.Stop()
+
 	for !isClosed() {
 		if paneGoneNotified {
 			// Pane is gone — slow heartbeat to detect if it comes back
@@ -659,7 +668,7 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 				conn.Close(websocket.StatusNormalClosure, "")
 				return
 			case <-inputEvent:
-			case <-time.After(3 * time.Second):
+			case <-slowTicker.C:
 			}
 			targetMu.Lock()
 			target = ""
@@ -683,14 +692,14 @@ func (h *SessionsHandler) wsTerminalPolling(ctx context.Context, conn *websocket
 			doCapture()
 		}
 
-		// Wait for input event or next stat check (10ms)
+		// Wait for input event or next stat check
 		select {
 		case <-ctx.Done():
 			conn.Close(websocket.StatusNormalClosure, "")
 			return
 		case <-inputEvent:
 			doCapture()
-		case <-time.After(10 * time.Millisecond):
+		case <-statTicker.C:
 			// Periodic stat check — also serves as heartbeat
 		}
 	}

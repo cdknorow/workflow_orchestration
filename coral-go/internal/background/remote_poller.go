@@ -62,6 +62,9 @@ func (p *RemoteBoardPoller) RunOnce(ctx context.Context) error {
 		return err
 	}
 
+	if p.discoverFn == nil {
+		return nil
+	}
 	agents, err := p.discoverFn(ctx)
 	if err != nil {
 		return err

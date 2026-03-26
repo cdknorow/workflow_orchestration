@@ -81,7 +81,15 @@ func newSession(name, agentType, workDir, sessionID, command string, cols, rows 
 }
 
 // readLoop reads PTY output and fans out to log file and subscribers.
+// When the PTY closes (EOF), the log file is closed here to prevent FD leaks
+// if the session exits naturally without kill() being called.
 func (s *session) readLoop() {
+	defer func() {
+		if s.logFile != nil {
+			s.logFile.Close()
+			s.logFile = nil
+		}
+	}()
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.proc.Read(buf)
@@ -177,9 +185,10 @@ func (s *session) kill() error {
 	// Close PTY handle
 	s.proc.Close()
 
-	// Close log file
+	// Close log file (may already be nil if readLoop closed it on natural exit)
 	if s.logFile != nil {
 		s.logFile.Close()
+		s.logFile = nil
 	}
 
 	// Close all subscriber channels
