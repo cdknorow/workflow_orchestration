@@ -133,18 +133,21 @@ func main() {
 	setupNativeTitlebar()
 	log.Println("[WEBVIEW] titlebar setup complete")
 
-	// Inject native app flag and classes SYNCHRONOUSLY on <html> element.
-	// documentElement exists before any CSS is evaluated, so classes are present
-	// for the first layout pass. This is critical for:
-	// - -webkit-app-region: drag (must be in effect at first render)
-	// - WKWebView min-height fixes (must be applied before flex layout)
-	// The platform layer (platform/native.js) also applies these on <body> at
-	// DOMContentLoaded as a safety net.
-	log.Println("[WEBVIEW] injecting native app flag and classes on documentElement")
+	// Inject native app flag and classes on <html> synchronously, and on
+	// <body> at DOMContentLoaded. Both are needed:
+	// - <html> classes: available before first CSS layout pass
+	// - <body> classes: required for .native-app.native-macos selectors
+	//   (same-element compound selectors only match on <body>)
+	log.Println("[WEBVIEW] injecting native app flag and classes")
 	w.Init(`window.__CORAL_APP__ = true;
 		document.documentElement.classList.add('native-app');
-		if (navigator.platform && navigator.platform.indexOf('Mac') !== -1) document.documentElement.classList.add('native-macos');
-		if (navigator.platform && navigator.platform.indexOf('Win') !== -1) document.documentElement.classList.add('native-windows');`)
+		if (navigator.platform.indexOf('Mac') !== -1) document.documentElement.classList.add('native-macos');
+		if (navigator.platform.indexOf('Win') !== -1) document.documentElement.classList.add('native-windows');
+		document.addEventListener('DOMContentLoaded', function() {
+			document.body.classList.add('native-app');
+			if (navigator.platform.indexOf('Mac') !== -1) document.body.classList.add('native-macos');
+			if (navigator.platform.indexOf('Win') !== -1) document.body.classList.add('native-windows');
+		});`)
 
 	// Bind JS console.log to Go logger in debug mode
 	log.Println("[WEBVIEW] setting up JS console redirect and WS monitoring")
