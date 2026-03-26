@@ -2,9 +2,11 @@
 
 import { state } from './state.js';
 import { escapeHtml, showToast } from './utils.js';
+import { fetchFileList, fuzzyFilter } from './file_mention.js';
 
 let _currentFiles = [];
 let _searchTimeout = null;
+let _renderTimer = null;
 
 /* ── Starred files (persisted in localStorage per session) ── */
 
@@ -84,17 +86,13 @@ export async function searchRepoFiles(query) {
         if (el) el.style.display = 'none';
         return;
     }
-    const agentName = state.currentSession.name;
-    const params = new URLSearchParams({ q: query });
-    const sid = state.currentSession.session_id;
-    if (sid) params.set('session_id', sid);
-    try {
-        const resp = await fetch(`/api/sessions/live/${encodeURIComponent(agentName)}/search-files?${params}`);
-        const data = await resp.json();
-        _renderSearchResults(data.files || []);
-    } catch {
-        _renderSearchResults([]);
-    }
+    // Client-side fuzzy search using cached file list (shared with @file mention).
+    // No server round-trip per keystroke.
+    const files = await fetchFileList();
+    const matches = fuzzyFilter(files, query);
+    // Throttle rendering to avoid layout thrashing on fast typing
+    clearTimeout(_renderTimer);
+    _renderTimer = setTimeout(() => _renderSearchResults(matches), 30);
 }
 
 function _renderSearchResults(files) {

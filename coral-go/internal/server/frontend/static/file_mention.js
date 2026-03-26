@@ -112,7 +112,7 @@ function fuzzyMatch(text, query, original) {
     return score;
 }
 
-function fuzzyFilter(files, query) {
+export function fuzzyFilter(files, query) {
     if (!query) return [];
 
     const qLower = query.toLowerCase();
