@@ -412,6 +412,13 @@ else
     fail "Found $ORPHANS orphan tmux sessions"
 fi
 
+# Clean up board state files from test data dir
+BOARD_FILES=$(find "$DATA_DIR" -name "board_state_*.json" 2>/dev/null | wc -l | tr -d '[:space:]')
+if [[ "$BOARD_FILES" -gt 0 ]]; then
+    log "  Cleaning up $BOARD_FILES board_state files from test dir"
+    find "$DATA_DIR" -name "board_state_*.json" -delete 2>/dev/null
+fi
+
 # Check server is still alive after killing agents
 if kill -0 "$SERVER_PID" 2>/dev/null; then
     pass "Server survived agent kill phase"
@@ -440,6 +447,16 @@ if [[ -d "$REAL_CORAL_DIR" ]]; then
     fi
 else
     pass "Real ~/.coral does not exist (fully isolated)"
+fi
+
+# Check no board_state files leaked to real ~/.coral
+if [[ -d "$REAL_CORAL_DIR" ]]; then
+    LEAKED_BOARD=$(find "$REAL_CORAL_DIR" -name "board_state_*stress*" -newer "$LOG_FILE" 2>/dev/null | head -3)
+    if [[ -z "$LEAKED_BOARD" ]]; then
+        pass "No board_state files leaked to real ~/.coral"
+    else
+        fail "board_state files leaked to real ~/.coral: $LEAKED_BOARD"
+    fi
 fi
 
 # Verify data was written to our isolated dir
