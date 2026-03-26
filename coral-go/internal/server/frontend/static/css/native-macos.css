@@ -11,28 +11,15 @@
 
 /* ── WKWebView Layout Fix ─────────────────────────────────── */
 
-/* Nuclear fix: remove agentic-state from flex flow entirely.
-   WKWebView's flex engine can miscalculate heights for nested
-   overflow:hidden containers during display transitions. Fixed
-   positioning gives the panel explicit dimensions that don't
-   depend on flex parent height resolution. */
-.native-macos .agentic-state {
-    position: fixed;
-    top: 37px;       /* below top-bar (6px padding * 2 + ~25px content) */
-    right: 0;
-    bottom: 0;
-    width: 420px;
-    z-index: 10;
-}
-
-/* Prevent left column from extending under the fixed panel */
-.native-macos .live-body {
-    padding-right: 424px;  /* 420px panel + 4px resize handle */
-}
-
-/* Hide resize handle — fixed panel can't be resized by dragging */
-.native-macos .task-bar-resize-handle {
-    display: none;
+/* NSWindowStyleMaskFullSizeContentView makes content extend under the
+   titlebar, which causes WKWebView to report a larger viewport height
+   than what's actually visible. This breaks flex height calculations
+   for nested overflow:hidden containers. Fix: give an explicit height
+   so the layout engine has a concrete value to work from. */
+html.native-macos,
+html.native-macos body {
+    height: 100vh;
+    overflow: hidden;
 }
 
 .native-macos .agentic-panel.active {
