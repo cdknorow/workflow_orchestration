@@ -5,6 +5,7 @@ import { getRenderer } from './renderers.js';
 import { renderTaskList } from './tasks.js';
 import { renderEventTimeline } from './agentic_state.js';
 import { getTerminalCols } from './xterm_renderer.js';
+import { platform } from './platform/detect.js';
 
 let _refreshCaptureHasRun = false;
 
@@ -72,11 +73,11 @@ export function renderCaptureText(el, text) {
 export async function refreshCapture() {
     if (!state.currentSession || state.currentSession.type !== "live") return;
 
-    // Skip polling when the tab is not visible — but always allow the first
-    // call so data is populated on initial session select. WKWebView can
-    // report document.hidden=true during initial load before the window is
-    // fully visible, which would leave the agentic state panel blank.
-    if (document.hidden && _refreshCaptureHasRun) return;
+    // Skip polling when the tab is not visible (saves CPU in background tabs).
+    // Skip this check in native apps — WKWebView can report document.hidden=true
+    // permanently due to NSWindowStyleMaskFullSizeContentView, which blocks all
+    // subsequent polls and leaves the agentic state panel blank.
+    if (!platform.isNative && document.hidden && _refreshCaptureHasRun) return;
     _refreshCaptureHasRun = true;
 
     try {

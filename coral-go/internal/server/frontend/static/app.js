@@ -10,7 +10,7 @@ import { sendCommand, sendCommandWithTeam, resendInputPrompt, sendRawKeys, sendM
 import { selectLiveSession, selectHistorySession, editAndResubmit, renameAgent, setAgentIcon, showEmojiPicker } from './sessions.js';
 import { toggleGroupCollapse, killGroup, killBoard, toggleTeamSleep, toggleAgentSleep, sleepAllAgents, wakeAllAgents, shareAgentTeam, saveTeamFromSidebar, killSessionDirect, showInfoDirect, attachDirect, restartDirect, showConfirmModal, hideConfirmModal, copyFolderPath, moveGroupUp, moveGroupDown, toggleGroupByTeam, setBoardAccentColor, moveSessionUp, moveSessionDown } from './render.js';
 import { syncPaneWidth, refreshCapture } from './capture.js';
-import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag, showAddAgentToBoard, hideAddAgentBoardModal, launchAgentToBoard, exportPersonas, importPersonas, exportTeamTemplates, importTeamTemplates, showDefaultPromptsModal, hideDefaultPromptsModal, resetDefaultPrompt, saveDefaultPrompts } from './modals.js';
+import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInfoModal, copyInfoCommand, showResumeModal, hideResumeModal, resumeIntoSession, showSettingsModal, hideSettingsModal, applySettings, loadSettings, toggleFlag, showAddAgentToBoard, hideAddAgentBoardModal, launchAgentToBoard, exportPersonas, importPersonas, exportTeamTemplates, importTeamTemplates, showDefaultPromptsModal, hideDefaultPromptsModal, resetDefaultPrompt, saveDefaultPrompts, deactivateLicense } from './modals.js';
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
 import { initSidebarResize, initCommandPaneResize, initTaskBarResize, initBoardChatResize, initSidebarCollapse, switchJobsSubtab, initAgenticPanelCollapse, toggleAgenticPanel, initAgenticBlockResize, initAgenticBlockCollapse } from './sidebar.js';
 import { fitTerminal } from './xterm_renderer.js';
@@ -39,6 +39,11 @@ import { showThemeConfigurator, hideThemeConfigurator } from './theme_config.js'
 import { initMessageBoard, selectBoardProject, showMessageBoardProjects, postBoardMessage, deleteMessageBoardProject, toggleBoardPause, toggleBoardSleep, deleteBoardMessage, showExportBoardModal, doExportBoard } from './message_board.js';
 import { loadAllFolderTags, showFolderTagDropdown, hideFolderTagDropdown, addFolderTag, removeFolderTag, createAndAddFolderTag } from './folder_tags.js';
 import { initMobile, syncMobileAgentList } from './mobile.js';
+import { platform } from './platform/detect.js';
+import { initNative } from './platform/native.js';
+import { initMacOS } from './platform/macos.js';
+import { initWindows } from './platform/windows.js';
+import { initBrowser } from './platform/browser.js';
 
 import { checkForUpdates, dismissUpdateToast } from './update_check.js';
 
@@ -58,6 +63,7 @@ Object.assign(window, {
     // modals
     showSettingsModal, hideSettingsModal, applySettings,
     showDefaultPromptsModal, hideDefaultPromptsModal, resetDefaultPrompt, saveDefaultPrompts,
+    _deactivateLicense: deactivateLicense,
     showLaunchModal, hideLaunchModal, launchSession, toggleFlag,
     showInfoModal, hideInfoModal, copyInfoCommand,
     showResumeModal, hideResumeModal, resumeIntoSession,
@@ -519,9 +525,14 @@ window._goHome = function() {
 
 // ── Initialization ────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-    // Detect native webview app (coral-app sets window.__CORAL_APP__)
-    if (window.__CORAL_APP__ || navigator.userAgent.includes('CoralApp')) {
-        document.body.classList.add('native-app');
+    // Initialize platform detection and platform-specific behavior
+    platform.init();
+    if (platform.isNative) {
+        initNative();
+        if (platform.isMacOS)   initMacOS();
+        if (platform.isWindows) initWindows();
+    } else {
+        initBrowser();
     }
 
     // Intercept 401 responses — redirect to auth page
