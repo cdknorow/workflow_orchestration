@@ -46,6 +46,7 @@ type CachedLicense struct {
 	CustomerName  string `json:"customer_name,omitempty"`
 	CustomerEmail string `json:"customer_email,omitempty"`
 	ProductName   string `json:"product_name,omitempty"`
+	VariantName   string `json:"variant_name,omitempty"`
 	ActivatedAt   string `json:"activated_at"`
 	LastValidated string `json:"last_validated"`
 	Valid         bool   `json:"valid"`
@@ -88,6 +89,16 @@ func NewManager(coralDir string) *Manager {
 	}
 	m.load()
 	return m
+}
+
+// VariantName returns the Lemon Squeezy variant name from the cached license (e.g. "Coral Trial Edition").
+func (m *Manager) VariantName() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cache == nil {
+		return ""
+	}
+	return m.cache.VariantName
 }
 
 // IsValid returns whether the app has a valid, non-expired license.
@@ -157,6 +168,9 @@ func (m *Manager) Revalidate() bool {
 	if resp.Meta.ProductName != "" {
 		m.cache.ProductName = resp.Meta.ProductName
 	}
+	if resp.Meta.VariantName != "" {
+		m.cache.VariantName = resp.Meta.VariantName
+	}
 	m.save()
 	return m.cache.Valid
 }
@@ -187,6 +201,7 @@ func (m *Manager) Activate(key string) error {
 		CustomerName:  resp.Meta.CustomerName,
 		CustomerEmail: resp.Meta.CustomerEmail,
 		ProductName:   resp.Meta.ProductName,
+		VariantName:   resp.Meta.VariantName,
 		ActivatedAt:   now,
 		LastValidated: now,
 		Valid:         true,
