@@ -136,6 +136,8 @@ func (h *SystemHandler) Status(w http.ResponseWriter, r *http.Request) {
 		"version":          config.Version,
 		"store_trial_url":  config.StoreTrialURL,
 		"store_pro_url":    config.StoreProURL,
+		"skip_license":     config.TierSkipLicense,
+		"tier_name":        config.TierName,
 	})
 }
 
@@ -170,6 +172,13 @@ func FetchLatestVersion() string {
 // UpdateCheck returns update availability info.
 // GET /api/system/update-check
 func (h *SystemHandler) UpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if config.TierSkipLicense {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"available": false,
+			"current":   config.Version,
+		})
+		return
+	}
 	latest := FetchLatestVersion()
 	available := latest != "" && latest != config.Version && config.Version != ""
 	writeJSON(w, http.StatusOK, map[string]any{

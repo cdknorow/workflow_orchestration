@@ -113,8 +113,8 @@ func main() {
 	tracking.SetCoralDir(cfg.CoralDir())
 	tracking.TrackInstallAsync()
 
-	// Check for updates on startup (non-blocking)
-	if config.Version != "" {
+	// Check for updates on startup (non-blocking, skip for license-free builds)
+	if config.Version != "" && !config.TierSkipLicense {
 		go func() {
 			time.Sleep(5 * time.Second)
 			latest := routes.FetchLatestVersion()

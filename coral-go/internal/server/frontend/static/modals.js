@@ -299,31 +299,53 @@ function _showCLINotFoundModal(agentType) {
 
 async function _showDemoLimitModal(message) {
     let storeProURL = 'https://store.coralai.ai';
+    let tierName = '';
     try {
         const resp = await fetch('/api/system/status');
         const data = await resp.json();
         if (data.store_pro_url) storeProURL = data.store_pro_url;
+        if (data.tier_name) tierName = data.tier_name;
     } catch (_e) { /* use default */ }
 
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.style.display = 'flex';
-    modal.innerHTML = `
-        <div class="modal-content" style="width:480px;text-align:center">
-            <h3 style="margin-bottom:12px">Free Trial Limit Reached</h3>
-            <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
-                Your free trial includes:<br>
-                <strong>Up to 8 agents</strong> and <strong>2 agent teams</strong>
-            </p>
-            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
-                Upgrade to <strong>Coral Pro</strong> for unlimited agents, teams, and priority support.
-            </p>
-            <div class="modal-actions" style="justify-content:center;gap:12px">
-                <button class="btn btn-secondary" data-action="close">Maybe Later</button>
-                <a href="${storeProURL}" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration:none">Upgrade to Pro</a>
+
+    if (tierName === 'dropboxers') {
+        modal.innerHTML = `
+            <div class="modal-content" style="width:480px;text-align:center">
+                <h3 style="margin-bottom:12px">Beta Limit Reached</h3>
+                <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
+                    The Coral For Dropbox beta is limited to:<br>
+                    <strong>12 agents</strong> and <strong>3 agent teams</strong>
+                </p>
+                <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
+                    Please stop existing sessions before launching new ones.
+                </p>
+                <div class="modal-actions" style="justify-content:center">
+                    <button class="btn btn-primary" data-action="close">OK</button>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    } else {
+        modal.innerHTML = `
+            <div class="modal-content" style="width:480px;text-align:center">
+                <h3 style="margin-bottom:12px">Free Trial Limit Reached</h3>
+                <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
+                    Your free trial includes:<br>
+                    <strong>Up to 8 agents</strong> and <strong>2 agent teams</strong>
+                </p>
+                <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
+                    Upgrade to <strong>Coral Pro</strong> for unlimited agents, teams, and priority support.
+                </p>
+                <div class="modal-actions" style="justify-content:center;gap:12px">
+                    <button class="btn btn-secondary" data-action="close">Maybe Later</button>
+                    <a href="${storeProURL}" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration:none">Upgrade to Pro</a>
+                </div>
+            </div>
+        `;
+    }
+
     document.body.appendChild(modal);
     modal.addEventListener('click', (e) => {
         if (e.target.dataset?.action === 'close' || e.target === modal) modal.remove();
@@ -1814,11 +1836,24 @@ async function _loadLicenseTierBadge() {
     const badge = document.getElementById('license-tier-badge');
     if (!badge) return;
     try {
+        // Check if license is skipped for this build tier
+        const statusResp = await fetch('/api/system/status');
+        if (statusResp.ok) {
+            const statusData = await statusResp.json();
+            if (statusData.skip_license) {
+                if (statusData.tier_name === 'dropboxers') {
+                    badge.innerHTML = '<span class="tier-label tier-pro">Coral For Dropbox</span>';
+                    badge.style.display = '';
+                } else {
+                    badge.style.display = 'none';
+                }
+                return;
+            }
+        }
         const resp = await fetch('/api/license/status');
         if (!resp.ok) return;
         const data = await resp.json();
         if (data.activated && data.valid) {
-            // Use product_name from LS if available, fallback to 'Coral Pro'
             const label = data.product_name || 'Coral Pro';
             badge.innerHTML = `<span class="tier-label tier-pro">${escapeHtml(label)}</span>`;
         } else {
@@ -2010,6 +2045,21 @@ async function _loadLicenseStatus() {
     const container = document.getElementById('license-status-display');
     if (!container) return;
     try {
+        // Hide license section for builds that skip license
+        const statusResp = await fetch('/api/system/status');
+        if (statusResp.ok) {
+            const statusData = await statusResp.json();
+            if (statusData.skip_license) {
+                const licenseSection = document.getElementById('license-section');
+                if (licenseSection) licenseSection.style.display = 'none';
+                const branding = document.getElementById('tier-branding-label');
+                if (branding && statusData.tier_name === 'dropboxers') {
+                    branding.textContent = 'Coral For Dropbox';
+                    branding.style.display = '';
+                }
+                return;
+            }
+        }
         const resp = await fetch('/api/license/status');
         if (!resp.ok) throw new Error('fetch failed');
         const data = await resp.json();
@@ -2034,7 +2084,7 @@ async function _loadLicenseStatus() {
                 <button class="btn btn-small" onclick="_deactivateLicense()" style="margin-top:8px;color:var(--text-secondary)">Deactivate</button>`;
         } else if (data.activated && !data.valid) {
             container.innerHTML = `<span style="color:var(--red, #f44336);font-size:13px;font-weight:600">License expired or invalid</span>
-                <br><a href="mailto:support@subgentic.ai" style="font-size:11px;color:var(--text-muted)">Contact support@subgentic.ai</a>
+                <br><a href="https://coralai.ai/support.html" target="_blank" style="font-size:11px;color:var(--text-muted)">Contact Support</a>
                 <button class="btn btn-small" onclick="_deactivateLicense()" style="margin-top:8px">Deactivate</button>`;
         } else {
             container.innerHTML = `<span style="color:var(--text-secondary);font-size:13px">Not activated</span>`;
