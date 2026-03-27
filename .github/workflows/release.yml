@@ -375,17 +375,18 @@ jobs:
     needs: [release]
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download macOS DMG artifact
         uses: actions/download-artifact@v4
         with:
+          name: coral-macos-dmg
           path: artifacts
 
-      - name: Publish release to subgentic/coral-app
+      - name: Publish DMG to subgentic/coral-app
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          echo "Publishing $TAG to subgentic/coral-app"
+          echo "Publishing $TAG to subgentic/coral-app (DMG only)"
 
           # Create the release on the public repo
           gh release create "$TAG" \
@@ -394,8 +395,8 @@ jobs:
             --generate-notes \
             || true
 
-          # Upload all artifacts
-          for f in artifacts/**/*; do
+          # Upload only the DMG
+          for f in artifacts/*.dmg; do
             if [ -f "$f" ]; then
               echo "Uploading $(basename "$f")..."
               gh release upload "$TAG" "$f" \
