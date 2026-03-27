@@ -69,7 +69,7 @@ func main() {
 	if cfg.LicenseRequired() {
 		lm := license.NewManager(cfg.CoralDir())
 		variantName = lm.VariantName()
-		if variantName == "Coral Trial Edition" {
+		if variantName != "Coral Pro" {
 			cfg.MaxLiveTeams = 2
 			cfg.MaxLiveAgents = 8
 		}
