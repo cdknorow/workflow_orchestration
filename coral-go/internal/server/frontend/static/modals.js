@@ -2178,8 +2178,8 @@ async function _ensureDefaultPrompts() {
     } catch {
         // Fallback — should never happen in practice
         _defaultPrompts = {
-            default_prompt_orchestrator: 'IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments. Periodically check for new messages.',
-            default_prompt_worker: 'IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then periodically check for new messages.',
+            default_prompt_orchestrator: 'IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments. When you have a new message, Coral will notify you.',
+            default_prompt_worker: 'IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then wait for Coral to notify you of new messages.',
             team_reminder_orchestrator: 'Remember to coordinate with your team and check the message board for updates',
             team_reminder_worker: 'Remember to work with your team',
         };

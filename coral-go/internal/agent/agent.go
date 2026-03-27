@@ -149,9 +149,9 @@ const DefaultWorkerSystemPrompt = "Post a message with coral-board post \"<your 
 	"then wait for instructions from the Orchestrator."
 
 // Default action prompts (appended to user prompt as CLI positional arg).
-const DefaultOrchestratorActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments. Periodically check for new messages.`
+const DefaultOrchestratorActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments. When you have a new message, Coral will notify you.`
 
-const DefaultWorkerActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then periodically check for new messages.`
+const DefaultWorkerActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then wait for Coral to notify you of new messages.`
 
 // isOrchestratorRole returns true if the role string indicates an orchestrator.
 func isOrchestratorRole(role string) bool {
@@ -180,7 +180,7 @@ func BuildBoardSystemPrompt(boardName, role, prompt string, promptOverrides map[
 				"  %s post \"msg\"    — post a message to the board\n"+
 				"  %s read --last 5 — see the 5 most recent messages\n"+
 				"  %s subscribers   — see who is on the board\n"+
-				"Check the board periodically for updates from your teammates.\n\n",
+				"When you have a new message, Coral will notify you.\n\n",
 			boardName, roleLabel, cli, cli, cli, cli, cli, cli)
 
 		var tail string

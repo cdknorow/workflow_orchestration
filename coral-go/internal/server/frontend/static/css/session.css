@@ -188,17 +188,23 @@
     margin-top: 3px;
 }
 
-.generate-goal-link {
-    color: var(--accent);
-    text-decoration: none;
-    font-size: 11px;
-    opacity: 0.7;
+.sidebar-goal-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    opacity: 0;
     transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
 }
-
-.generate-goal-link:hover {
-    opacity: 1;
-    text-decoration: underline;
+.session-group-item:hover .sidebar-goal-btn {
+    opacity: 0.6;
+}
+.sidebar-goal-btn:hover {
+    opacity: 1 !important;
+    color: var(--accent);
 }
 
 /* ── Sidebar Kebab Menu ───────────────────────────────────── */

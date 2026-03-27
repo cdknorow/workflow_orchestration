@@ -110,6 +110,29 @@ export async function sendCommandWithTeam() {
     await sendCommand();
 }
 
+const BOARD_PROTOCOL = `You have access to a shared message board for team communication. Use these commands:
+
+- coral-board post "<message>" — Post a message to the board (use --board <name> if needed)
+- coral-board read — Read recent messages
+- coral-board read --all — Read all messages
+
+Guidelines:
+- Post status updates so the team knows what you're working on
+- When you have a new message, Coral will notify you
+- Keep messages concise and actionable
+- When done with a task, post your results to the board`;
+
+export async function sendBoardProtocol() {
+    if (!state.currentSession || state.currentSession.type !== "live") {
+        showToast("No live session selected", true);
+        return;
+    }
+    const input = document.getElementById("command-input");
+    const current = input.value.trim();
+    input.value = current ? `${current}\n\n${BOARD_PROTOCOL}` : BOARD_PROTOCOL;
+    await sendCommand();
+}
+
 export async function resendInputPrompt() {
     if (!state.currentSession || state.currentSession.type !== "live") {
         showToast("No live session selected", true);
@@ -254,6 +277,10 @@ export function renderQuickActions() {
                     <button class="send-menu-item" onclick="resendInputPrompt(); closeSendMenu()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                         Resend Prompt
+                    </button>
+                    <button class="send-menu-item" onclick="sendBoardProtocol(); closeSendMenu()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
+                        Send Board Protocol
                     </button>
                 </div>
             </div>

@@ -927,7 +927,8 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
     const isTerminal = s.agent_type === "terminal";
     const sid = s.session_id ? escapeAttr(s.session_id) : "";
     const goalText = s.summary ? escapeHtml(s.summary) : null;
-    const goal = goalText || (isTerminal ? "" : `<a href="#" class="generate-goal-link" onclick="event.preventDefault(); event.stopPropagation(); requestGoal('${escapeAttr(s.name)}', '${escapeAttr(s.agent_type)}', '${sid}')" title="Ask agent to set a goal">Generate Goal</a>`);
+    const goal = goalText || "";
+    const goalBtn = (!goalText && !isTerminal) ? `<button class="sidebar-goal-btn" onclick="event.stopPropagation(); requestGoal('${escapeAttr(s.name)}', '${escapeAttr(s.agent_type)}', '${sid}')" title="Generate Goal"><span class="material-icons" style="font-size:16px">auto_awesome</span></button>` : "";
     const displayLabel = s.display_name || (isCompact && s.board_job_title) || (isTerminal ? "Terminal" : "Agent");
     const mobileStatus = getMobileStatusChip(s);
     const lastActivity = formatStaleness(s.staleness_seconds);
@@ -1035,6 +1036,7 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
                 <span class="session-label">${isTerminal ? '<svg class="terminal-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg> ' : ''}${sleepIcon}${agentIcon}${orchIcon}${escapeHtml(displayLabel)}${typeTag}</span>
                 <span class="session-name-spacer"></span>
                 ${waitingBadge}
+                ${goalBtn}
                 ${kebabMenu}
             </div>
             <div class="session-mobile-banner-row">
