@@ -68,6 +68,9 @@ info "Killing any existing processes on port $TEST_PORT..."
 pkill -f "coral-tray.*--port $TEST_PORT" 2>/dev/null || true
 lsof -ti :"$TEST_PORT" 2>/dev/null | xargs kill 2>/dev/null || true
 rm -f "$CORAL_HOME/tray.pid"
+# Truncate logs so we only check for crashes from THIS run
+: > "$CORAL_HOME/tray.log" 2>/dev/null || true
+: > "$CORAL_HOME/app.log" 2>/dev/null || true
 sleep 1
 
 # ── Phase 3: Launch coral-tray ─────────────────────────────────────
