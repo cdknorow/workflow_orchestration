@@ -137,14 +137,21 @@ func (h *SystemHandler) Status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-const githubReleasesAPI = "https://api.github.com/repos/subgentic/coral-app/releases/latest"
+var githubReleasesAPI = "https://api.github.com/repos/subgentic/coral-app/releases/latest"
 const githubReleasesURL = "https://github.com/subgentic/coral-app/releases"
 
 // FetchLatestVersion queries GitHub for the latest release version tag (without "v" prefix).
 // Returns empty string on any error.
 func FetchLatestVersion() string {
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(githubReleasesAPI)
+	req, err := http.NewRequest("GET", githubReleasesAPI, nil)
+	if err != nil {
+		return ""
+	}
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return ""
 	}
@@ -164,10 +171,10 @@ func (h *SystemHandler) UpdateCheck(w http.ResponseWriter, r *http.Request) {
 	latest := FetchLatestVersion()
 	available := latest != "" && latest != config.Version && config.Version != ""
 	writeJSON(w, http.StatusOK, map[string]any{
-		"available":    available,
-		"current":      config.Version,
-		"latest":       latest,
-		"releases_url": githubReleasesURL,
+		"available":   available,
+		"current":     config.Version,
+		"latest":      latest,
+		"release_url": githubReleasesURL,
 	})
 }
 

@@ -1,27 +1,33 @@
-/* Update notification — checks for new Coral versions on PyPI */
+/* Update notification — checks for new Coral releases on GitHub */
 
 import { escapeHtml } from './utils.js';
 
 /**
  * Fetch update info from the backend and show a toast if a new version is available.
- * Respects localStorage dismissal and the update-check-enabled setting.
+ * Pass force=true to bypass dismissal (e.g. manual "Check for Updates" click).
  */
-export async function checkForUpdates() {
-    // Respect opt-out
-    if (localStorage.getItem("coral-update-check-enabled") === "false") return;
+export async function checkForUpdates(force = false) {
+    // Respect opt-out (only for automatic checks)
+    if (!force && localStorage.getItem("coral-update-check-enabled") === "false") return;
 
     try {
         const resp = await fetch("/api/system/update-check");
         const data = await resp.json();
-        if (!data.available) return;
 
-        // Skip if user already dismissed this version
-        const dismissed = localStorage.getItem("coral-update-dismissed");
-        if (dismissed === data.latest) return;
+        if (!data.available) {
+            if (force) showToast("You're on the latest version.");
+            return;
+        }
+
+        // Skip if user already dismissed this version (automatic check only)
+        if (!force) {
+            const dismissed = localStorage.getItem("coral-update-dismissed");
+            if (dismissed === data.latest) return;
+        }
 
         showUpdateToast(data);
     } catch (_e) {
-        // Silent fail — update check is best-effort
+        if (force) showToast("Could not check for updates.");
     }
 }
 
@@ -55,8 +61,8 @@ function showUpdateToast(data) {
         }
     }
 
-    const releaseLink = data.release_url
-        ? `<a href="${escapeHtml(data.release_url)}" target="_blank" rel="noopener" class="update-toast-link">View full release</a>`
+    const downloadBtn = data.release_url
+        ? `<a href="${escapeHtml(data.release_url)}" target="_blank" rel="noopener" class="update-toast-download">Download v${escapeHtml(data.latest)}</a>`
         : "";
 
     const toast = document.createElement("div");
@@ -71,12 +77,8 @@ function showUpdateToast(data) {
                 </span>
                 <button class="update-toast-close" onclick="dismissUpdateToast('${escapeHtml(data.latest)}')" title="Dismiss">&times;</button>
             </div>
-            <div class="update-toast-cmd">
-                <code>${escapeHtml(data.upgrade_command)}</code>
-                <button class="copy-btn update-toast-copy" onclick="navigator.clipboard.writeText('${escapeHtml(data.upgrade_command)}').then(()=>this.textContent='Copied!').catch(()=>{})">Copy</button>
-            </div>
             ${notesHtml}
-            ${releaseLink}
+            ${downloadBtn}
         </div>`;
 
     document.body.appendChild(toast);
