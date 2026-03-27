@@ -1796,11 +1796,11 @@ export async function loadSettings() {
         // Apply scrollbar visibility
         document.body.classList.toggle('no-scrollbars', !s.show_scrollbars);
 
-        // Apply theme from settings (default to Dropbox Dark if no theme configured)
-        const themeName = (!s.custom_theme || s.custom_theme === "GhostV3") ? "Dropbox Dark" : s.custom_theme;
+        // Apply theme from settings (default to Dark if no theme configured)
+        const themeName = (!s.custom_theme || s.custom_theme === "GhostV3") ? "Dark" : s.custom_theme;
         await applyCustomThemeByName(themeName);
         if (!s.custom_theme || s.custom_theme === "GhostV3") {
-            state.settings.custom_theme = "Dropbox Dark";
+            state.settings.custom_theme = "Dark";
         }
         // Load license tier badge in settings dropdown
         _loadLicenseTierBadge();

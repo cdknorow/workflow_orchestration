@@ -112,12 +112,12 @@ var bundledThemes = map[string]string{
     "--board-msg-bg": "#1e2233"
   }
 }`,
-	"Dropbox Dark": `{
-  "description": "Dark theme with Dropbox blue accents",
+	"Dark": `{
+  "description": "Dark theme with cool blue accents",
   "base": "dark",
   "variables": {
-    "--accent": "#0061ff",
-    "--accent-dim": "#004dd9",
+    "--accent": "#5173a9",
+    "--accent-dim": "#5173a9",
     "--badge-claude": "#0061ff",
     "--badge-gemini": "#ea8226",
     "--border": "#404040",
