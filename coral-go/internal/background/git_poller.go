@@ -153,14 +153,14 @@ func queryGit(ctx context.Context, workdir string) (*gitInfo, error) {
 	defer cancel()
 
 	// Get branch name
-	out, err := executil.Command(ctx, "git", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return nil, err
 	}
 	branch := strings.TrimSpace(string(out))
 
 	// Get latest commit
-	out, err = executil.Command(ctx, "git", "-C", workdir, "log", "-1", "--format=%H|%s|%aI").Output()
+	out, err = executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "log", "-1", "--format=%H|%s|%aI").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func queryGit(ctx context.Context, workdir string) (*gitInfo, error) {
 
 	// Get remote URL (best-effort)
 	var remoteURL *string
-	out, err = executil.Command(ctx, "git", "-C", workdir, "remote", "get-url", "origin").Output()
+	out, err = executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "remote", "get-url", "origin").Output()
 	if err == nil {
 		s := strings.TrimSpace(string(out))
 		if s != "" {
@@ -198,7 +198,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 	fileMap := make(map[string]store.ChangedFile)
 
 	// git diff base --numstat
-	out, err := executil.Command(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
+	out, err := executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "diff", base, "--numstat").Output()
 	if err == nil && len(out) > 0 {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			line = strings.TrimSpace(line)
@@ -221,7 +221,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 	}
 
 	// git status --porcelain for untracked files
-	out, err = executil.Command(ctx, "git", "-C", workdir, "status", "--porcelain", "--untracked-files=all").Output()
+	out, err = executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "status", "--porcelain", "--untracked-files=normal").Output()
 	if err == nil && len(out) > 0 {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if len(line) < 4 {
@@ -265,7 +265,7 @@ func queryChangedFiles(ctx context.Context, workdir string) ([]store.ChangedFile
 }
 
 func getBaseTimestamp(ctx context.Context, workdir, baseRef string) float64 {
-	out, err := executil.Command(ctx, "git", "-C", workdir, "log", "-1", "--format=%ct", baseRef).Output()
+	out, err := executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "log", "-1", "--format=%ct", baseRef).Output()
 	if err != nil {
 		return 0
 	}

@@ -34,7 +34,7 @@ func git(ctx context.Context, workdir string, args ...string) (string, error) {
 	if !Available() {
 		return "", exec.ErrNotFound
 	}
-	fullArgs := append([]string{"-C", workdir}, args...)
+	fullArgs := append([]string{"--no-optional-locks", "-C", workdir}, args...)
 	out, err := executil.Command(ctx, "git", fullArgs...).Output()
 	if err != nil {
 		return "", err
