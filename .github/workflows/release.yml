@@ -26,7 +26,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           LDFLAGS="-s -w -X github.com/cdknorow/coral/internal/config.PostHogKey=phc_qXGp75qwDNcETkBDDsptPuP8qAV4nNQPDmTdAC8K9h2 -X github.com/cdknorow/coral/internal/config.Version=${VERSION}"
           BUILD_TAGS=""
-          if [[ "$GITHUB_REF_NAME" == *"-beta"* ]] || [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
+          if [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
+            BUILD_TAGS="-tags dropboxers"
+          elif [[ "$GITHUB_REF_NAME" == *"-beta"* ]]; then
             BUILD_TAGS="-tags beta"
           elif [[ "$GITHUB_REF_NAME" == *"-dev"* ]]; then
             BUILD_TAGS="-tags dev"
@@ -76,7 +78,9 @@ jobs:
           $version = "${{ github.ref_name }}" -replace "^v", ""
           $ldflags = "-s -w -X github.com/cdknorow/coral/internal/config.PostHogKey=phc_qXGp75qwDNcETkBDDsptPuP8qAV4nNQPDmTdAC8K9h2 -X github.com/cdknorow/coral/internal/config.Version=$version"
           $buildTags = ""
-          if ("${{ github.ref_name }}" -match "-beta|-forDropbox") {
+          if ("${{ github.ref_name }}" -match "-forDropbox") {
+            $buildTags = "-tags dropboxers"
+          } elseif ("${{ github.ref_name }}" -match "-beta") {
             $buildTags = "-tags beta"
           } elseif ("${{ github.ref_name }}" -match "-dev") {
             $buildTags = "-tags dev"
@@ -182,7 +186,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           LDFLAGS="-s -w -X github.com/cdknorow/coral/internal/config.PostHogKey=phc_qXGp75qwDNcETkBDDsptPuP8qAV4nNQPDmTdAC8K9h2 -X github.com/cdknorow/coral/internal/config.Version=${VERSION}"
           BUILD_TAGS=""
-          if [[ "$GITHUB_REF_NAME" == *"-beta"* ]] || [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
+          if [[ "$GITHUB_REF_NAME" == *"-forDropbox"* ]]; then
+            BUILD_TAGS="-tags dropboxers"
+          elif [[ "$GITHUB_REF_NAME" == *"-beta"* ]]; then
             BUILD_TAGS="-tags beta"
           elif [[ "$GITHUB_REF_NAME" == *"-dev"* ]]; then
             BUILD_TAGS="-tags dev"

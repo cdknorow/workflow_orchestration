@@ -22,6 +22,9 @@ BUILD_TAGS=""
 if [ "$CORAL_TIER" = "dev" ]; then
     BUILD_TAGS="-tags dev"
     echo "==> Tier: dev (EULA skipped, license skipped)"
+elif [ "$CORAL_TIER" = "dropboxers" ]; then
+    BUILD_TAGS="-tags dropboxers"
+    echo "==> Tier: dropboxers (license skipped, 3 teams / 12 agents)"
 elif [ "$CORAL_TIER" = "beta" ]; then
     BUILD_TAGS="-tags beta"
     echo "==> Tier: beta (license skipped, demo limits enforced)"

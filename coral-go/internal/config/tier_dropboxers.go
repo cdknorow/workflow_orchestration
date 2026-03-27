@@ -1,15 +1,15 @@
-//go:build beta && !dev && !dropboxers
+//go:build dropboxers && !dev && !beta
 
 package config
 
-// Build tier: Beta
-// Built with: go build -tags beta
+// Build tier: Dropboxers
+// Built with: go build -tags dropboxers
 // Requires EULA, skips license, enforces demo limits (3 teams / 12 agents).
 var (
 	TierSkipEULA    = false
 	TierSkipLicense = true
 	TierDemoLimits  = true
-	TierName        = "beta"
+	TierName        = "dropboxers"
 	TierMaxTeams    = 3
 	TierMaxAgents   = 12
 
