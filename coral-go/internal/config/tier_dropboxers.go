@@ -6,7 +6,7 @@ package config
 // Built with: go build -tags dropboxers
 // Requires EULA, skips license, enforces demo limits (3 teams / 12 agents).
 var (
-	TierSkipEULA    = false
+	TierSkipEULA    = true
 	TierSkipLicense = true
 	TierDemoLimits  = true
 	TierName        = "dropboxers"
