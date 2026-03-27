@@ -17,6 +17,7 @@ import (
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/executil"
 	"github.com/cdknorow/coral/internal/license"
+	"github.com/cdknorow/coral/internal/server/routes"
 	"github.com/cdknorow/coral/internal/startup"
 	"github.com/cdknorow/coral/internal/tracking"
 )
@@ -98,6 +99,17 @@ func main() {
 	// Anonymous install/upgrade tracking (non-blocking)
 	tracking.SetCoralDir(cfg.CoralDir())
 	tracking.TrackInstallAsync()
+
+	// Check for updates on startup (non-blocking)
+	if config.Version != "" {
+		go func() {
+			time.Sleep(5 * time.Second)
+			latest := routes.FetchLatestVersion()
+			if latest != "" && latest != config.Version {
+				log.Printf("[UPDATE] New version available: v%s (you have v%s) — %s", latest, config.Version, "https://github.com/subgentic/coral-app/releases")
+			}
+		}()
+	}
 
 	// Open browser unless --no-browser
 	if !*noBrowser {

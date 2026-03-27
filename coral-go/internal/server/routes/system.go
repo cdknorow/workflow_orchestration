@@ -137,14 +137,37 @@ func (h *SystemHandler) Status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const githubReleasesAPI = "https://api.github.com/repos/subgentic/coral-app/releases/latest"
+const githubReleasesURL = "https://github.com/subgentic/coral-app/releases"
+
+// FetchLatestVersion queries GitHub for the latest release version tag (without "v" prefix).
+// Returns empty string on any error.
+func FetchLatestVersion() string {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(githubReleasesAPI)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var data struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(data.TagName, "v")
+}
+
 // UpdateCheck returns update availability info.
 // GET /api/system/update-check
 func (h *SystemHandler) UpdateCheck(w http.ResponseWriter, r *http.Request) {
-	// Go binary doesn't have a PyPI update mechanism yet.
-	// Return the current version with no update available.
+	latest := FetchLatestVersion()
+	available := latest != "" && latest != config.Version && config.Version != ""
 	writeJSON(w, http.StatusOK, map[string]any{
-		"available": false,
-		"current":   config.Version,
+		"available":    available,
+		"current":      config.Version,
+		"latest":       latest,
+		"releases_url": githubReleasesURL,
 	})
 }
 

@@ -374,6 +374,23 @@ function closeTopBarSettings() {
 window.toggleTopBarSettings = toggleTopBarSettings;
 window.closeTopBarSettings = closeTopBarSettings;
 
+async function checkForUpdates() {
+    try {
+        const resp = await fetch('/api/system/update-check');
+        const data = await resp.json();
+        if (data.available) {
+            if (confirm(`Update available: v${data.latest} (you have v${data.current})\n\nOpen releases page?`)) {
+                window.open(data.releases_url, '_blank');
+            }
+        } else {
+            showToast('You are on the latest version (' + (data.current || 'unknown') + ')');
+        }
+    } catch {
+        showToast('Could not check for updates');
+    }
+}
+window.checkForUpdates = checkForUpdates;
+
 // Close kebab menus when clicking outside
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.top-bar-settings-wrapper')) {
