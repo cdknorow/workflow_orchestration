@@ -10,6 +10,8 @@ var (
 	TierSkipLicense = false
 	TierDemoLimits  = false
 	TierName        = "prod"
+	TierMaxTeams    = 0
+	TierMaxAgents   = 0
 
 	// Live store (Lemon Squeezy)
 	StoreTrialURL = "https://store.coralai.ai/checkout/buy/6e3facc8-9fe8-4126-9000-d1a006e1e71a"

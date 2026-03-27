@@ -129,8 +129,8 @@ func Load(dataDir ...string) *Config {
 
 	// Demo limits from build tier (beta) or runtime LS plan (prod)
 	if TierDemoLimits {
-		cfg.MaxLiveTeams = 2
-		cfg.MaxLiveAgents = 8
+		cfg.MaxLiveTeams = TierMaxTeams
+		cfg.MaxLiveAgents = TierMaxAgents
 	}
 
 	return cfg
