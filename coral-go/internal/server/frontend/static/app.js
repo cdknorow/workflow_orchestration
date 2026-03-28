@@ -116,7 +116,38 @@ Object.assign(window, {
     _activateCustomView: activateCustomView, _pushView: pushView,
     // render (pagination)
     loadHistoryPage,
+    // top nav
+    switchNavTab,
 });
+
+// ── Top Nav Tab Switching ─────────────────────────────────────────────
+function switchNavTab(tab) {
+    // Update tab button states
+    document.querySelectorAll('.top-nav-tab').forEach(btn => btn.classList.remove('active'));
+    const activeTab = document.getElementById(`nav-tab-${tab}`);
+    if (activeTab) activeTab.classList.add('active');
+
+    // Show/hide sidebar sections based on tab
+    const liveSection = document.querySelector('[data-section="live-sessions"]');
+    const historySection = document.querySelector('[data-section="history"]');
+    const jobsSection = document.querySelector('[data-section="jobs"]');
+    const sidebarFooter = document.querySelector('.sidebar-footer');
+
+    if (liveSection) liveSection.style.display = tab === 'agents' ? '' : 'none';
+    if (jobsSection) jobsSection.style.display = tab === 'agents' ? '' : 'none';
+    if (historySection) historySection.style.display = tab === 'history' ? '' : 'none';
+    if (sidebarFooter) sidebarFooter.style.display = tab === 'agents' ? '' : 'none';
+
+    // Switch main view for board tab
+    if (tab === 'board') {
+        showView('messageboard-view');
+    } else if (tab === 'history') {
+        // Keep current main view, just switch sidebar content
+    } else {
+        // Agents tab — show welcome or current session
+        if (!state.currentSession) showView('welcome-screen');
+    }
+}
 
 // ── Import team from folder ───────────────────────────────────────────
 window._importTeamFromFolder = function() {

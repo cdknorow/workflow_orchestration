@@ -2,9 +2,6 @@
         <!-- Left Sidebar -->
         <aside class="sidebar">
             <section class="sidebar-section" data-section="live-sessions">
-                <div class="sidebar-new-row">
-                    <button class="btn btn-primary sidebar-new-btn-full" onclick="showLaunchModal()">+ New</button>
-                </div>
                 <div class="sidebar-section-body">
                     <ul id="live-sessions-list" class="session-list">
                         <li class="empty-state">No live sessions</li>
@@ -140,6 +137,9 @@
                     </ul>
                 </div>
             </section>
+            <div class="sidebar-footer">
+                <button class="btn btn-primary sidebar-new-btn-full" onclick="showLaunchModal()">+ New Agent</button>
+            </div>
         </aside>
 
 {{ end }}

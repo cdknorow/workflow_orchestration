@@ -21,6 +21,38 @@
     gap: 8px;
 }
 
+/* ── Top Nav Tabs ─────────────────────────────────────────── */
+
+.top-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-left: 24px;
+}
+
+.top-nav-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 4px 0 6px;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.top-nav-tab:hover {
+    color: var(--text-primary);
+}
+
+.top-nav-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+}
+
 /* ── Top Bar Search ────────────────────────────────────────── */
 
 .top-bar-search {
@@ -171,6 +203,23 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+}
+
+/* ── Sidebar Footer (+ New button) ────────────────────────── */
+
+.sidebar-footer {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    margin-top: auto;
+}
+
+.sidebar-footer .sidebar-new-btn-full {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .sidebar-resize-handle {
