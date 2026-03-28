@@ -28,6 +28,8 @@ import (
 	"time"
 
 	webview "github.com/webview/webview_go"
+
+	"github.com/cdknorow/coral/internal/executil"
 )
 
 var debugMode bool
@@ -163,7 +165,11 @@ func main() {
 		var isExternal = href.startsWith('http') && !href.startsWith(location.origin);
 		if (isExternal || a.target === '_blank') {
 			e.preventDefault();
-			window.open(href, '_blank');
+			if (window._coralOpenExternal) {
+				_coralOpenExternal(href);
+			} else {
+				window.open(href, '_blank');
+			}
 		}
 	}, true);
 
@@ -229,6 +235,13 @@ func main() {
 			setInterval(checkHealth, 5000);
 		});
 	})();`)
+
+	// Bind native URL opener — WKWebView doesn't support window.open(),
+	// so the link interceptor calls this to open external URLs in the system browser.
+	w.Bind("_coralOpenExternal", func(url string) {
+		log.Printf("[WEBVIEW] opening external URL: %s", url)
+		executil.OpenBrowser(url)
+	})
 
 	// Bind JS console.log to Go logger in debug mode
 	log.Println("[WEBVIEW] setting up JS console redirect and WS monitoring")

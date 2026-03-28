@@ -91,7 +91,11 @@ function initLinkInterceptor() {
         const isExternal = href.startsWith('http') && !href.startsWith(location.origin);
         if (isExternal || a.target === '_blank') {
             e.preventDefault();
-            window.open(href, '_blank');
+            if (window._coralOpenExternal) {
+                window._coralOpenExternal(href);
+            } else {
+                window.open(href, '_blank');
+            }
         }
     }, true);
 }
