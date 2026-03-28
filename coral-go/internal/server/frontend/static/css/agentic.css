@@ -6,15 +6,16 @@
 /* ── Agentic State Panel ───────────────────────────────────── */
 
 .task-bar-resize-handle {
-    width: 4px;
+    width: 1px;
     cursor: col-resize;
     background: var(--border);
     flex-shrink: 0;
-    transition: background 0.15s;
+    transition: background 0.15s, width 0.15s;
 }
 
 .task-bar-resize-handle:hover,
 .task-bar-resize-handle.dragging {
+    width: 3px;
     background: var(--accent);
 }
 
@@ -80,16 +81,17 @@
 /* ── Resize Handle Between Blocks ──────────────────────────── */
 
 .agentic-block-resize-handle {
-    height: 4px;
+    height: 1px;
     cursor: row-resize;
     background: var(--border);
     flex-shrink: 0;
     position: relative;
-    transition: background 0.15s;
+    transition: background 0.15s, height 0.15s;
 }
 
 .agentic-block-resize-handle:hover,
 .agentic-block-resize-handle.dragging {
+    height: 3px;
     background: var(--accent);
 }
 
