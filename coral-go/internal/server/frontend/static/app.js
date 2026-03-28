@@ -120,6 +120,22 @@ Object.assign(window, {
     switchNavTab,
 });
 
+// ── Reset Team ───────────────────────────────────────────────────────
+async function resetTeam(boardName) {
+    if (!confirm(`Reset all agents in "${boardName}"? Their context will be cleared and they'll restart with their original prompts.`)) return;
+    try {
+        const resp = await fetch(`/api/sessions/live/team/${encodeURIComponent(boardName)}/reset`, { method: 'POST' });
+        if (resp.ok) {
+            showToast(`Team "${boardName}" is resetting...`);
+        } else {
+            const data = await resp.json().catch(() => ({}));
+            showToast(data.error || 'Reset failed', true);
+        }
+    } catch {
+        showToast('Reset failed', true);
+    }
+}
+
 // ── Top Nav Tab Switching ─────────────────────────────────────────────
 function switchNavTab(tab) {
     // Update tab button states
@@ -380,7 +396,7 @@ Object.assign(window, {
     toggleSidebarKebab, closeSidebarKebabs,
     // render (sidebar actions)
     toggleGroupCollapse, killGroup, moveGroupUp, moveGroupDown,
-    copyFolderPath, killBoard, setBoardAccentColor,
+    copyFolderPath, killBoard, setBoardAccentColor, resetTeam,
     moveSessionUp, moveSessionDown,
     toggleTeamSleep, toggleAgentSleep, sleepAllAgents, wakeAllAgents,
     shareAgentTeam, saveTeamFromSidebar,

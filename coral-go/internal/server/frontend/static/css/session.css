@@ -470,10 +470,14 @@
 }
 
 .session-group-item {
-    padding: 6px 12px 6px 33px !important;
+    padding: 10px 12px 10px 33px !important;
     cursor: grab;
     min-height: 0;
     border-left: 2px solid transparent;
+}
+
+.session-group-header + .session-group-item {
+    margin-top: 4px;
 }
 
 .session-group-item.active {

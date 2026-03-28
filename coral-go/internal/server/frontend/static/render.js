@@ -1126,7 +1126,7 @@ export function renderLiveSessions(sessions) {
         const accentColor = _boardAccentColor(boardName);
         const boardCollapsed = _isGroupCollapsed(boardName);
         const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
-        const boardLink = `<button class="group-board-link" onclick="event.stopPropagation(); selectBoardProject('${escapeAttr(boardName)}')" title="View board: ${escapeAttr(boardName)}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 6h-2V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h2v3a1 1 0 0 0 1.6.8L10.33 17H18a1 1 0 0 0 1-1v-3h2a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1zM17 15H10a1 1 0 0 0-.6.2L6 17.75V16a1 1 0 0 0-1-1H4V4h14v2H7a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h10zm3-3H8V8h12z"/></svg></button>`;
+        const boardLink = '';
         const boardWorkDir = boardSessions[0]?.working_directory || '';
         const boardIsSleeping = boardSessions.every(s => s.sleeping);
         const boardSleepIcon = boardIsSleeping ? ' <span class="agent-icon" title="Team is sleeping">🌙</span>' : '';
@@ -1163,6 +1163,10 @@ export function renderLiveSessions(sessions) {
                 <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); moveGroupDown('${escapeAttr(boardName)}')">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 9l4 4 4-4"/></svg>
                     Move Down
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); resetTeam('${escapeAttr(boardName)}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8a7 7 0 0 1 12.9-3.8"/><path d="M15 8a7 7 0 0 1-12.9 3.8"/><polyline points="13 1 14 4.2 10.5 4.2"/><polyline points="3 15 2 11.8 5.5 11.8"/></svg>
+                    Reset Team
                 </button>
                 <hr class="overflow-menu-divider">
                 <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killBoard('${escapeAttr(boardName)}')">
@@ -1316,7 +1320,7 @@ export function renderLiveSessions(sessions) {
                 const accentColor = _boardAccentColor(boardName);
                 const boardCollapsed = _isGroupCollapsed(boardName);
                 const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
-                const boardLink = `<button class="group-board-link" onclick="event.stopPropagation(); selectBoardProject('${escapeAttr(boardName)}')" title="View board: ${escapeAttr(boardName)}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 6h-2V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h2v3a1 1 0 0 0 1.6.8L10.33 17H18a1 1 0 0 0 1-1v-3h2a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1zM17 15H10a1 1 0 0 0-.6.2L6 17.75V16a1 1 0 0 0-1-1H4V4h14v2H7a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h10zm3-3H8V8h12z"/></svg></button>`;
+                const boardLink = '';
                 const boardWorkDir = boardSessions[0]?.working_directory || '';
                 const boardIsSleeping = boardSessions.some(s => s.sleeping);
                 const boardSleepIcon = boardIsSleeping ? ' <span class="agent-icon" title="Team is sleeping">🌙</span>' : '';

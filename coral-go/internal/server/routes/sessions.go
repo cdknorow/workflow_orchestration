@@ -1789,10 +1789,10 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 
 	// Save each agent's config before killing
 	type agentConfig struct {
-		DisplayName string
+		DisplayName *string
 		WorkingDir  string
 		AgentType   string
-		Flags       string
+		Flags       *string
 		Prompt      *string
 		BoardServer *string
 		BoardType   *string
@@ -1831,8 +1831,8 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 	var launched []map[string]any
 	for _, cfg := range configs {
 		var flags []string
-		if cfg.Flags != "" {
-			json.Unmarshal([]byte(cfg.Flags), &flags)
+		if cfg.Flags != nil && *cfg.Flags != "" {
+			json.Unmarshal([]byte(*cfg.Flags), &flags)
 		}
 		prompt := ""
 		if cfg.Prompt != nil {
@@ -1846,21 +1846,25 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 		if cfg.BoardType != nil {
 			boardType = *cfg.BoardType
 		}
+		displayName := ""
+		if cfg.DisplayName != nil {
+			displayName = *cfg.DisplayName
+		}
 
-		result, err := h.launchSession(bgCtx, cfg.WorkingDir, cfg.AgentType, cfg.DisplayName,
+		result, err := h.launchSession(bgCtx, cfg.WorkingDir, cfg.AgentType, displayName,
 			"", flags, prompt, boardName, boardServer, "", boardType, nil)
 		if err != nil {
-			log.Printf("[reset-team] failed to re-launch %s: %v", cfg.DisplayName, err)
-			launched = append(launched, map[string]any{"name": cfg.DisplayName, "error": err.Error()})
+			log.Printf("[reset-team] failed to re-launch %s: %v", displayName, err)
+			launched = append(launched, map[string]any{"name": displayName, "error": err.Error()})
 			continue
 		}
 
 		// Re-setup board subscription
 		go h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
-			cfg.AgentType, boardName, cfg.DisplayName)
+			cfg.AgentType, boardName, displayName)
 
 		launched = append(launched, map[string]any{
-			"name":         cfg.DisplayName,
+			"name":         displayName,
 			"session_id":   result["session_id"],
 			"session_name": result["session_name"],
 		})
