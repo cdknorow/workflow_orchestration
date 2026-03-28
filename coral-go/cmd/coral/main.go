@@ -126,6 +126,10 @@ func main() {
 		}()
 	}
 
+	// Print dashboard URL to stdout so it's visible in the terminal
+	fmt.Printf("\n  Coral dashboard: http://localhost:%d\n", cfg.Port)
+	fmt.Printf("  Press Ctrl+C to stop\n\n")
+
 	// Open browser unless --no-browser
 	if !*noBrowser {
 		go func() {
@@ -135,6 +139,8 @@ func main() {
 	}
 
 	<-ctx.Done()
-	log.Println("Shutting down...")
+	fmt.Println() // newline after ^C
+	log.Println("[SHUTDOWN] shutting down...")
 	rs.Shutdown(10 * time.Second)
+	log.Println("[SHUTDOWN] done")
 }
