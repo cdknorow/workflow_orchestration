@@ -470,9 +470,43 @@
 }
 
 .session-group-item {
-    padding-left: 33px !important;
+    padding: 6px 16px 6px 33px !important;
     cursor: grab;
-    min-height: 46px;
+    min-height: 0;
+    border-left: 2px solid transparent;
+}
+
+.session-group-item.active {
+    border-left-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+/* ── Agent Status Text ────────────────────────────────────── */
+
+.session-activity-text {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.session-status-chip {
+    display: none;  /* hidden on desktop — activity-text shows status instead */
+}
+
+/* Color-code status text based on dot state class */
+.session-dot.working ~ .session-info .session-activity-text {
+    color: var(--accent);
+}
+
+.session-dot.waiting ~ .session-info .session-activity-text,
+.session-dot.stuck ~ .session-info .session-activity-text {
+    color: var(--warning, #d29922);
+}
+
+.session-dot.done ~ .session-info .session-activity-text {
+    color: var(--success, #3fb950);
 }
 
 .session-group-item.dragging {

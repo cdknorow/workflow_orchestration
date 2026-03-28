@@ -1043,7 +1043,7 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
             </div>
             <div class="session-mobile-meta">
                 <span class="session-status-chip ${escapeAttr(mobileStatus.className)}">${escapeHtml(mobileStatus.label)}</span>
-                <span class="session-activity-text">${escapeHtml(activityLabel)} ${escapeHtml(lastActivity)}</span>
+                <span class="session-activity-text" title="${escapeAttr(activityLabel)} ${escapeAttr(lastActivity)}">${escapeHtml(mobileStatus.label)}</span>
                 ${unreadBoardBadge}
             </div>
             <span class="session-goal${isCompact ? ' session-goal-compact' : ''}">${goal}</span>
