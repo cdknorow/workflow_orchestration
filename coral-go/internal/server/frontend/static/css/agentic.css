@@ -347,7 +347,7 @@
 }
 
 .filter-dropdown-toggle:hover {
-    background: rgba(167, 139, 250, 0.1);
+    background: rgba(88, 166, 255, 0.1);
 }
 
 .filter-dropdown-list {
@@ -382,15 +382,15 @@
     flex-shrink: 0;
 }
 
-.filter-dropdown-item.tool-read .filter-item-icon    { color: var(--color-tool-read); background: rgba(167, 139, 250, 0.1); }
+.filter-dropdown-item.tool-read .filter-item-icon    { color: var(--color-tool-read); background: rgba(88, 166, 255, 0.1); }
 .filter-dropdown-item.tool-write .filter-item-icon   { color: var(--color-tool-write); background: rgba(63, 185, 80, 0.1); }
 .filter-dropdown-item.tool-edit .filter-item-icon     { color: var(--color-tool-edit); background: rgba(210, 153, 34, 0.1); }
 .filter-dropdown-item.tool-bash .filter-item-icon     { color: var(--color-tool-bash); background: rgba(210, 168, 255, 0.1); }
 .filter-dropdown-item.tool-grep .filter-item-icon     { color: var(--color-tool-grep); background: rgba(121, 192, 255, 0.1); }
 .filter-dropdown-item.tool-web .filter-item-icon      { color: var(--color-tool-web); background: rgba(255, 166, 87, 0.1); }
-.filter-dropdown-item.tool-task .filter-item-icon     { color: var(--color-tool-task); background: rgba(167, 139, 250, 0.1); }
+.filter-dropdown-item.tool-task .filter-item-icon     { color: var(--color-tool-task); background: rgba(88, 166, 255, 0.1); }
 .filter-dropdown-item.tool-agent .filter-item-icon    { color: var(--color-tool-agent); background: rgba(210, 168, 255, 0.1); }
-.filter-dropdown-item.tool-status .filter-item-icon   { color: var(--color-tool-status); background: rgba(167, 139, 250, 0.15); }
+.filter-dropdown-item.tool-status .filter-item-icon   { color: var(--color-tool-status); background: rgba(88, 166, 255, 0.15); }
 .filter-dropdown-item.tool-goal .filter-item-icon     { color: var(--color-tool-goal); background: rgba(63, 185, 80, 0.15); }
 .filter-dropdown-item.tool-confidence .filter-item-icon { color: var(--color-tool-confidence); background: rgba(227, 179, 65, 0.15); }
 .filter-dropdown-item.tool-stop .filter-item-icon     { color: var(--color-tool-stop); background: rgba(248, 81, 73, 0.1); }
@@ -532,8 +532,8 @@
 }
 
 .event-item.event-type-status {
-    background: rgba(167, 139, 250, 0.06);
-    border-color: rgba(167, 139, 250, 0.2);
+    background: rgba(88, 166, 255, 0.06);
+    border-color: rgba(88, 166, 255, 0.2);
 }
 
 .event-item.event-type-goal {
@@ -603,16 +603,16 @@
     border-radius: 6px;
 }
 
-.event-icon.tool-read   { color: var(--color-tool-read); background: rgba(167, 139, 250, 0.1); }
+.event-icon.tool-read   { color: var(--color-tool-read); background: rgba(88, 166, 255, 0.1); }
 .event-icon.tool-write  { color: var(--color-tool-write); background: rgba(63, 185, 80, 0.1); }
 .event-icon.tool-edit   { color: var(--color-tool-edit); background: rgba(210, 153, 34, 0.1); }
 .event-icon.tool-bash   { color: var(--color-tool-bash); background: rgba(210, 168, 255, 0.1); }
 .event-icon.tool-grep,
 .event-icon.tool-glob   { color: var(--color-tool-grep); background: rgba(121, 192, 255, 0.1); }
 .event-icon.tool-web    { color: var(--color-tool-web); background: rgba(255, 166, 87, 0.1); }
-.event-icon.tool-task   { color: var(--color-tool-task); background: rgba(167, 139, 250, 0.1); }
+.event-icon.tool-task   { color: var(--color-tool-task); background: rgba(88, 166, 255, 0.1); }
 .event-icon.tool-agent  { color: var(--color-tool-agent); background: rgba(210, 168, 255, 0.1); }
-.event-icon.tool-status { color: var(--color-tool-status); background: rgba(167, 139, 250, 0.15); }
+.event-icon.tool-status { color: var(--color-tool-status); background: rgba(88, 166, 255, 0.15); }
 .event-icon.tool-goal   { color: var(--color-tool-goal); background: rgba(63, 185, 80, 0.15); }
 .event-icon.tool-stop   { color: var(--color-tool-stop); background: rgba(248, 81, 73, 0.1); }
 .event-icon.tool-notification { color: var(--color-tool-edit); background: rgba(210, 153, 34, 0.1); }
@@ -694,9 +694,9 @@
 .activity-chart-bar.tool-bash   { background: rgba(210, 168, 255, 0.6); }
 .activity-chart-bar.tool-grep   { background: rgba(121, 192, 255, 0.6); }
 .activity-chart-bar.tool-web    { background: rgba(255, 166, 87, 0.6); }
-.activity-chart-bar.tool-task   { background: rgba(167, 139, 250, 0.6); }
+.activity-chart-bar.tool-task   { background: rgba(88, 166, 255, 0.6); }
 .activity-chart-bar.tool-agent  { background: rgba(210, 168, 255, 0.6); }
-.activity-chart-bar.tool-status { background: rgba(167, 139, 250, 0.6); }
+.activity-chart-bar.tool-status { background: rgba(88, 166, 255, 0.6); }
 .activity-chart-bar.tool-goal   { background: rgba(63, 185, 80, 0.6); }
 .activity-chart-bar.tool-confidence { background: rgba(227, 179, 65, 0.6); }
 .activity-chart-bar.tool-stop   { background: rgba(248, 81, 73, 0.6); }
@@ -1219,7 +1219,7 @@
 .file-modified .file-status-icon { color: var(--warning); background: rgba(210, 153, 34, 0.12); }
 .file-added .file-status-icon    { color: var(--success); background: rgba(63, 185, 80, 0.12); }
 .file-deleted .file-status-icon  { color: var(--error); background: rgba(248, 81, 73, 0.12); }
-.file-renamed .file-status-icon  { color: var(--accent); background: rgba(167, 139, 250, 0.12); }
+.file-renamed .file-status-icon  { color: var(--accent); background: rgba(88, 166, 255, 0.12); }
 
 .file-path-wrap {
     flex: 1;

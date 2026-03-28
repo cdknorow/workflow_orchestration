@@ -11,29 +11,29 @@
 :root,
 [data-theme="dark"] {
     /* Surface / Background */
-    --bg-primary:   #09090b;
-    --bg-secondary: #0c0c0f;
-    --bg-tertiary:  #18181b;
-    --bg-hover:     #27272a;
-    --bg-elevated:  #1e1e22;
+    --bg-primary:   #0a0e14;
+    --bg-secondary: #12171e;
+    --bg-tertiary:  #1c2128;
+    --bg-hover:     #2a313a;
+    --bg-elevated:  #252b33;
 
     /* Borders */
-    --border:       #27272a;
-    --border-light: #3f3f46;
+    --border:       #30363d;
+    --border-light: #484f58;
 
     /* Text */
-    --text-primary:   #fafafa;
-    --text-secondary: #a1a1aa;
-    --text-muted:     #52525b;
+    --text-primary:   #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted:     #484f58;
 
     /* Accent / Brand */
-    --accent:     #a78bfa;
-    --accent-dim: #7c3aed;
+    --accent:     #58a6ff;
+    --accent-dim: #1f6feb;
 
     /* Semantic Status */
-    --success: #34d399;
-    --warning: #ffb781;
-    --error:   #ffb4ab;
+    --success: #3fb950;
+    --warning: #d29922;
+    --error:   #f85149;
 
     /* Agent Badges */
     --badge-claude: #7c3aed;
@@ -41,41 +41,41 @@
     --badge-codex: #10a37f;
 
     /* Shadows */
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.35);
 
     /* Typography */
     --font-sans:  'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-mono:  'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 
     /* Syntax Highlighting */
-    --sh-keyword:   #f87171;
-    --sh-string:    #a6c8ff;
-    --sh-comment:   #71717a;
-    --sh-number:    #93c5fd;
-    --sh-builtin:   #ffb781;
-    --sh-decorator: #c4b5fd;
+    --sh-keyword:   #ff7b72;
+    --sh-string:    #a5d6ff;
+    --sh-comment:   #8b949e;
+    --sh-number:    #79c0ff;
+    --sh-builtin:   #ffa657;
+    --sh-decorator: #d2a8ff;
 
     /* Diff */
-    --diff-add-bg:    rgba(52, 211, 153, 0.15);
-    --diff-add-color: #34d399;
-    --diff-del-bg:    rgba(255, 180, 171, 0.15);
-    --diff-del-color: #ffb4ab;
+    --diff-add-bg:    rgba(63, 185, 80, 0.15);
+    --diff-add-color: #3fb950;
+    --diff-del-bg:    rgba(248, 81, 73, 0.15);
+    --diff-del-color: #f85149;
 
     /* Tool / Event Colors */
     --color-tool-read:       var(--accent);
     --color-tool-write:      var(--success);
     --color-tool-edit:       var(--warning);
-    --color-tool-bash:       #c4b5fd;
-    --color-tool-grep:       #93c5fd;
-    --color-tool-web:        #ffb781;
+    --color-tool-bash:       #d2a8ff;
+    --color-tool-grep:       #79c0ff;
+    --color-tool-web:        #ffa657;
     --color-tool-task:       var(--accent);
-    --color-tool-agent:      #c4b5fd;
+    --color-tool-agent:      #d2a8ff;
     --color-tool-status:     var(--accent);
     --color-tool-goal:       var(--success);
-    --color-tool-confidence: #fbbf24;
+    --color-tool-confidence: #e3b341;
     --color-tool-stop:       var(--error);
-    --color-tool-pulse:      #a78bfa;
+    --color-tool-pulse:      #bc8cff;
     --color-tool-default:    var(--text-muted);
 
     /* Modal backdrop */
@@ -89,49 +89,49 @@
 
     /* Chat / markdown specifics */
     --code-inline-bg:  rgba(255, 255, 255, 0.07);
-    --code-block-bg:   rgba(0, 0, 0, 0.40);
-    --table-header-bg: rgba(0, 0, 0, 0.25);
+    --code-block-bg:   rgba(0, 0, 0, 0.35);
+    --table-header-bg: rgba(0, 0, 0, 0.2);
 
     /* Capture blocks */
-    --capture-text-bg:   rgba(161, 161, 170, 0.06);
-    --capture-tool-bg:   rgba(167, 139, 250, 0.06);
-    --capture-user-bg:   rgba(196, 181, 253, 0.08);
-    --capture-pulse-bg:  rgba(52, 211, 153, 0.08);
-    --capture-code-bg:   rgba(161, 161, 170, 0.1);
-    --capture-user-color: #c4b5fd;
+    --capture-text-bg:   rgba(110, 118, 129, 0.06);
+    --capture-tool-bg:   rgba(88, 166, 255, 0.05);
+    --capture-user-bg:   rgba(201, 160, 255, 0.08);
+    --capture-pulse-bg:  rgba(63, 185, 80, 0.08);
+    --capture-code-bg:   rgba(110, 118, 129, 0.1);
+    --capture-user-color: #c9a0ff;
 
     /* Top bar */
-    --topbar-bg: rgba(9, 9, 11, 0.95);
-    --topbar-border: rgba(39, 39, 42, 0.6);
+    --topbar-bg: rgba(18, 23, 30, 0.85);
+    --topbar-border: rgba(48, 54, 61, 0.6);
 
     /* Terminal (xterm) */
-    --xterm-background:          #09090b;
-    --xterm-foreground:          #fafafa;
-    --xterm-cursor:              #fafafa;
-    --xterm-selection-background:#3f3f46;
-    --xterm-black:               #52525b;
-    --xterm-red:                 #ffb4ab;
-    --xterm-green:               #34d399;
-    --xterm-yellow:              #ffb781;
-    --xterm-blue:                #a6c8ff;
-    --xterm-magenta:             #c4b5fd;
-    --xterm-cyan:                #5eead4;
-    --xterm-white:               #fafafa;
-    --xterm-bright-black:        #71717a;
-    --xterm-bright-red:          #fecaca;
-    --xterm-bright-green:        #6ee7b7;
-    --xterm-bright-yellow:       #fbbf24;
-    --xterm-bright-blue:         #93c5fd;
-    --xterm-bright-magenta:      #ddd6fe;
-    --xterm-bright-cyan:         #99f6e4;
-    --xterm-bright-white:        #fafafa;
+    --xterm-background:          #0d1117;
+    --xterm-foreground:          #e6edf3;
+    --xterm-cursor:              #e6edf3;
+    --xterm-selection-background:#264f78;
+    --xterm-black:               #484f58;
+    --xterm-red:                 #f85149;
+    --xterm-green:               #3fb950;
+    --xterm-yellow:              #d29922;
+    --xterm-blue:                #58a6ff;
+    --xterm-magenta:             #bc8cff;
+    --xterm-cyan:                #39d2c0;
+    --xterm-white:               #e6edf3;
+    --xterm-bright-black:        #6e7681;
+    --xterm-bright-red:          #ffa198;
+    --xterm-bright-green:        #56d364;
+    --xterm-bright-yellow:       #e3b341;
+    --xterm-bright-blue:         #79c0ff;
+    --xterm-bright-magenta:      #d2a8ff;
+    --xterm-bright-cyan:         #56d4dd;
+    --xterm-bright-white:        #f0f6fc;
 
     /* Message Board */
-    --mb-bg:          #121215;
-    --mb-text:        #e4e4e7;
-    --mb-text-bright: #fafafa;
-    --mb-heading:     #a6c8ff;
-    --mb-code-bg:     #09090b;
+    --mb-bg:          #1a1f3a;
+    --mb-text:        #e0e0e0;
+    --mb-text-bright: #f0f0f0;
+    --mb-heading:     #88c0d0;
+    --mb-code-bg:     #0a0e27;
     --board-msg-bg:   transparent;
 }
 

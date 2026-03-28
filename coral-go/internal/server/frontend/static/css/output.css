@@ -136,7 +136,7 @@
 }
 
 .xterm-container.xterm-focused {
-    outline: 1px solid var(--accent-primary, #a78bfa);
+    outline: 1px solid var(--accent-primary, #58a6ff);
     outline-offset: -1px;
     border-radius: 4px;
 }

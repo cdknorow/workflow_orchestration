@@ -717,7 +717,7 @@ img[src*="coral.png"] {
 .welcome-hero-btn:hover {
     background: var(--accent-hover, var(--accent));
     transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(167, 139, 250, 0.3);
+    box-shadow: 0 4px 16px rgba(88, 166, 255, 0.3);
 }
 
 .welcome-hero-btn svg {
