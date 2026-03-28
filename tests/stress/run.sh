@@ -102,6 +102,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ── Pre-test cleanup ────────────────────────────────────────────────────
+# Kill any dangling coral-stress-test processes from previous runs
+pkill -f "coral-stress-test" 2>/dev/null || true
+# Kill any tmux servers on old stress test sockets
+for old_sock in /tmp/.coral-stress-*/tmux.sock; do
+    tmux -S "$old_sock" kill-server 2>/dev/null || true
+done
+# Remove old stress test data dirs
+rm -rf /tmp/.coral-stress-* 2>/dev/null || true
+sleep 1
+
 # ── Setup ───────────────────────────────────────────────────────────────
 mkdir -p "$DATA_DIR"
 touch "$LOG_FILE"
@@ -235,6 +246,15 @@ if [[ "$LIVE_COUNT" -gt 0 ]]; then
     pass "API reports $LIVE_COUNT live sessions"
 else
     fail "API reports 0 live sessions"
+fi
+
+# Debug: show DB contents to identify extra sessions
+DB_PATH="${DATA_DIR}/sessions.db"
+if command -v sqlite3 &>/dev/null && [[ -f "$DB_PATH" ]]; then
+    log "  DB live_sessions:"
+    sqlite3 "$DB_PATH" "SELECT agent_name, board_name, is_sleeping FROM live_sessions" 2>/dev/null | while read -r line; do
+        log "    $line"
+    done
 fi
 
 # Collect agent names for WebSocket cycling
