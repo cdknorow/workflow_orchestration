@@ -58,9 +58,11 @@
 .topbar-search-dropdown {
     position: absolute;
     top: 100%;
+    bottom: auto;           /* override base .file-mention-dropdown bottom:100% */
     left: 0;
     right: 0;
     margin-top: 4px;
+    margin-bottom: 0;       /* override base margin-bottom */
     max-height: 400px;
     overflow-y: auto;
     z-index: 100;
