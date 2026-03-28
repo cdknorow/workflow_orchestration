@@ -203,7 +203,6 @@ export function showBoardChatTab(boardName) {
                 </div>
                 <span class="toolbar-spacer"></span>
                 <div class="toolbar-group">
-                    <span class="board-chat-hint">Ctrl+Enter to send</span>
                     <button class="btn-nav" onclick="window._sendBoardChat('${escapeAttr(boardName)}')" title="Send message">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="8" x2="14" y2="8"/><polyline points="9 3 14 8 9 13"/></svg>
                     </button>
