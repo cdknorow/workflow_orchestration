@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cdknorow/coral/internal/httputil"
+	"github.com/cdknorow/coral/internal/naming"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -75,7 +76,7 @@ func (p *RemoteBoardPoller) RunOnce(ctx context.Context) error {
 	for _, agent := range agents {
 		if agent.SessionID != "" {
 			agentMap[agent.SessionID] = agent
-			tmuxName := fmt.Sprintf("%s-%s", agent.AgentType, agent.SessionID)
+			tmuxName := naming.SessionName(agent.AgentType, agent.SessionID)
 			agentMap[tmuxName] = agent
 		}
 	}
@@ -134,7 +135,7 @@ func (p *RemoteBoardPoller) RunOnce(ctx context.Context) error {
 		}
 		nudge := fmt.Sprintf("You have %d unread message%s on the message board. Run 'coral-board read' to see them.",
 			data.Unread, plural)
-		sessionName := fmt.Sprintf("%s-%s", agent.AgentType, agent.SessionID)
+		sessionName := naming.SessionName(agent.AgentType, agent.SessionID)
 		err = p.runtime.SendInput(ctx, sessionName, nudge)
 		if err != nil {
 			continue

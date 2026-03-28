@@ -16,10 +16,13 @@ import (
 )
 
 // Subscriber represents a board subscriber.
+// SubscriberID is the stable identity (role/display name, e.g. "Orchestrator").
+// SessionName is the current tmux/pty session name (mutable across restarts).
 type Subscriber struct {
 	ID           int64   `db:"id" json:"id"`
 	Project      string  `db:"project" json:"project"`
-	SessionID    string  `db:"session_id" json:"session_id"`
+	SubscriberID string  `db:"subscriber_id" json:"subscriber_id"`
+	SessionName  string  `db:"session_name" json:"session_name,omitempty"`
 	JobTitle     string  `db:"job_title" json:"job_title"`
 	WebhookURL   *string `db:"webhook_url" json:"webhook_url"`
 	OriginServer *string `db:"origin_server" json:"origin_server"`
@@ -27,6 +30,8 @@ type Subscriber struct {
 	LastReadID   int64   `db:"last_read_id" json:"last_read_id"`
 	SubscribedAt string  `db:"subscribed_at" json:"subscribed_at"`
 	IsActive     int     `db:"is_active" json:"is_active"`
+	// Legacy column — kept for DB compat, mirrors SubscriberID for new rows.
+	SessionID string `db:"session_id" json:"-"`
 }
 
 // GroupInfo holds group summary info.
@@ -36,14 +41,17 @@ type GroupInfo struct {
 }
 
 // Message represents a board message.
+// SubscriberID is the stable poster identity (role name).
 type Message struct {
-	ID             int64   `db:"id" json:"id"`
-	Project        string  `db:"project" json:"project"`
-	SessionID      string  `db:"session_id" json:"session_id"`
-	Content        string  `db:"content" json:"content"`
-	CreatedAt      string  `db:"created_at" json:"created_at"`
-	JobTitle       string  `db:"job_title" json:"job_title,omitempty"`
-	TargetGroupID  *string `db:"target_group_id" json:"target_group_id,omitempty"`
+	ID            int64   `db:"id" json:"id"`
+	Project       string  `db:"project" json:"project"`
+	SubscriberID  string  `db:"subscriber_id" json:"subscriber_id"`
+	Content       string  `db:"content" json:"content"`
+	CreatedAt     string  `db:"created_at" json:"created_at"`
+	JobTitle      string  `db:"job_title" json:"job_title,omitempty"`
+	TargetGroupID *string `db:"target_group_id" json:"target_group_id,omitempty"`
+	// Legacy column — kept for DB compat, mirrors SubscriberID for new rows.
+	SessionID string `db:"session_id" json:"-"`
 }
 
 // ProjectInfo holds project summary info.
@@ -122,6 +130,40 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN receive_mode TEXT NOT NULL DEFAULT 'mentions'")
 	s.db.ExecContext(ctx, "ALTER TABLE board_messages ADD COLUMN target_group_id TEXT")
 	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+
+	// Stable board identity migration: add subscriber_id and session_name columns.
+	// subscriber_id is the stable identity (role name); session_name is the mutable tmux session.
+	// The legacy session_id column is kept and mirrored to subscriber_id for UNIQUE constraint compat.
+	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN subscriber_id TEXT")
+	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN session_name TEXT")
+	s.db.ExecContext(ctx, "ALTER TABLE board_messages ADD COLUMN subscriber_id TEXT")
+	s.db.ExecContext(ctx, "ALTER TABLE board_groups ADD COLUMN subscriber_id TEXT")
+
+	// Backfill: save old session_id as session_name, then set subscriber_id from job_title.
+	s.db.ExecContext(ctx, "UPDATE board_subscribers SET session_name = session_id WHERE session_name IS NULL")
+	s.db.ExecContext(ctx, "UPDATE board_subscribers SET subscriber_id = job_title WHERE subscriber_id IS NULL")
+	// Deduplicate: when multiple rows share (project, subscriber_id), keep the one with the highest
+	// id and remove others before we overwrite session_id.
+	s.db.ExecContext(ctx, `DELETE FROM board_subscribers WHERE id NOT IN (
+		SELECT MAX(id) FROM board_subscribers GROUP BY project, subscriber_id
+	) AND subscriber_id IS NOT NULL`)
+	// Mirror subscriber_id into session_id so UNIQUE(project, session_id) enforces uniqueness on subscriber_id.
+	s.db.ExecContext(ctx, "UPDATE board_subscribers SET session_id = subscriber_id WHERE subscriber_id IS NOT NULL AND session_id != subscriber_id")
+	// Backfill messages: look up subscriber_id from board_subscribers by session_name match.
+	s.db.ExecContext(ctx, `UPDATE board_messages SET subscriber_id = COALESCE(
+		(SELECT bs.subscriber_id FROM board_subscribers bs
+		 WHERE bs.session_name = board_messages.session_id AND bs.project = board_messages.project
+		 LIMIT 1),
+		board_messages.session_id
+	) WHERE subscriber_id IS NULL`)
+	// Backfill groups
+	s.db.ExecContext(ctx, `UPDATE board_groups SET subscriber_id = COALESCE(
+		(SELECT bs.subscriber_id FROM board_subscribers bs
+		 WHERE bs.session_name = board_groups.session_id AND bs.project = board_groups.project
+		 LIMIT 1),
+		board_groups.session_id
+	) WHERE subscriber_id IS NULL`)
+
 	return nil
 }
 
@@ -132,52 +174,53 @@ func nowUTC() string {
 // ── Subscribers ──────────────────────────────────────────────────────
 
 // Subscribe adds or updates a subscriber on a board project.
-func (s *Store) Subscribe(ctx context.Context, project, sessionID, jobTitle string, webhookURL, originServer *string, receiveMode string) (*Subscriber, error) {
+// subscriberID is the stable identity (role name). sessionName is the current tmux/pty session.
+func (s *Store) Subscribe(ctx context.Context, project, subscriberID, jobTitle, sessionName string, webhookURL, originServer *string, receiveMode string) (*Subscriber, error) {
 	if receiveMode == "" {
 		receiveMode = "mentions"
 	}
 	now := nowUTC()
 
-	// Carry forward last_read_id from existing subscriptions. Try matching by
-	// role (job_title) first, then fall back to the highest cursor on the same
-	// project. This preserves the read cursor when an agent restarts with a
-	// new session_id, even if the session name or role changes slightly.
+	// For new subscribers who haven't been on this board before, start their
+	// cursor at the latest message so they don't get flooded with history.
 	var carryForwardCursor int64
 	_ = s.db.GetContext(ctx, &carryForwardCursor,
-		"SELECT COALESCE(MAX(last_read_id), 0) FROM board_subscribers WHERE project = ? AND job_title = ?",
-		project, jobTitle)
+		"SELECT COALESCE(MAX(last_read_id), 0) FROM board_subscribers WHERE project = ? AND subscriber_id = ?",
+		project, subscriberID)
 	if carryForwardCursor == 0 {
-		// Fallback: use the highest cursor from any subscriber on this project
 		_ = s.db.GetContext(ctx, &carryForwardCursor,
 			"SELECT COALESCE(MAX(last_read_id), 0) FROM board_subscribers WHERE project = ?",
 			project)
 	}
 
+	// session_id mirrors subscriber_id so UNIQUE(project, session_id) enforces subscriber uniqueness.
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO board_subscribers (project, session_id, job_title, webhook_url, origin_server, receive_mode, last_read_id, subscribed_at, is_active)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+		`INSERT INTO board_subscribers (project, session_id, subscriber_id, session_name, job_title, webhook_url, origin_server, receive_mode, last_read_id, subscribed_at, is_active)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
 		 ON CONFLICT(project, session_id) DO UPDATE SET
 		     job_title = excluded.job_title,
 		     webhook_url = excluded.webhook_url,
 		     origin_server = excluded.origin_server,
 		     receive_mode = excluded.receive_mode,
+		     session_name = excluded.session_name,
+		     subscriber_id = excluded.subscriber_id,
 		     is_active = 1`,
-		project, sessionID, jobTitle, webhookURL, originServer, receiveMode, carryForwardCursor, now)
+		project, subscriberID, subscriberID, sessionName, jobTitle, webhookURL, originServer, receiveMode, carryForwardCursor, now)
 	if err != nil {
 		return nil, err
 	}
 	var sub Subscriber
 	err = s.db.GetContext(ctx, &sub,
-		"SELECT * FROM board_subscribers WHERE project = ? AND session_id = ?",
-		project, sessionID)
+		"SELECT * FROM board_subscribers WHERE project = ? AND subscriber_id = ?",
+		project, subscriberID)
 	return &sub, err
 }
 
 // Unsubscribe marks a subscriber as inactive. Returns true if a row was updated.
-func (s *Store) Unsubscribe(ctx context.Context, project, sessionID string) (bool, error) {
+func (s *Store) Unsubscribe(ctx context.Context, project, subscriberID string) (bool, error) {
 	result, err := s.db.ExecContext(ctx,
-		"UPDATE board_subscribers SET is_active = 0 WHERE project = ? AND session_id = ? AND is_active = 1",
-		project, sessionID)
+		"UPDATE board_subscribers SET is_active = 0 WHERE project = ? AND subscriber_id = ? AND is_active = 1",
+		project, subscriberID)
 	if err != nil {
 		return false, err
 	}
@@ -193,18 +236,19 @@ func (s *Store) ListSubscribers(ctx context.Context, project string) ([]Subscrib
 	return subs, err
 }
 
-// GetSubscription returns the active subscription for a session.
-func (s *Store) GetSubscription(ctx context.Context, sessionID string) (*Subscriber, error) {
+// GetSubscription returns the active subscription for a subscriber.
+func (s *Store) GetSubscription(ctx context.Context, subscriberID string) (*Subscriber, error) {
 	var sub Subscriber
 	err := s.db.GetContext(ctx, &sub,
-		"SELECT * FROM board_subscribers WHERE session_id = ? AND is_active = 1 LIMIT 1", sessionID)
+		"SELECT * FROM board_subscribers WHERE subscriber_id = ? AND is_active = 1 LIMIT 1", subscriberID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return &sub, err
 }
 
-// GetAllSubscriptions returns all active subscriptions keyed by session_id.
+// GetAllSubscriptions returns all active subscriptions keyed by session_name
+// (the tmux session identifier) for compatibility with live session lookups.
 func (s *Store) GetAllSubscriptions(ctx context.Context) (map[string]*Subscriber, error) {
 	var subs []Subscriber
 	err := s.db.SelectContext(ctx, &subs, "SELECT * FROM board_subscribers WHERE is_active = 1")
@@ -213,72 +257,33 @@ func (s *Store) GetAllSubscriptions(ctx context.Context) (map[string]*Subscriber
 	}
 	result := make(map[string]*Subscriber, len(subs))
 	for i := range subs {
-		result[subs[i].SessionID] = &subs[i]
+		result[subs[i].SessionName] = &subs[i]
 	}
 	return result, nil
 }
 
-// TransferSubscription transfers a subscription from one session to another,
-// preserving last_read_id. Used during session resume when the session_id
-// changes but the agent should not re-read old messages.
-func (s *Store) TransferSubscription(ctx context.Context, project, oldSessionID, newSessionID string) error {
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var old Subscriber
-	err = tx.GetContext(ctx, &old,
-		"SELECT last_read_id, job_title, webhook_url, origin_server, receive_mode FROM board_subscribers WHERE project = ? AND session_id = ?",
-		project, oldSessionID)
-	if err == sql.ErrNoRows {
-		return nil // Nothing to transfer
-	}
-	if err != nil {
-		return err
-	}
-
-	now := nowUTC()
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO board_subscribers (project, session_id, job_title, webhook_url, origin_server, receive_mode, last_read_id, subscribed_at, is_active)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-		 ON CONFLICT(project, session_id)
-		 DO UPDATE SET job_title = excluded.job_title,
-		               webhook_url = excluded.webhook_url,
-		               origin_server = excluded.origin_server,
-		               receive_mode = excluded.receive_mode,
-		               last_read_id = excluded.last_read_id,
-		               is_active = 1`,
-		project, newSessionID, old.JobTitle, old.WebhookURL,
-		old.OriginServer, old.ReceiveMode, old.LastReadID, now)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx,
-		"UPDATE board_subscribers SET is_active = 0 WHERE project = ? AND session_id = ?",
-		project, oldSessionID)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
+// UpdateSessionName updates the mutable tmux/pty session name for a subscriber.
+// Used when an agent restarts and gets a new session but keeps its identity.
+func (s *Store) UpdateSessionName(ctx context.Context, project, subscriberID, sessionName string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE board_subscribers SET session_name = ? WHERE project = ? AND subscriber_id = ?",
+		sessionName, project, subscriberID)
+	return err
 }
 
 // ── Messages ─────────────────────────────────────────────────────────
 
 // PostMessage posts a new message to a project board.
-func (s *Store) PostMessage(ctx context.Context, project, sessionID, content string, targetGroupID *string) (*Message, error) {
+func (s *Store) PostMessage(ctx context.Context, project, subscriberID, content string, targetGroupID *string) (*Message, error) {
 	now := nowUTC()
 	result, err := s.db.ExecContext(ctx,
-		"INSERT INTO board_messages (project, session_id, content, target_group_id, created_at) VALUES (?, ?, ?, ?, ?)",
-		project, sessionID, content, targetGroupID, now)
+		"INSERT INTO board_messages (project, session_id, subscriber_id, content, target_group_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		project, subscriberID, subscriberID, content, targetGroupID, now)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := result.LastInsertId()
-	msg := &Message{ID: id, Project: project, SessionID: sessionID, Content: content, CreatedAt: now}
+	msg := &Message{ID: id, Project: project, SubscriberID: subscriberID, Content: content, CreatedAt: now}
 	if targetGroupID != nil {
 		msg.TargetGroupID = targetGroupID
 	}
@@ -286,12 +291,12 @@ func (s *Store) PostMessage(ctx context.Context, project, sessionID, content str
 }
 
 // ReadMessages returns unread messages for a subscriber (cursor-based).
-func (s *Store) ReadMessages(ctx context.Context, project, sessionID string, limit int) ([]Message, error) {
+func (s *Store) ReadMessages(ctx context.Context, project, subscriberID string, limit int) ([]Message, error) {
 	// Get subscriber cursor
 	var lastReadID int64
 	err := s.db.GetContext(ctx, &lastReadID,
-		"SELECT last_read_id FROM board_subscribers WHERE project = ? AND session_id = ?",
-		project, sessionID)
+		"SELECT last_read_id FROM board_subscribers WHERE project = ? AND subscriber_id = ?",
+		project, subscriberID)
 	if err != nil {
 		return nil, nil // Not subscribed
 	}
@@ -299,13 +304,13 @@ func (s *Store) ReadMessages(ctx context.Context, project, sessionID string, lim
 	// Fetch new messages from others
 	var messages []Message
 	err = s.db.SelectContext(ctx, &messages,
-		`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+		`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
 		        COALESCE(s.job_title, 'Unknown') as job_title
 		 FROM board_messages m
-		 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
-		 WHERE m.project = ? AND m.id > ? AND m.session_id != ?
+		 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
+		 WHERE m.project = ? AND m.id > ? AND m.subscriber_id != ?
 		 ORDER BY m.id ASC LIMIT ?`,
-		project, lastReadID, sessionID, limit)
+		project, lastReadID, subscriberID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -322,16 +327,16 @@ func (s *Store) ReadMessages(ctx context.Context, project, sessionID string, lim
 	// Skip past own messages
 	var ownMax int64
 	s.db.GetContext(ctx, &ownMax,
-		"SELECT COALESCE(MAX(id), 0) FROM board_messages WHERE project = ? AND session_id = ?",
-		project, sessionID)
+		"SELECT COALESCE(MAX(id), 0) FROM board_messages WHERE project = ? AND subscriber_id = ?",
+		project, subscriberID)
 	if ownMax > newCursor {
 		newCursor = ownMax
 	}
 
 	if newCursor > lastReadID {
 		s.db.ExecContext(ctx,
-			"UPDATE board_subscribers SET last_read_id = ? WHERE project = ? AND session_id = ?",
-			newCursor, project, sessionID)
+			"UPDATE board_subscribers SET last_read_id = ? WHERE project = ? AND subscriber_id = ?",
+			newCursor, project, subscriberID)
 	}
 
 	return messages, nil
@@ -344,22 +349,22 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 	var err error
 	if beforeID > 0 {
 		err = s.db.SelectContext(ctx, &messages,
-			`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
 			        COALESCE(s.job_title, 'Unknown') as job_title,
 			        m.target_group_id
 			 FROM board_messages m
-			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
 			 WHERE m.project = ? AND m.id < ?
 			 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
 			project, beforeID, limit, offset)
 	} else if offset > 0 {
 		// Paginated load: use ASC order with offset for consistent pagination
 		err = s.db.SelectContext(ctx, &messages,
-			`SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
 			        COALESCE(s.job_title, 'Unknown') as job_title,
 			        m.target_group_id
 			 FROM board_messages m
-			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
 			 WHERE m.project = ?
 			 ORDER BY m.id ASC LIMIT ? OFFSET ?`,
 			project, limit, offset)
@@ -367,11 +372,11 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 		// Initial load (offset=0): get most recent messages
 		err = s.db.SelectContext(ctx, &messages,
 			`SELECT * FROM (
-			    SELECT m.id, m.project, m.session_id, m.content, m.created_at,
+			    SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
 			           COALESCE(s.job_title, 'Unknown') as job_title,
 			           m.target_group_id
 			    FROM board_messages m
-			    LEFT JOIN board_subscribers s ON m.project = s.project AND m.session_id = s.session_id
+			    LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
 			    WHERE m.project = ?
 			    ORDER BY m.id DESC LIMIT ?
 			 ) sub ORDER BY id ASC`,
@@ -393,17 +398,17 @@ func (s *Store) CountMessages(ctx context.Context, project string) (int, error) 
 // Modes:
 //   - "none"     → always 0
 //   - "all"      → all unread messages from others
-//   - "mentions" → only messages with @notify-all, @<session_id>, or @<job_title>
+//   - "mentions" → only messages with @notify-all, @<subscriber_id>, or @<job_title>
 //   - anything else → treat as group-id, count only messages from group members
-func (s *Store) CheckUnread(ctx context.Context, project, sessionID string) (int, error) {
+func (s *Store) CheckUnread(ctx context.Context, project, subscriberID string) (int, error) {
 	var sub struct {
 		LastReadID  int64  `db:"last_read_id"`
 		JobTitle    string `db:"job_title"`
 		ReceiveMode string `db:"receive_mode"`
 	}
 	err := s.db.GetContext(ctx, &sub,
-		"SELECT last_read_id, job_title, receive_mode FROM board_subscribers WHERE project = ? AND session_id = ?",
-		project, sessionID)
+		"SELECT last_read_id, job_title, receive_mode FROM board_subscribers WHERE project = ? AND subscriber_id = ?",
+		project, subscriberID)
 	if err != nil {
 		return 0, nil
 	}
@@ -420,15 +425,15 @@ func (s *Store) CheckUnread(ctx context.Context, project, sessionID string) (int
 	if receiveMode == "all" {
 		var count int
 		err := s.db.GetContext(ctx, &count,
-			`SELECT COUNT(*) FROM board_messages WHERE project = ? AND id > ? AND session_id != ?`,
-			project, sub.LastReadID, sessionID)
+			`SELECT COUNT(*) FROM board_messages WHERE project = ? AND id > ? AND subscriber_id != ?`,
+			project, sub.LastReadID, subscriberID)
 		return count, err
 	}
 
 	if receiveMode == "mentions" {
 		patterns := []string{
 			"%@notify-all%", "%@notify_all%", "%@notifyall%", "%@all%",
-			fmt.Sprintf("%%@%s%%", sessionID),
+			fmt.Sprintf("%%@%s%%", subscriberID),
 		}
 		if sub.JobTitle != "" {
 			// Match @JobTitle anywhere in the message
@@ -440,7 +445,7 @@ func (s *Store) CheckUnread(ctx context.Context, project, sessionID string) (int
 		}
 
 		whereClauses := make([]string, len(patterns))
-		args := []interface{}{project, sub.LastReadID, sessionID}
+		args := []interface{}{project, sub.LastReadID, subscriberID}
 		for i, p := range patterns {
 			whereClauses[i] = "content LIKE ? COLLATE NOCASE"
 			args = append(args, p)
@@ -449,7 +454,7 @@ func (s *Store) CheckUnread(ctx context.Context, project, sessionID string) (int
 		var count int
 		query := fmt.Sprintf(
 			`SELECT COUNT(*) FROM board_messages
-			 WHERE project = ? AND id > ? AND session_id != ? AND (%s)`,
+			 WHERE project = ? AND id > ? AND subscriber_id != ? AND (%s)`,
 			strings.Join(whereClauses, " OR "))
 		err = s.db.GetContext(ctx, &count, query, args...)
 		return count, err
@@ -458,14 +463,14 @@ func (s *Store) CheckUnread(ctx context.Context, project, sessionID string) (int
 	// Group-based mode: count messages from group members only
 	var memberIDs []string
 	err = s.db.SelectContext(ctx, &memberIDs,
-		"SELECT session_id FROM board_groups WHERE project = ? AND group_id = ?",
+		"SELECT subscriber_id FROM board_groups WHERE project = ? AND group_id = ?",
 		project, receiveMode)
 	if err != nil || len(memberIDs) == 0 {
 		return 0, nil
 	}
 
 	placeholders := make([]string, len(memberIDs))
-	args := []interface{}{project, sub.LastReadID, sessionID}
+	args := []interface{}{project, sub.LastReadID, subscriberID}
 	for i, id := range memberIDs {
 		placeholders[i] = "?"
 		args = append(args, id)
@@ -474,34 +479,36 @@ func (s *Store) CheckUnread(ctx context.Context, project, sessionID string) (int
 	var count int
 	query := fmt.Sprintf(
 		`SELECT COUNT(*) FROM board_messages
-		 WHERE project = ? AND id > ? AND session_id != ? AND session_id IN (%s)`,
+		 WHERE project = ? AND id > ? AND subscriber_id != ? AND subscriber_id IN (%s)`,
 		strings.Join(placeholders, ","))
 	err = s.db.GetContext(ctx, &count, query, args...)
 	return count, err
 }
 
 // GetAllUnreadCounts returns unread counts for all subscribers, respecting each subscriber's receive_mode.
+// Returns map keyed by session_name (tmux session identifier) for compatibility with live session lookups.
 func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) {
 	var subs []struct {
-		Project     string `db:"project"`
-		SessionID   string `db:"session_id"`
-		JobTitle    string `db:"job_title"`
-		LastReadID  int64  `db:"last_read_id"`
-		ReceiveMode string `db:"receive_mode"`
+		Project      string `db:"project"`
+		SubscriberID string `db:"subscriber_id"`
+		SessionName  string `db:"session_name"`
+		JobTitle     string `db:"job_title"`
+		LastReadID   int64  `db:"last_read_id"`
+		ReceiveMode  string `db:"receive_mode"`
 	}
 	err := s.db.SelectContext(ctx, &subs,
-		"SELECT project, session_id, job_title, last_read_id, receive_mode FROM board_subscribers WHERE is_active = 1")
+		"SELECT project, subscriber_id, session_name, job_title, last_read_id, receive_mode FROM board_subscribers WHERE is_active = 1")
 	if err != nil || len(subs) == 0 {
 		return map[string]int{}, nil
 	}
 
 	// Pre-load all group memberships
 	var groupRows []struct {
-		Project   string `db:"project"`
-		GroupID   string `db:"group_id"`
-		SessionID string `db:"session_id"`
+		Project      string `db:"project"`
+		GroupID      string `db:"group_id"`
+		SubscriberID string `db:"subscriber_id"`
 	}
-	s.db.SelectContext(ctx, &groupRows, "SELECT project, group_id, session_id FROM board_groups")
+	s.db.SelectContext(ctx, &groupRows, "SELECT project, group_id, subscriber_id FROM board_groups")
 
 	type groupKey struct{ project, groupID string }
 	groupsByKey := make(map[groupKey]map[string]bool)
@@ -510,15 +517,16 @@ func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) 
 		if groupsByKey[key] == nil {
 			groupsByKey[key] = make(map[string]bool)
 		}
-		groupsByKey[key][gr.SessionID] = true
+		groupsByKey[key][gr.SubscriberID] = true
 	}
 
 	// Group subscribers by project
 	type subInfo struct {
-		SessionID   string
-		JobTitle    string
-		LastReadID  int64
-		ReceiveMode string
+		SubscriberID string
+		SessionName  string
+		JobTitle     string
+		LastReadID   int64
+		ReceiveMode  string
 	}
 	byProject := make(map[string][]subInfo)
 	for _, sub := range subs {
@@ -527,7 +535,7 @@ func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) 
 			rm = "mentions"
 		}
 		byProject[sub.Project] = append(byProject[sub.Project], subInfo{
-			sub.SessionID, sub.JobTitle, sub.LastReadID, rm,
+			sub.SubscriberID, sub.SessionName, sub.JobTitle, sub.LastReadID, rm,
 		})
 	}
 
@@ -542,24 +550,24 @@ func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) 
 		}
 
 		var msgs []struct {
-			ID        int64  `db:"id"`
-			SessionID string `db:"session_id"`
-			Content   string `db:"content"`
+			ID           int64  `db:"id"`
+			SubscriberID string `db:"subscriber_id"`
+			Content      string `db:"content"`
 		}
 		s.db.SelectContext(ctx, &msgs,
-			"SELECT id, session_id, content FROM board_messages WHERE project = ? AND id > ? ORDER BY id",
+			"SELECT id, subscriber_id, content FROM board_messages WHERE project = ? AND id > ? ORDER BY id",
 			project, minCursor)
 
 		if len(msgs) == 0 {
 			for _, sub := range projectSubs {
-				result[sub.SessionID] = 0
+				result[sub.SessionName] = 0
 			}
 			continue
 		}
 
 		for _, sub := range projectSubs {
 			if sub.ReceiveMode == "none" {
-				result[sub.SessionID] = 0
+				result[sub.SessionName] = 0
 				continue
 			}
 
@@ -567,19 +575,19 @@ func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) 
 			switch sub.ReceiveMode {
 			case "all":
 				for _, msg := range msgs {
-					if msg.ID <= sub.LastReadID || msg.SessionID == sub.SessionID {
+					if msg.ID <= sub.LastReadID || msg.SubscriberID == sub.SubscriberID {
 						continue
 					}
 					count++
 				}
 			case "mentions":
 				mentionTerms := []string{"@notify-all", "@notify_all", "@notifyall", "@all",
-					"@" + sub.SessionID}
+					"@" + sub.SubscriberID}
 				if sub.JobTitle != "" {
 					mentionTerms = append(mentionTerms, "@"+sub.JobTitle)
 				}
 				for _, msg := range msgs {
-					if msg.ID <= sub.LastReadID || msg.SessionID == sub.SessionID {
+					if msg.ID <= sub.LastReadID || msg.SubscriberID == sub.SubscriberID {
 						continue
 					}
 					contentLower := strings.ToLower(msg.Content)
@@ -594,15 +602,15 @@ func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) 
 				// Group-based mode
 				members := groupsByKey[groupKey{project, sub.ReceiveMode}]
 				for _, msg := range msgs {
-					if msg.ID <= sub.LastReadID || msg.SessionID == sub.SessionID {
+					if msg.ID <= sub.LastReadID || msg.SubscriberID == sub.SubscriberID {
 						continue
 					}
-					if members[msg.SessionID] {
+					if members[msg.SubscriberID] {
 						count++
 					}
 				}
 			}
-			result[sub.SessionID] = count
+			result[sub.SessionName] = count
 		}
 	}
 
@@ -611,20 +619,20 @@ func (s *Store) GetAllUnreadCounts(ctx context.Context) (map[string]int, error) 
 
 // ── Groups ───────────────────────────────────────────────────────────
 
-// AddToGroup adds a session to a board group.
-func (s *Store) AddToGroup(ctx context.Context, project, groupID, sessionID string) error {
+// AddToGroup adds a subscriber to a board group.
+func (s *Store) AddToGroup(ctx context.Context, project, groupID, subscriberID string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO board_groups (project, group_id, session_id) VALUES (?, ?, ?)
+		`INSERT INTO board_groups (project, group_id, session_id, subscriber_id) VALUES (?, ?, ?, ?)
 		 ON CONFLICT(project, group_id, session_id) DO NOTHING`,
-		project, groupID, sessionID)
+		project, groupID, subscriberID, subscriberID)
 	return err
 }
 
-// RemoveFromGroup removes a session from a board group. Returns true if removed.
-func (s *Store) RemoveFromGroup(ctx context.Context, project, groupID, sessionID string) (bool, error) {
+// RemoveFromGroup removes a subscriber from a board group. Returns true if removed.
+func (s *Store) RemoveFromGroup(ctx context.Context, project, groupID, subscriberID string) (bool, error) {
 	result, err := s.db.ExecContext(ctx,
-		"DELETE FROM board_groups WHERE project = ? AND group_id = ? AND session_id = ?",
-		project, groupID, sessionID)
+		"DELETE FROM board_groups WHERE project = ? AND group_id = ? AND subscriber_id = ?",
+		project, groupID, subscriberID)
 	if err != nil {
 		return false, err
 	}
@@ -632,11 +640,11 @@ func (s *Store) RemoveFromGroup(ctx context.Context, project, groupID, sessionID
 	return n > 0, nil
 }
 
-// ListGroupMembers returns session_ids in a group.
+// ListGroupMembers returns subscriber_ids in a group.
 func (s *Store) ListGroupMembers(ctx context.Context, project, groupID string) ([]string, error) {
 	var members []string
 	err := s.db.SelectContext(ctx, &members,
-		"SELECT session_id FROM board_groups WHERE project = ? AND group_id = ? ORDER BY session_id",
+		"SELECT subscriber_id FROM board_groups WHERE project = ? AND group_id = ? ORDER BY subscriber_id",
 		project, groupID)
 	if err != nil {
 		return []string{}, nil
@@ -669,12 +677,12 @@ func (s *Store) DeleteMessage(ctx context.Context, messageID int64) (bool, error
 }
 
 // GetWebhookTargets returns subscribers with webhook URLs (excluding sender).
-func (s *Store) GetWebhookTargets(ctx context.Context, project, excludeSessionID string) ([]Subscriber, error) {
+func (s *Store) GetWebhookTargets(ctx context.Context, project, excludeSubscriberID string) ([]Subscriber, error) {
 	var subs []Subscriber
 	err := s.db.SelectContext(ctx, &subs,
 		`SELECT * FROM board_subscribers
-		 WHERE project = ? AND session_id != ? AND webhook_url IS NOT NULL AND webhook_url != '' AND is_active = 1`,
-		project, excludeSessionID)
+		 WHERE project = ? AND subscriber_id != ? AND webhook_url IS NOT NULL AND webhook_url != '' AND is_active = 1`,
+		project, excludeSubscriberID)
 	return subs, err
 }
 

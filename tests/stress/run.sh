@@ -234,6 +234,8 @@ LAUNCHED=0
 # Launch agents via the team API so they're on shared boards (needed for reset team test)
 WORK_DIR="${DATA_DIR}/workdir"
 mkdir -p "$WORK_DIR"
+# Resolve symlinks (macOS: /tmp → /private/tmp) so comparisons match the server's filepath.Abs()
+WORK_DIR="$(cd "$WORK_DIR" && pwd -P)"
 
 for t in $(seq 1 $TEAMS); do
     BOARD_NAME="stress-team-${t}"
@@ -460,20 +462,20 @@ fi
 
 # Validate cursor advancement: read messages on behalf of an agent, then read
 # again and verify the cursor advanced (second read returns fewer/no messages)
-# The board uses session_name (e.g. "claude-<uuid>") as the subscriber ID,
-# not the raw session_id UUID. Use tmux_session field from the live sessions API.
+# Board now uses subscriber_id (the role/display_name) as stable identity.
+# Use display_name from the live sessions API as the subscriber_id for reads.
 CURSOR_BOARD="stress-team-1"
-CURSOR_AGENT=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
-import sys, json
+CURSOR_SUB_ID=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json, urllib.parse
 for s in json.load(sys.stdin):
     if s.get('board_project') == '${CURSOR_BOARD}':
-        print(s.get('tmux_session', ''))
+        print(urllib.parse.quote(s.get('display_name', ''), safe=''))
         break
 " 2>/dev/null || true)
 
-if [[ -n "$CURSOR_AGENT" ]]; then
+if [[ -n "$CURSOR_SUB_ID" ]]; then
     # First read: should return unread messages and advance cursor
-    READ1_COUNT=$(api GET "/api/board/${CURSOR_BOARD}/messages?session_id=${CURSOR_AGENT}" 2>/dev/null | python3 -c "
+    READ1_COUNT=$(api GET "/api/board/${CURSOR_BOARD}/messages?subscriber_id=${CURSOR_SUB_ID}" 2>/dev/null | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -483,7 +485,7 @@ except: print(0)
 " 2>/dev/null || echo "0")
 
     # Second read: cursor should have advanced, so fewer (ideally 0) new messages
-    READ2_COUNT=$(api GET "/api/board/${CURSOR_BOARD}/messages?session_id=${CURSOR_AGENT}" 2>/dev/null | python3 -c "
+    READ2_COUNT=$(api GET "/api/board/${CURSOR_BOARD}/messages?subscriber_id=${CURSOR_SUB_ID}" 2>/dev/null | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -492,16 +494,65 @@ try:
 except: print(0)
 " 2>/dev/null || echo "0")
 
-    log "  Cursor test on $CURSOR_BOARD (agent=$CURSOR_AGENT): read1=$READ1_COUNT, read2=$READ2_COUNT"
+    CURSOR_SUB_DISPLAY=$(python3 -c "import urllib.parse; print(urllib.parse.unquote('${CURSOR_SUB_ID}'))" 2>/dev/null || echo "$CURSOR_SUB_ID")
+    log "  Cursor test on $CURSOR_BOARD (subscriber_id=$CURSOR_SUB_DISPLAY): read1=$READ1_COUNT, read2=$READ2_COUNT"
     if [[ "$READ1_COUNT" -gt 0 ]] && [[ "$READ2_COUNT" -lt "$READ1_COUNT" ]]; then
         pass "Board read cursor advances (read1=$READ1_COUNT → read2=$READ2_COUNT)"
     elif [[ "$READ1_COUNT" -gt 0 ]] && [[ "$READ2_COUNT" -eq "$READ1_COUNT" ]]; then
         fail "Board read cursor did NOT advance (both reads returned $READ1_COUNT)"
     elif [[ "$READ1_COUNT" -eq 0 ]]; then
-        fail "Board read returned 0 messages for subscribed agent $CURSOR_AGENT"
+        fail "Board read returned 0 messages for subscriber $CURSOR_SUB_ID"
     fi
 else
     warn "Could not find an agent on $CURSOR_BOARD for cursor test"
+fi
+
+# Validate @mention triggers unread notification for the mentioned agent
+MENTION_BOARD="stress-team-1"
+MENTION_AGENTS=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json, urllib.parse
+sessions = json.load(sys.stdin)
+board = [s for s in sessions if s.get('board_project') == '${MENTION_BOARD}']
+for s in board[:2]:
+    print(s.get('display_name', ''))
+" 2>/dev/null || true)
+
+MENTION_TARGET=$(echo "$MENTION_AGENTS" | head -1)
+MENTION_SENDER=$(echo "$MENTION_AGENTS" | tail -1)
+
+if [[ -n "$MENTION_TARGET" ]] && [[ -n "$MENTION_SENDER" ]]; then
+    MENTION_SENDER_ENC=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MENTION_SENDER}', safe=''))" 2>/dev/null)
+    MENTION_TARGET_ENC=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${MENTION_TARGET}', safe=''))" 2>/dev/null)
+
+    # Clear target's unread by reading all current messages
+    api GET "/api/board/${MENTION_BOARD}/messages?subscriber_id=${MENTION_TARGET_ENC}" > /dev/null 2>&1
+
+    # Post a message that @mentions the target agent
+    MENTION_BODY=$(python3 -c "
+import json
+print(json.dumps({'subscriber_id': '${MENTION_SENDER}', 'content': 'Hey @${MENTION_TARGET}, this is a mention test'}))
+" 2>/dev/null)
+    api POST "/api/board/${MENTION_BOARD}/messages" -H "Content-Type: application/json" -d "$MENTION_BODY" > /dev/null 2>&1
+
+    sleep 1
+
+    # Check unread count for the mentioned agent
+    MENTION_UNREAD=$(api GET "/api/board/${MENTION_BOARD}/messages/check?subscriber_id=${MENTION_TARGET_ENC}" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('unread', data.get('count', 0)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+    log "  @mention test: sent '@${MENTION_TARGET}' from ${MENTION_SENDER}, target unread=$MENTION_UNREAD"
+    if [[ "$MENTION_UNREAD" -gt 0 ]]; then
+        pass "@mention triggers unread for mentioned agent (unread=$MENTION_UNREAD)"
+    else
+        fail "@mention did not trigger unread for mentioned agent $MENTION_TARGET"
+    fi
+else
+    warn "Could not find agents on $MENTION_BOARD for mention test"
 fi
 
 # ── Phase 4: Sleep/wake cycles ──────────────────────────────────────────
@@ -838,6 +889,36 @@ print(len(sleeping))
             else
                 fail "Phase 4.6: Board subscriber mismatch ($P46_SUB_COUNT subscribers vs $P46_FINAL_BOARD agents — ghost subscribers?)"
             fi
+
+            # 4a. No duplicate subscriber_ids on this board
+            P46_DUP_SUBS=$(sqlite3 "$MB_DB" "SELECT COUNT(*) FROM (SELECT subscriber_id, COUNT(*) as cnt FROM board_subscribers WHERE project='${P46_BOARD}' AND is_active=1 GROUP BY subscriber_id HAVING cnt > 1)" 2>/dev/null || echo "?")
+            if [[ "$P46_DUP_SUBS" == "0" ]]; then
+                pass "Phase 4.6: No duplicate subscriber_ids on board"
+            else
+                fail "Phase 4.6: $P46_DUP_SUBS duplicate subscriber_id(s) found on board"
+                sqlite3 "$MB_DB" "SELECT subscriber_id, COUNT(*) as cnt FROM board_subscribers WHERE project='${P46_BOARD}' AND is_active=1 GROUP BY subscriber_id HAVING cnt > 1" 2>/dev/null | while read -r line; do
+                    log "    dup: $line"
+                done
+            fi
+
+            # 4b. subscriber_id matches agent role/display_name (not empty, not a session UUID)
+            P46_BAD_SUB_IDS=$(sqlite3 "$MB_DB" "SELECT COUNT(*) FROM board_subscribers WHERE project='${P46_BOARD}' AND is_active=1 AND (subscriber_id IS NULL OR subscriber_id = '' OR subscriber_id LIKE 'claude-%')" 2>/dev/null || echo "?")
+            if [[ "$P46_BAD_SUB_IDS" == "0" ]]; then
+                pass "Phase 4.6: All subscriber_ids are role names (not session UUIDs)"
+            else
+                fail "Phase 4.6: $P46_BAD_SUB_IDS subscriber(s) have bad subscriber_id (null/empty/session UUID)"
+                sqlite3 "$MB_DB" "SELECT subscriber_id, session_name, job_title FROM board_subscribers WHERE project='${P46_BOARD}' AND is_active=1" 2>/dev/null | while read -r line; do
+                    log "    sub: $line"
+                done
+            fi
+
+            # 4c. session_name updated to new tmux session after reset
+            P46_STALE_SESSIONS=$(sqlite3 "$MB_DB" "SELECT COUNT(*) FROM board_subscribers WHERE project='${P46_BOARD}' AND is_active=1 AND session_name IN ($(echo "$P46_PRE_IDS" | sed "s/^/'/;s/$/'/" | paste -sd, -))" 2>/dev/null || echo "?")
+            if [[ "$P46_STALE_SESSIONS" == "0" ]]; then
+                pass "Phase 4.6: All session_names updated to new sessions after reset"
+            else
+                warn "Phase 4.6: $P46_STALE_SESSIONS subscriber(s) still have pre-reset session_name"
+            fi
         else
             warn "Phase 4.6: Cannot check board_subscribers (sqlite3 unavailable or DB not found at $MB_DB)"
         fi
@@ -876,11 +957,158 @@ for b in bad:
         else
             fail "Phase 4.6: Server unhealthy after reset-with-sleeping-agents"
         fi
+
+        # 7. Working directory preserved after reset
+        P46_BAD_WORKDIRS=$(echo "$P46_FINAL" | python3 -c "
+import sys, json
+sessions = json.load(sys.stdin)
+board = [s for s in sessions if s.get('board_project') == '${P46_BOARD}']
+expected = '${WORK_DIR}'
+bad = []
+for s in board:
+    wd = s.get('working_directory', '')
+    if wd != expected:
+        bad.append(f\"{s.get('name')}: got '{wd}' expected '{expected}'\")
+print(len(bad))
+for b in bad:
+    print(b, file=sys.stderr)
+" 2>>"$LOG_FILE" || echo "?")
+
+        if [[ "$P46_BAD_WORKDIRS" == "0" ]]; then
+            pass "Phase 4.6: All agents have correct working_directory (API)"
+        else
+            fail "Phase 4.6: $P46_BAD_WORKDIRS agent(s) have wrong working_directory (API) — see log"
+        fi
+
+        # 8. DB-level working_dir check
+        SESS_DB="${DATA_DIR}/sessions.db"
+        if command -v sqlite3 &>/dev/null && [[ -f "$SESS_DB" ]]; then
+            P46_DB_BAD_WD=$(sqlite3 "$SESS_DB" "SELECT COUNT(*) FROM live_sessions WHERE board_name='${P46_BOARD}' AND (working_dir != '${WORK_DIR}' OR working_dir IS NULL OR working_dir = '')" 2>/dev/null || echo "?")
+            if [[ "$P46_DB_BAD_WD" == "0" ]]; then
+                pass "Phase 4.6: DB confirms all agents have correct working_dir"
+            else
+                fail "Phase 4.6: DB has $P46_DB_BAD_WD agent(s) with wrong/empty working_dir"
+                sqlite3 "$SESS_DB" "SELECT session_id, working_dir FROM live_sessions WHERE board_name='${P46_BOARD}'" 2>/dev/null | while read -r line; do
+                    log "    $line"
+                done
+            fi
+        fi
     else
         fail "Phase 4.6: Reset team returned error: $RESET_RESP"
     fi
 else
     warn "Phase 4.6: Not enough agents on $P46_BOARD ($P46_AGENT_COUNT < 2), skipping"
+fi
+
+# ── Phase 4.7: Individual agent restart ───────────────────────────────
+log ""
+log "Phase 4.7: Individual agent restart..."
+
+# Pick an agent from stress-team-3 (untouched by Phase 4.5/4.6 resets)
+P47_BOARD="stress-team-3"
+P47_AGENT=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json
+for s in json.load(sys.stdin):
+    if s.get('board_project') == '${P47_BOARD}':
+        print(json.dumps({
+            'name': s.get('name', ''),
+            'session_id': s.get('session_id', ''),
+            'display_name': s.get('display_name', ''),
+            'working_directory': s.get('working_directory', ''),
+            'tmux_session': s.get('tmux_session', ''),
+        }))
+        break
+" 2>/dev/null || true)
+
+if [[ -n "$P47_AGENT" ]]; then
+    P47_NAME=$(echo "$P47_AGENT" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])" 2>/dev/null)
+    P47_OLD_SID=$(echo "$P47_AGENT" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_id'])" 2>/dev/null)
+    P47_DISPLAY=$(echo "$P47_AGENT" | python3 -c "import sys,json; print(json.load(sys.stdin)['display_name'])" 2>/dev/null)
+    P47_WORKDIR=$(echo "$P47_AGENT" | python3 -c "import sys,json; print(json.load(sys.stdin)['working_directory'])" 2>/dev/null)
+    log "  Restarting agent: name=$P47_NAME session_id=${P47_OLD_SID:0:8} display=$P47_DISPLAY"
+
+    # Count subscribers before restart
+    MB_DB="${DATA_DIR}/messageboard.db"
+    P47_PRE_SUB_COUNT=""
+    if command -v sqlite3 &>/dev/null && [[ -f "$MB_DB" ]]; then
+        P47_PRE_SUB_COUNT=$(sqlite3 "$MB_DB" "SELECT COUNT(*) FROM board_subscribers WHERE project='${P47_BOARD}' AND is_active=1" 2>/dev/null || echo "?")
+    fi
+
+    # Restart the agent
+    RESTART_RESP=$(api POST "/api/sessions/live/${P47_NAME}/restart" \
+        -H "Content-Type: application/json" \
+        -d "{\"session_id\":\"${P47_OLD_SID}\",\"agent_type\":\"claude\"}" 2>/dev/null || echo "")
+
+    if echo "$RESTART_RESP" | grep -q '"ok":true\|"ok": true'; then
+        P47_NEW_SID=$(echo "$RESTART_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
+        log "  Restart OK: new session_id=${P47_NEW_SID:0:8}"
+        sleep 2
+
+        # Get the restarted agent's state
+        P47_POST=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json
+for s in json.load(sys.stdin):
+    if s.get('session_id') == '${P47_NEW_SID}':
+        print(json.dumps(s))
+        break
+" 2>/dev/null || true)
+
+        if [[ -n "$P47_POST" ]]; then
+            # 1. New session ID (different from old)
+            if [[ "$P47_NEW_SID" != "$P47_OLD_SID" ]]; then
+                pass "Phase 4.7: Agent got new session ID after restart"
+            else
+                fail "Phase 4.7: Agent kept same session ID after restart"
+            fi
+
+            # 2. display_name preserved
+            P47_POST_DISPLAY=$(echo "$P47_POST" | python3 -c "import sys,json; print(json.load(sys.stdin).get('display_name',''))" 2>/dev/null)
+            if [[ "$P47_POST_DISPLAY" == "$P47_DISPLAY" ]]; then
+                pass "Phase 4.7: display_name preserved after restart ($P47_POST_DISPLAY)"
+            else
+                fail "Phase 4.7: display_name changed after restart ('$P47_POST_DISPLAY' != '$P47_DISPLAY')"
+            fi
+
+            # 3. working_directory preserved
+            P47_POST_WD=$(echo "$P47_POST" | python3 -c "import sys,json; print(json.load(sys.stdin).get('working_directory',''))" 2>/dev/null)
+            if [[ "$P47_POST_WD" == "$P47_WORKDIR" ]]; then
+                pass "Phase 4.7: working_directory preserved after restart"
+            else
+                fail "Phase 4.7: working_directory changed after restart ('$P47_POST_WD' != '$P47_WORKDIR')"
+            fi
+
+            # 4. No duplicate board subscribers
+            if command -v sqlite3 &>/dev/null && [[ -f "$MB_DB" ]]; then
+                P47_POST_SUB_COUNT=$(sqlite3 "$MB_DB" "SELECT COUNT(*) FROM board_subscribers WHERE project='${P47_BOARD}' AND is_active=1" 2>/dev/null || echo "?")
+                if [[ "$P47_POST_SUB_COUNT" == "$P47_PRE_SUB_COUNT" ]]; then
+                    pass "Phase 4.7: No duplicate subscribers after restart ($P47_POST_SUB_COUNT == $P47_PRE_SUB_COUNT)"
+                else
+                    fail "Phase 4.7: Subscriber count changed after restart ($P47_POST_SUB_COUNT != $P47_PRE_SUB_COUNT)"
+                fi
+
+                # 5. subscriber_id still matches role name
+                P47_SUB_ID=$(sqlite3 "$MB_DB" "SELECT subscriber_id FROM board_subscribers WHERE project='${P47_BOARD}' AND is_active=1 AND job_title='${P47_DISPLAY}'" 2>/dev/null || echo "")
+                if [[ "$P47_SUB_ID" == "$P47_DISPLAY" ]]; then
+                    pass "Phase 4.7: subscriber_id still matches role name after restart"
+                else
+                    warn "Phase 4.7: subscriber_id is '$P47_SUB_ID' (expected '$P47_DISPLAY')"
+                fi
+            fi
+
+            # 6. Server healthy
+            if curl -s "http://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
+                pass "Phase 4.7: Server healthy after individual restart"
+            else
+                fail "Phase 4.7: Server unhealthy after individual restart"
+            fi
+        else
+            fail "Phase 4.7: Could not find restarted agent with session_id=$P47_NEW_SID"
+        fi
+    else
+        fail "Phase 4.7: Restart returned error: $RESTART_RESP"
+    fi
+else
+    warn "Phase 4.7: No agents found on $P47_BOARD for restart test"
 fi
 
 # ── Phase 5: Kill all agents ────────────────────────────────────────────

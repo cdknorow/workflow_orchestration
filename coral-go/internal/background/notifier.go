@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cdknorow/coral/internal/board"
+	"github.com/cdknorow/coral/internal/naming"
 )
 
 // BoardNotifier nudges agents when they have unread board messages.
@@ -68,16 +69,15 @@ func (n *BoardNotifier) RunOnce(ctx context.Context) error {
 
 	liveBoardIDs := make(map[string]bool)
 
-	for _, agent := range agents {
-		if agent.SessionID == "" {
+	for _, a := range agents {
+		if a.SessionID == "" {
 			continue
 		}
 
-		// Board uses tmux session name as subscriber ID: {type}-{uuid}
-		boardSID := fmt.Sprintf("%s-%s", agent.AgentType, agent.SessionID)
-		liveBoardIDs[boardSID] = true
+		subscriberID := naming.SubscriberID(a.DisplayName, a.AgentType)
+		liveBoardIDs[subscriberID] = true
 
-		sub, err := n.boardStore.GetSubscription(ctx, boardSID)
+		sub, err := n.boardStore.GetSubscription(ctx, subscriberID)
 		if err != nil || sub == nil {
 			continue
 		}
@@ -90,40 +90,40 @@ func (n *BoardNotifier) RunOnce(ctx context.Context) error {
 			continue
 		}
 
-		unread, err := n.boardStore.CheckUnread(ctx, sub.Project, boardSID)
+		unread, err := n.boardStore.CheckUnread(ctx, sub.Project, subscriberID)
 		if err != nil {
 			continue
 		}
 
 		if unread == 0 {
 			n.notifiedMu.Lock()
-			delete(n.notified, boardSID)
+			delete(n.notified, subscriberID)
 			n.notifiedMu.Unlock()
 			continue
 		}
 
 		n.notifiedMu.Lock()
-		alreadyNotified := n.notified[boardSID] == unread
+		alreadyNotified := n.notified[subscriberID] == unread
 		n.notifiedMu.Unlock()
 		if alreadyNotified {
 			continue
 		}
 
-		// Send nudge
+		// Send nudge via tmux session name (routing identity, not board identity)
 		plural := "s"
 		if unread == 1 {
 			plural = ""
 		}
 		nudge := fmt.Sprintf("You have %d unread message%s on the message board. Run 'coral-board read' to see them.", unread, plural)
-		sessionName := fmt.Sprintf("%s-%s", agent.AgentType, agent.SessionID)
-		err = n.runtime.SendInput(ctx, sessionName, nudge)
+		sessName := naming.SessionName(a.AgentType, a.SessionID)
+		err = n.runtime.SendInput(ctx, sessName, nudge)
 		if err != nil {
-			n.logger.Warn("failed to nudge agent", "agent", agent.AgentName, "error", err)
+			n.logger.Warn("failed to nudge agent", "agent", a.AgentName, "error", err)
 			continue
 		}
 
 		n.notifiedMu.Lock()
-		n.notified[boardSID] = unread
+		n.notified[subscriberID] = unread
 		n.notifiedMu.Unlock()
 	}
 

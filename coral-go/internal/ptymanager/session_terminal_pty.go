@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/cdknorow/coral/internal/naming"
 )
 
 // PTYSessionTerminal implements SessionTerminal using native PTY sessions.
@@ -24,7 +26,7 @@ func (p *PTYSessionTerminal) ListSessions(_ context.Context) ([]PaneInfo, error)
 	for i, s := range sessions {
 		panes[i] = PaneInfo{
 			PaneTitle:   s.AgentName,
-			SessionName: fmt.Sprintf("%s-%s", s.AgentType, s.SessionID),
+			SessionName: naming.SessionName(s.AgentType, s.SessionID),
 			Target:      s.SessionID,
 			CurrentPath: s.WorkingDir,
 		}
@@ -35,7 +37,7 @@ func (p *PTYSessionTerminal) ListSessions(_ context.Context) ([]PaneInfo, error)
 func (p *PTYSessionTerminal) FindSession(_ context.Context, name, agentType, sessionID string) (*PaneInfo, error) {
 	sessions := p.backend.ListSessions()
 	for _, s := range sessions {
-		sessName := fmt.Sprintf("%s-%s", s.AgentType, s.SessionID)
+		sessName := naming.SessionName(s.AgentType, s.SessionID)
 		if sessName == name || s.AgentName == name || s.SessionID == sessionID {
 			return &PaneInfo{
 				PaneTitle:   s.AgentName,
@@ -101,7 +103,7 @@ func (p *PTYSessionTerminal) killByAnyKey(_ context.Context, name, agentType, se
 	}
 	// Try agentType-sessionID format
 	if sessionID != "" {
-		composed := fmt.Sprintf("%s-%s", agentType, sessionID)
+		composed := naming.SessionName(agentType, sessionID)
 		if err := p.backend.Kill(composed); err == nil {
 			return nil
 		}
@@ -112,7 +114,7 @@ func (p *PTYSessionTerminal) killByAnyKey(_ context.Context, name, agentType, se
 	}
 	// Search through all sessions for a matching agent name, session ID, or folder name
 	for _, s := range p.backend.ListSessions() {
-		sessName := fmt.Sprintf("%s-%s", s.AgentType, s.SessionID)
+		sessName := naming.SessionName(s.AgentType, s.SessionID)
 		if s.AgentName == name || s.SessionID == sessionID || filepath.Base(s.WorkingDir) == name {
 			return p.backend.Kill(sessName)
 		}
@@ -168,7 +170,7 @@ func (p *PTYSessionTerminal) HasSession(_ context.Context, name string) bool {
 func (p *PTYSessionTerminal) DisplayMessage(_ context.Context, target, _ string) (string, error) {
 	sessions := p.backend.ListSessions()
 	for _, s := range sessions {
-		sessName := fmt.Sprintf("%s-%s", s.AgentType, s.SessionID)
+		sessName := naming.SessionName(s.AgentType, s.SessionID)
 		if sessName == target || s.SessionID == target {
 			return filepath.Base(s.WorkingDir), nil
 		}

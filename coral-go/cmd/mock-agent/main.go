@@ -162,9 +162,13 @@ func parseSettings(path string) (boardName string, env map[string]string) {
 }
 
 func post(baseURL, board, sessionName, message string) {
+	subscriberID := os.Getenv("CORAL_SUBSCRIBER_ID")
+	if subscriberID == "" {
+		subscriberID = sessionName
+	}
 	body, _ := json.Marshal(map[string]string{
-		"session_id": sessionName,
-		"content":    message,
+		"subscriber_id": subscriberID,
+		"content":       message,
 	})
 	resp, err := http.Post(fmt.Sprintf("%s/api/board/%s/messages", baseURL, board), "application/json", bytes.NewReader(body))
 	if err != nil {

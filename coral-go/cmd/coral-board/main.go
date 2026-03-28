@@ -83,6 +83,16 @@ func resolveSessionName() string {
 	return host
 }
 
+// resolveSubscriberID returns the stable board identity for this agent.
+// Uses CORAL_SUBSCRIBER_ID (role name) if set, otherwise falls back to
+// the session name for backwards compatibility.
+func resolveSubscriberID() string {
+	if id := os.Getenv("CORAL_SUBSCRIBER_ID"); id != "" {
+		return id
+	}
+	return resolveSessionName()
+}
+
 func apiCall(method, path string, body any) (map[string]any, error) {
 	var bodyReader io.Reader
 	if body != nil {
@@ -177,10 +187,12 @@ func cmdJoin() {
 		}
 	}
 
+	subscriberID := resolveSubscriberID()
 	sessionName := resolveSessionName()
 	_, err := apiCall("POST", "/"+project+"/subscribe", map[string]string{
-		"session_id": sessionName,
-		"job_title":  jobTitle,
+		"subscriber_id": subscriberID,
+		"session_name":  sessionName,
+		"job_title":     jobTitle,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -188,7 +200,7 @@ func cmdJoin() {
 	}
 
 	saveState(&boardState{Project: project, JobTitle: jobTitle})
-	fmt.Printf("Joined '%s' as '%s' (session: %s)\n", project, jobTitle, sessionName)
+	fmt.Printf("Joined '%s' as '%s' (subscriber: %s)\n", project, jobTitle, subscriberID)
 }
 
 func cmdPost() {
@@ -202,11 +214,11 @@ func cmdPost() {
 		os.Exit(1)
 	}
 	message := strings.Join(os.Args[2:], " ")
-	sessionName := resolveSessionName()
+	subscriberID := resolveSubscriberID()
 
 	result, err := apiCall("POST", "/"+st.Project+"/messages", map[string]string{
-		"session_id": sessionName,
-		"content":    message,
+		"subscriber_id": subscriberID,
+		"content":       message,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -234,12 +246,12 @@ func cmdRead() {
 		}
 	}
 
-	sessionName := resolveSessionName()
+	subscriberID := resolveSubscriberID()
 	var path string
 	if useLast {
 		path = fmt.Sprintf("/%s/messages/all?limit=%d", st.Project, lastN)
 	} else {
-		path = fmt.Sprintf("/%s/messages?session_id=%s&limit=50", st.Project, sessionName)
+		path = fmt.Sprintf("/%s/messages?subscriber_id=%s&limit=50", st.Project, subscriberID)
 	}
 
 	resp, err := http.Get(serverURL + "/api/board" + path)
@@ -265,7 +277,7 @@ func cmdRead() {
 		}
 		role, _ := m["job_title"].(string)
 		if role == "" {
-			role, _ = m["session_id"].(string)
+			role, _ = m["subscriber_id"].(string)
 		}
 		content, _ := m["content"].(string)
 		fmt.Printf("[%s] %s: %s\n", ts, role, content)
@@ -278,8 +290,8 @@ func cmdCheck() {
 		fmt.Fprintln(os.Stderr, "Not subscribed to any board.")
 		os.Exit(1)
 	}
-	sessionName := resolveSessionName()
-	result, err := apiCall("GET", fmt.Sprintf("/%s/messages/check?session_id=%s", st.Project, sessionName), nil)
+	subscriberID := resolveSubscriberID()
+	result, err := apiCall("GET", fmt.Sprintf("/%s/messages/check?subscriber_id=%s", st.Project, subscriberID), nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -342,12 +354,12 @@ func cmdSubscribers() {
 	var subs []map[string]any
 	json.Unmarshal(data, &subs)
 
-	sessionName := resolveSessionName()
+	subscriberID := resolveSubscriberID()
 	for _, s := range subs {
 		role, _ := s["job_title"].(string)
-		sid, _ := s["session_id"].(string)
+		sid, _ := s["subscriber_id"].(string)
 		marker := ""
-		if sid == sessionName {
+		if sid == subscriberID {
 			marker = " (you)"
 		}
 		fmt.Printf("  %s (%s)%s\n", role, sid, marker)
@@ -360,9 +372,9 @@ func cmdLeave() {
 		fmt.Fprintln(os.Stderr, "Not subscribed to any board.")
 		os.Exit(1)
 	}
-	sessionName := resolveSessionName()
+	subscriberID := resolveSubscriberID()
 	apiCall("DELETE", "/"+st.Project+"/subscribe", map[string]string{
-		"session_id": sessionName,
+		"subscriber_id": subscriberID,
 	})
 	deleteState()
 	fmt.Printf("Left '%s'\n", st.Project)
@@ -397,8 +409,8 @@ type exportData struct {
 }
 
 type exportSubscriber struct {
-	SessionID string `json:"session_id"`
-	Role      string `json:"role"`
+	SubscriberID string `json:"subscriber_id"`
+	Role         string `json:"role"`
 }
 
 type exportStats struct {
@@ -515,7 +527,7 @@ func cmdExport() {
 		}
 		role, _ := m["job_title"].(string)
 		if role == "" {
-			role, _ = m["session_id"].(string)
+			role, _ = m["subscriber_id"].(string)
 		}
 		content, _ := m["content"].(string)
 		entries = append(entries, exportEntry{
@@ -555,12 +567,12 @@ func cmdExport() {
 	}
 	var subs []exportSubscriber
 	for _, s := range rawSubs {
-		sid, _ := s["session_id"].(string)
+		sid, _ := s["subscriber_id"].(string)
 		role, _ := s["job_title"].(string)
 		if role == "" {
 			role = sid
 		}
-		subs = append(subs, exportSubscriber{SessionID: sid, Role: role})
+		subs = append(subs, exportSubscriber{SubscriberID: sid, Role: role})
 	}
 
 	// Count by source
@@ -621,7 +633,7 @@ func renderMarkdown(buf *bytes.Buffer, d *exportData) {
 		buf.WriteString(fmt.Sprintf("**Subscribers**: %d\n\n", len(d.Subscribers)))
 		buf.WriteString("| Agent | Role |\n|-------|------|\n")
 		for _, s := range d.Subscribers {
-			buf.WriteString(fmt.Sprintf("| %s | %s |\n", s.SessionID, s.Role))
+			buf.WriteString(fmt.Sprintf("| %s | %s |\n", s.SubscriberID, s.Role))
 		}
 	}
 

@@ -64,9 +64,8 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		merged["permissions"] = permMap
 	}
 
-	// Set CORAL_SESSION_NAME in env so coral-board and hooks can identify this agent.
-	// This is the authoritative source — tmux display-message is unreliable when
-	// multiple sessions share the same tmux socket.
+	// Set CORAL_SESSION_NAME and CORAL_SUBSCRIBER_ID in env so coral-board and hooks
+	// can identify this agent. CORAL_SUBSCRIBER_ID is the stable board identity (role name).
 	{
 		envMap, _ := merged["env"].(map[string]interface{})
 		if envMap == nil {
@@ -74,6 +73,9 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		}
 		if params.SessionName != "" {
 			envMap["CORAL_SESSION_NAME"] = params.SessionName
+		}
+		if params.Role != "" {
+			envMap["CORAL_SUBSCRIBER_ID"] = params.Role
 		}
 		merged["env"] = envMap
 	}

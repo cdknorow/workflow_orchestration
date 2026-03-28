@@ -18,21 +18,26 @@ func testStore(t *testing.T) *Store {
 	return s
 }
 
+// sub is a test helper that calls Subscribe with subscriberID used as both subscriber and session name.
+func sub(s *Store, ctx context.Context, project, subscriberID, jobTitle string) (*Subscriber, error) {
+	return s.Subscribe(ctx, project, subscriberID, jobTitle, "tmux-"+subscriberID, nil, nil, "")
+}
+
 func TestSubscribeAndList(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	sub, err := s.Subscribe(ctx, "myproject", "agent-1", "Lead Dev", nil, nil, "")
+	result, err := sub(s, ctx, "myproject", "agent-1", "Lead Dev")
 	require.NoError(t, err)
-	assert.Equal(t, "Lead Dev", sub.JobTitle)
-	assert.Equal(t, "myproject", sub.Project)
+	assert.Equal(t, "Lead Dev", result.JobTitle)
+	assert.Equal(t, "myproject", result.Project)
 
 	subs, err := s.ListSubscribers(ctx, "myproject")
 	require.NoError(t, err)
 	assert.Len(t, subs, 1)
 
-	// Upsert same session updates job_title
-	sub2, err := s.Subscribe(ctx, "myproject", "agent-1", "Senior Dev", nil, nil, "")
+	// Upsert same subscriber updates job_title
+	sub2, err := sub(s, ctx, "myproject", "agent-1", "Senior Dev")
 	require.NoError(t, err)
 	assert.Equal(t, "Senior Dev", sub2.JobTitle)
 
@@ -45,30 +50,30 @@ func TestSubscribeAndList(t *testing.T) {
 	assert.True(t, removed)
 
 	removed, _ = s.Unsubscribe(ctx, "myproject", "agent-1")
-	assert.False(t, removed) // Already gone
+	assert.False(t, removed) // Already inactive
 }
 
 func TestGetSubscription(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	sub, err := s.GetSubscription(ctx, "nonexistent")
+	result, err := s.GetSubscription(ctx, "nonexistent")
 	require.NoError(t, err)
-	assert.Nil(t, sub)
+	assert.Nil(t, result)
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
-	sub, err = s.GetSubscription(ctx, "agent-1")
+	sub(s, ctx, "proj", "agent-1", "Dev")
+	result, err = s.GetSubscription(ctx, "agent-1")
 	require.NoError(t, err)
-	require.NotNil(t, sub)
-	assert.Equal(t, "proj", sub.Project)
+	require.NotNil(t, result)
+	assert.Equal(t, "proj", result.Project)
 }
 
 func TestPostAndReadMessages(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev A", nil, nil, "")
-	s.Subscribe(ctx, "proj", "agent-2", "Dev B", nil, nil, "")
+	sub(s, ctx, "proj", "agent-1", "Dev A")
+	sub(s, ctx, "proj", "agent-2", "Dev B")
 
 	// Agent-1 posts
 	msg, err := s.PostMessage(ctx, "proj", "agent-1", "Hello team!", nil)
@@ -97,7 +102,7 @@ func TestListMessages(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
+	sub(s, ctx, "proj", "agent-1", "Dev")
 	s.PostMessage(ctx, "proj", "agent-1", "msg 1", nil)
 	s.PostMessage(ctx, "proj", "agent-1", "msg 2", nil)
 
@@ -114,8 +119,8 @@ func TestCheckUnread(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev A", nil, nil, "")
-	s.Subscribe(ctx, "proj", "agent-2", "Dev B", nil, nil, "")
+	sub(s, ctx, "proj", "agent-1", "Dev A")
+	sub(s, ctx, "proj", "agent-2", "Dev B")
 
 	// Post without mention — agent-2 should have 0 unread
 	s.PostMessage(ctx, "proj", "agent-1", "Just a regular message", nil)
@@ -144,22 +149,23 @@ func TestGetAllUnreadCounts(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev A", nil, nil, "")
-	s.Subscribe(ctx, "proj", "agent-2", "Dev B", nil, nil, "")
+	sub(s, ctx, "proj", "agent-1", "Dev A")
+	sub(s, ctx, "proj", "agent-2", "Dev B")
 
 	s.PostMessage(ctx, "proj", "agent-1", "@all hello", nil)
 
 	counts, err := s.GetAllUnreadCounts(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, counts["agent-1"]) // Own message
-	assert.Equal(t, 1, counts["agent-2"]) // Mentioned
+	// Counts are keyed by session_name (tmux-<subscriberID>)
+	assert.Equal(t, 0, counts["tmux-agent-1"]) // Own message
+	assert.Equal(t, 1, counts["tmux-agent-2"]) // Mentioned
 }
 
 func TestDeleteMessage(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
+	sub(s, ctx, "proj", "agent-1", "Dev")
 	msg, _ := s.PostMessage(ctx, "proj", "agent-1", "delete me", nil)
 
 	removed, err := s.DeleteMessage(ctx, msg.ID)
@@ -174,8 +180,8 @@ func TestListProjects(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj-a", "agent-1", "Dev", nil, nil, "")
-	s.Subscribe(ctx, "proj-b", "agent-2", "Dev", nil, nil, "")
+	sub(s, ctx, "proj-a", "agent-1", "Dev")
+	sub(s, ctx, "proj-b", "agent-2", "Dev")
 	s.PostMessage(ctx, "proj-a", "agent-1", "hello", nil)
 
 	projects, err := s.ListProjects(ctx)
@@ -187,7 +193,7 @@ func TestDeleteProject(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 
-	s.Subscribe(ctx, "proj", "agent-1", "Dev", nil, nil, "")
+	sub(s, ctx, "proj", "agent-1", "Dev")
 	s.PostMessage(ctx, "proj", "agent-1", "hello", nil)
 
 	err := s.DeleteProject(ctx, "proj")

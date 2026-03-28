@@ -2,8 +2,8 @@ package background
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/cdknorow/coral/internal/naming"
 	"github.com/cdknorow/coral/internal/ptymanager"
 )
 
@@ -64,5 +64,5 @@ var _ AgentRuntime = (*TmuxRuntime)(nil)
 
 // FormatSessionName builds a session name from agent type and session ID.
 func FormatSessionName(agentType, sessionID string) string {
-	return fmt.Sprintf("%s-%s", agentType, sessionID)
+	return naming.SessionName(agentType, sessionID)
 }

@@ -6,11 +6,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cdknorow/coral/internal/naming"
 )
 
 // session represents a single running PTY session.
@@ -54,7 +55,7 @@ func newSession(name, agentType, workDir, sessionID, command string, cols, rows 
 	}
 
 	// Set up log file (use os.TempDir for cross-platform support)
-	logPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+	logPath := naming.LogFile(os.TempDir(), agentType, sessionID)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Printf("Warning: could not open log file %s: %v", logPath, err)

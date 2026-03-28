@@ -24,6 +24,7 @@ import (
 	at "github.com/cdknorow/coral/internal/agenttypes"
 	"github.com/cdknorow/coral/internal/board"
 	"github.com/cdknorow/coral/internal/config"
+	"github.com/cdknorow/coral/internal/naming"
 	"github.com/cdknorow/coral/internal/gitutil"
 	"github.com/cdknorow/coral/internal/httputil"
 	"github.com/cdknorow/coral/internal/jsonl"
@@ -124,7 +125,7 @@ func (h *SessionsHandler) discoverAgents(ctx *http.Request) ([]AgentInfo, error)
 			agentName = sessionID[:8]
 		}
 
-		logPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+		logPath := naming.LogFile(h.cfg.LogDir, agentType, sessionID)
 
 		agents = append(agents, AgentInfo{
 			AgentType:   agentType,
@@ -644,7 +645,7 @@ func (h *SessionsHandler) Info(w http.ResponseWriter, r *http.Request) {
 			}
 			result["agent_type"] = ls.AgentType
 			// Construct log path from agent type + session ID
-			logPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", ls.AgentType, sessionID))
+			logPath := naming.LogFile(h.cfg.LogDir, ls.AgentType, sessionID)
 			result["log_path"] = logPath
 		}
 	}
@@ -1371,8 +1372,8 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newSessionID := generateUUID()
-	newSessionName := fmt.Sprintf("%s-%s", agentType, newSessionID)
-	newLogPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, newSessionID))
+	newSessionName := naming.SessionName(agentType, newSessionID)
+	newLogPath := naming.LogFile(h.cfg.LogDir, agentType, newSessionID)
 
 	// Close old pipe-pane, respawn, rename
 	h.terminal.StopLogging(ctx, pane.Target)
@@ -1414,10 +1415,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 
 	allFlags := append(storedFlags, strings.Fields(body.ExtraFlags)...)
 
-	role := storedDisplayName
-	if role == "" {
-		role = agentType
-	}
+	role := naming.SubscriberID(storedDisplayName, agentType)
 
 	userSettings, _ := h.ss.GetSettings(ctx)
 
@@ -1452,7 +1450,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 
 	// Re-subscribe to board if needed
 	if storedBoard != "" {
-		go h.setupBoardAndPrompt(newSessionID, newSessionName, agentType, storedBoard, storedDisplayName)
+		h.setupBoardAndPrompt(newSessionID, newSessionName, agentType, storedBoard, storedDisplayName)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1509,8 +1507,8 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	agent.TryPrepareResume(agentImpl, body.SessionID, pane.CurrentPath)
 
 	newSessionID := generateUUID()
-	newSessionName := fmt.Sprintf("%s-%s", agentType, newSessionID)
-	newLogPath := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, newSessionID))
+	newSessionName := naming.SessionName(agentType, newSessionID)
+	newLogPath := naming.LogFile(h.cfg.LogDir, agentType, newSessionID)
 
 	// Load stored fields from current session
 	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType string
@@ -1524,10 +1522,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	role := storedDisplayName
-	if role == "" {
-		role = agentType
-	}
+	role := naming.SubscriberID(storedDisplayName, agentType)
 
 	userSettings, _ := h.ss.GetSettings(ctx)
 
@@ -1567,15 +1562,9 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		BoardType:    strPtr(storedBoardType),
 	})
 
-	// Transfer board subscription cursor and re-subscribe
+	// Re-subscribe to board — subscriber_id (role) is stable, so the cursor persists automatically.
 	if storedBoard != "" {
-		oldSessionName := fmt.Sprintf("%s-%s", agentType, body.CurrentSessionID)
-		if h.bs != nil && oldSessionName != newSessionName {
-			if err := h.bs.TransferSubscription(ctx, storedBoard, oldSessionName, newSessionName); err != nil {
-				log.Printf("Failed to transfer board subscription cursor from %s to %s: %v", body.CurrentSessionID[:8], newSessionID[:8], err)
-			}
-		}
-		go h.setupBoardAndPrompt(newSessionID, newSessionName, agentType, storedBoard, storedDisplayName)
+		h.setupBoardAndPrompt(newSessionID, newSessionName, agentType, storedBoard, storedDisplayName)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1676,7 +1665,7 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 
 	// Setup board subscription in background (prompt is passed as CLI arg, not via tmux send-keys)
 	if body.BoardName != "" {
-		go h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
+		h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
 			body.AgentType, body.BoardName, body.DisplayName)
 	}
 
@@ -1750,7 +1739,7 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 
 		// Board subscription handled by setupBoardAndPrompt (prompt passed as CLI arg)
 		if body.BoardName != "" {
-			go h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
+			h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
 				body.AgentType, body.BoardName, agentDef.Name)
 		}
 
@@ -1824,10 +1813,9 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 		h.ss.UnregisterLiveSession(bgCtx, s.SessionID)
 		h.terminal.KillSession(bgCtx, s.AgentName, s.AgentType, s.SessionID)
 		removeBoardStateFile(s.AgentName, h.cfg)
-		// Clean up board subscriber entry to prevent ghost agents
-		if h.bs != nil {
-			sessionName := fmt.Sprintf("%s-%s", s.AgentType, s.SessionID)
-			h.bs.Unsubscribe(bgCtx, boardName, sessionName)
+		// Mark subscriber as inactive during reset; re-launch will reactivate.
+		if h.bs != nil && s.DisplayName != nil && *s.DisplayName != "" {
+			h.bs.Unsubscribe(bgCtx, boardName, *s.DisplayName)
 		}
 	}
 
@@ -1872,7 +1860,7 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Re-setup board subscription
-		go h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
+		h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
 			cfg.AgentType, boardName, displayName)
 
 		launched = append(launched, map[string]any{
@@ -2118,7 +2106,7 @@ func (h *SessionsHandler) findLogPath(agentType, sessionID string) string {
 	if agentType == "" {
 		agentType = at.Claude
 	}
-	return filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+	return naming.LogFile(h.cfg.LogDir, agentType, sessionID)
 }
 
 // writeJSON is a package-local alias for httputil.WriteJSON.
@@ -2187,8 +2175,8 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 	folderName := filepath.Base(absDir)
 
 	sessionID := generateUUID()
-	sessionName := fmt.Sprintf("%s-%s", agentType, sessionID)
-	logFile := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+	sessionName := naming.SessionName(agentType, sessionID)
+	logFile := naming.LogFile(h.cfg.LogDir, agentType, sessionID)
 
 	isTerminal := agentType == at.Terminal
 	agentImpl := agent.GetAgent(agentType)
@@ -2196,10 +2184,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		agent.TryPrepareResume(agentImpl, resumeSessionID, absDir)
 	}
 
-	role := displayName
-	if role == "" {
-		role = agentType
-	}
+	role := naming.SubscriberID(displayName, agentType)
 
 	launchParams := agent.LaunchParams{
 		SessionID:       sessionID,
@@ -2251,10 +2236,13 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		if err := h.terminal.CreateSession(ctx, sessionName, absDir); err != nil {
 			return nil, fmt.Errorf("tmux new-session failed: %w", err)
 		}
-		// Set CORAL_SESSION_NAME in the tmux session environment
+		// Set CORAL_SESSION_NAME and CORAL_SUBSCRIBER_ID in the tmux session environment
 		if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
 			if err := tmuxTerm.Client().SetEnvironment(ctx, sessionName, "CORAL_SESSION_NAME", sessionName); err != nil {
 				log.Printf("[launch] failed to set CORAL_SESSION_NAME for %s: %v", sessionName, err)
+			}
+			if err := tmuxTerm.Client().SetEnvironment(ctx, sessionName, "CORAL_SUBSCRIBER_ID", role); err != nil {
+				log.Printf("[launch] failed to set CORAL_SUBSCRIBER_ID for %s: %v", sessionName, err)
 			}
 		}
 
@@ -2301,12 +2289,10 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 // setupBoardAndPrompt subscribes a session to a message board.
 // The agent prompt is now passed directly as a CLI positional argument
 // in launchSession, so no tmux-based prompt delivery is needed.
-// Includes auto-accept for trust prompts and retry with verification.
+// subscriberID is the stable identity (role name), sessionName is the mutable tmux session.
 func (h *SessionsHandler) setupBoardAndPrompt(sessionID, sessionName, agentType, boardName, displayName string) {
-	role := displayName
-	if role == "" {
-		role = agentType
-	}
+	role := naming.SubscriberID(displayName, agentType)
+	subscriberID := role // stable board identity = role name
 	ctx := context.Background()
 
 	if boardName == "" {
@@ -2322,12 +2308,12 @@ func (h *SessionsHandler) setupBoardAndPrompt(sessionID, sessionName, agentType,
 		}
 
 		// Preserve existing receive_mode on re-subscribe (e.g. restart)
-		existing, err := h.bs.GetSubscription(ctx, sessionName)
+		existing, err := h.bs.GetSubscription(ctx, subscriberID)
 		if err == nil && existing != nil && existing.ReceiveMode != "" {
 			receiveMode = existing.ReceiveMode
 		}
 
-		if _, err := h.bs.Subscribe(ctx, boardName, sessionName, role, nil, nil, receiveMode); err != nil {
+		if _, err := h.bs.Subscribe(ctx, boardName, subscriberID, role, sessionName, nil, nil, receiveMode); err != nil {
 			log.Printf("Failed to subscribe session %s to board %s: %v", sessionID[:8], boardName, err)
 		}
 	}
@@ -2780,8 +2766,8 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.LiveSession,
 	flags []string, prompt, boardName, boardServer, backend, boardType, displayName string) error {
 
-	sessionName := fmt.Sprintf("%s-%s", ls.AgentType, ls.SessionID)
-	logFile := filepath.Join(h.cfg.LogDir, fmt.Sprintf("%s_coral_%s.log", ls.AgentType, ls.SessionID))
+	sessionName := naming.SessionName(ls.AgentType, ls.SessionID)
+	logFile := naming.LogFile(h.cfg.LogDir, ls.AgentType, ls.SessionID)
 
 	agentImpl := agent.GetAgent(ls.AgentType)
 	agent.TryPrepareResume(agentImpl, ls.SessionID, ls.WorkingDir)
@@ -2843,7 +2829,7 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 
 	// Re-subscribe to board with existing session name
 	if boardName != "" {
-		go h.setupBoardAndPrompt(ls.SessionID, sessionName, ls.AgentType, boardName, displayName)
+		h.setupBoardAndPrompt(ls.SessionID, sessionName, ls.AgentType, boardName, displayName)
 	}
 
 	return nil

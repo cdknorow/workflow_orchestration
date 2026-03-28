@@ -14,6 +14,7 @@ import (
 
 	"github.com/cdknorow/coral/internal/agent"
 	at "github.com/cdknorow/coral/internal/agenttypes"
+	"github.com/cdknorow/coral/internal/naming"
 	"github.com/cdknorow/coral/internal/store"
 	"github.com/google/uuid"
 )
@@ -59,8 +60,8 @@ func (l *AgentLauncher) LaunchAgent(ctx context.Context, workingDir, agentType, 
 	folderName := filepath.Base(workingDir)
 	logDir := os.TempDir()
 	sessionID := uuid.New().String()
-	sessionName := fmt.Sprintf("%s-%s", agentType, sessionID)
-	logFile := filepath.Join(logDir, fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+	sessionName := naming.SessionName(agentType, sessionID)
+	logFile := naming.LogFile(logDir, agentType, sessionID)
 
 	isTerminal := agentType == at.Terminal
 	ag := agent.GetAgent(agentType)

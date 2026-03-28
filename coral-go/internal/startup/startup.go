@@ -259,9 +259,19 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	schedStore := store.NewScheduleStore(db)
 	rbStore := store.NewRemoteBoardStore(db)
 
-	// Shared agent discovery function
+	// Shared agent discovery function — enriches runtime agents with display names from the DB.
 	discoverFn := func(ctx context.Context) ([]background.AgentInfo, error) {
-		return agentRT.ListAgents(ctx)
+		agents, err := agentRT.ListAgents(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// Look up display names from live_sessions for stable board subscriber_id
+		for i, a := range agents {
+			if ls, err := sessStore.GetLiveSession(ctx, a.SessionID); err == nil && ls != nil && ls.DisplayName != nil {
+				agents[i].DisplayName = *ls.DisplayName
+			}
+		}
+		return agents, nil
 	}
 
 	// Git poller

@@ -30,6 +30,9 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 	if params.SessionName != "" {
 		parts = append(parts, fmt.Sprintf(`CORAL_SESSION_NAME="%s"`, params.SessionName))
 	}
+	if params.Role != "" {
+		parts = append(parts, fmt.Sprintf(`CORAL_SUBSCRIBER_ID="%s"`, params.Role))
+	}
 
 	if params.ResumeSessionID != "" {
 		// codex resume takes session ID as a positional argument, not --session flag

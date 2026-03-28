@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cdknorow/coral/internal/naming"
 	"github.com/cdknorow/coral/internal/pulse"
 	"github.com/cdknorow/coral/internal/tmux"
 )
@@ -40,8 +41,8 @@ func NewTmuxBackend(client *tmux.Client, logDir string) *TmuxBackend {
 
 func (b *TmuxBackend) Spawn(name, agentType, workDir, sessionID, command string, cols, rows uint16) error {
 	ctx := context.Background()
-	tmuxName := fmt.Sprintf("%s-%s", agentType, sessionID)
-	logPath := filepath.Join(b.logDir, fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+	tmuxName := naming.SessionName(agentType, sessionID)
+	logPath := naming.LogFile(b.logDir, agentType, sessionID)
 
 	// Create empty log file
 	os.WriteFile(logPath, []byte{}, 0644)

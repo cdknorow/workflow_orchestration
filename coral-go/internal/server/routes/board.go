@@ -62,24 +62,36 @@ func (h *BoardHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, emptyIfNil(projects))
 }
 
-// Subscribe subscribes a session to a board.
+// Subscribe subscribes to a board.
 // POST /api/board/{project}/subscribe
+// Accepts subscriber_id (stable identity) with optional session_name.
+// Falls back to session_id for backwards compatibility.
 func (h *BoardHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	var body struct {
-		SessionID   string  `json:"session_id"`
-		JobTitle    string  `json:"job_title"`
-		WebhookURL  *string `json:"webhook_url"`
-		ReceiveMode string  `json:"receive_mode"`
+		SubscriberID string  `json:"subscriber_id"`
+		SessionID    string  `json:"session_id"` // legacy compat
+		SessionName  string  `json:"session_name"`
+		JobTitle     string  `json:"job_title"`
+		WebhookURL   *string `json:"webhook_url"`
+		ReceiveMode  string  `json:"receive_mode"`
 	}
-	if err := decodeJSON(r, &body); err != nil || body.SessionID == "" {
-		errBadRequest(w, "session_id required")
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+	subscriberID := body.SubscriberID
+	if subscriberID == "" {
+		subscriberID = body.SessionID // legacy fallback
+	}
+	if subscriberID == "" {
+		errBadRequest(w, "subscriber_id required")
 		return
 	}
 	if body.JobTitle == "" {
 		body.JobTitle = "Agent"
 	}
-	sub, err := h.bs.Subscribe(r.Context(), project, body.SessionID, body.JobTitle, body.WebhookURL, nil, body.ReceiveMode)
+	sub, err := h.bs.Subscribe(r.Context(), project, subscriberID, body.JobTitle, body.SessionName, body.WebhookURL, nil, body.ReceiveMode)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
@@ -87,18 +99,27 @@ func (h *BoardHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sub)
 }
 
-// Unsubscribe removes a session from a board.
+// Unsubscribe removes a subscriber from a board.
 // DELETE /api/board/{project}/subscribe
 func (h *BoardHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	var body struct {
-		SessionID string `json:"session_id"`
+		SubscriberID string `json:"subscriber_id"`
+		SessionID    string `json:"session_id"` // legacy compat
 	}
-	if err := decodeJSON(r, &body); err != nil || body.SessionID == "" {
-		errBadRequest(w, "session_id required")
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
 		return
 	}
-	found, err := h.bs.Unsubscribe(r.Context(), project, body.SessionID)
+	subscriberID := body.SubscriberID
+	if subscriberID == "" {
+		subscriberID = body.SessionID
+	}
+	if subscriberID == "" {
+		errBadRequest(w, "subscriber_id required")
+		return
+	}
+	found, err := h.bs.Unsubscribe(r.Context(), project, subscriberID)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
@@ -115,7 +136,8 @@ func (h *BoardHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 func (h *BoardHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	var body struct {
-		SessionID     string  `json:"session_id"`
+		SubscriberID  string  `json:"subscriber_id"`
+		SessionID     string  `json:"session_id"` // legacy compat
 		Content       string  `json:"content"`
 		TargetGroupID *string `json:"target_group_id,omitempty"`
 		As            string  `json:"as,omitempty"` // display name for auto-subscribe (e.g. "Operator")
@@ -125,30 +147,35 @@ func (h *BoardHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subscriberID := body.SubscriberID
+	if subscriberID == "" {
+		subscriberID = body.SessionID
+	}
+
 	// Auto-subscribe the poster if 'as' is provided and they aren't subscribed yet
-	if body.As != "" && body.SessionID != "" {
-		sub, _ := h.bs.GetSubscription(r.Context(), body.SessionID)
+	if body.As != "" && subscriberID != "" {
+		sub, _ := h.bs.GetSubscription(r.Context(), subscriberID)
 		if sub == nil {
-			h.bs.Subscribe(r.Context(), project, body.SessionID, body.As, nil, nil, "all")
+			h.bs.Subscribe(r.Context(), project, subscriberID, body.As, "", nil, nil, "all")
 		}
 	}
 
-	msg, err := h.bs.PostMessage(r.Context(), project, body.SessionID, body.Content, body.TargetGroupID)
+	msg, err := h.bs.PostMessage(r.Context(), project, subscriberID, body.Content, body.TargetGroupID)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
 	}
 
 	// Fire-and-forget webhook dispatch
-	go h.dispatchWebhooks(project, body.SessionID, msg)
+	go h.dispatchWebhooks(project, subscriberID, msg)
 
 	writeJSON(w, http.StatusOK, msg)
 }
 
 // dispatchWebhooks sends webhook callbacks to all subscribers with webhook_url set.
-func (h *BoardHandler) dispatchWebhooks(project, senderSessionID string, msg *board.Message) {
+func (h *BoardHandler) dispatchWebhooks(project, senderSubscriberID string, msg *board.Message) {
 	ctx := context.Background()
-	targets, err := h.bs.GetWebhookTargets(ctx, project, senderSessionID)
+	targets, err := h.bs.GetWebhookTargets(ctx, project, senderSubscriberID)
 	if err != nil || len(targets) == 0 {
 		return
 	}
@@ -158,7 +185,7 @@ func (h *BoardHandler) dispatchWebhooks(project, senderSessionID string, msg *bo
 	subs, err := h.bs.ListSubscribers(ctx, project)
 	if err == nil {
 		for _, s := range subs {
-			if s.SessionID == senderSessionID {
+			if s.SubscriberID == senderSubscriberID {
 				senderTitle = s.JobTitle
 				break
 			}
@@ -168,11 +195,11 @@ func (h *BoardHandler) dispatchWebhooks(project, senderSessionID string, msg *bo
 	payload := map[string]any{
 		"project": project,
 		"message": map[string]any{
-			"id":         msg.ID,
-			"session_id": msg.SessionID,
-			"job_title":  senderTitle,
-			"content":    msg.Content,
-			"created_at": msg.CreatedAt,
+			"id":            msg.ID,
+			"subscriber_id": msg.SubscriberID,
+			"job_title":     senderTitle,
+			"content":       msg.Content,
+			"created_at":    msg.CreatedAt,
 		},
 	}
 
@@ -210,9 +237,12 @@ func (h *BoardHandler) ReadMessages(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []board.Message{})
 		return
 	}
-	sessionID := r.URL.Query().Get("session_id")
+	subscriberID := r.URL.Query().Get("subscriber_id")
+	if subscriberID == "" {
+		subscriberID = r.URL.Query().Get("session_id") // legacy compat
+	}
 	limit := queryInt(r, "limit", 50)
-	messages, err := h.bs.ReadMessages(r.Context(), project, sessionID, limit)
+	messages, err := h.bs.ReadMessages(r.Context(), project, subscriberID, limit)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
@@ -258,8 +288,11 @@ func (h *BoardHandler) CheckUnread(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"unread": 0})
 		return
 	}
-	sessionID := r.URL.Query().Get("session_id")
-	count, err := h.bs.CheckUnread(r.Context(), project, sessionID)
+	subscriberID := r.URL.Query().Get("subscriber_id")
+	if subscriberID == "" {
+		subscriberID = r.URL.Query().Get("session_id") // legacy compat
+	}
+	count, err := h.bs.CheckUnread(r.Context(), project, subscriberID)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
@@ -347,7 +380,7 @@ func (h *BoardHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, emptyIfNil(groups))
 }
 
-// ListGroupMembers returns session IDs in a group.
+// ListGroupMembers returns subscriber IDs in a group.
 // GET /api/board/{project}/groups/{groupID}/members
 func (h *BoardHandler) ListGroupMembers(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
@@ -360,32 +393,41 @@ func (h *BoardHandler) ListGroupMembers(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, emptyIfNil(members))
 }
 
-// AddGroupMember adds a session to a group.
+// AddGroupMember adds a subscriber to a group.
 // POST /api/board/{project}/groups/{groupID}/members
 func (h *BoardHandler) AddGroupMember(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	groupID := chi.URLParam(r, "groupID")
 	var body struct {
-		SessionID string `json:"session_id"`
+		SubscriberID string `json:"subscriber_id"`
+		SessionID    string `json:"session_id"` // legacy compat
 	}
-	if err := decodeJSON(r, &body); err != nil || body.SessionID == "" {
-		errBadRequest(w, "session_id required")
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
 		return
 	}
-	if err := h.bs.AddToGroup(r.Context(), project, groupID, body.SessionID); err != nil {
+	subscriberID := body.SubscriberID
+	if subscriberID == "" {
+		subscriberID = body.SessionID
+	}
+	if subscriberID == "" {
+		errBadRequest(w, "subscriber_id required")
+		return
+	}
+	if err := h.bs.AddToGroup(r.Context(), project, groupID, subscriberID); err != nil {
 		errInternalServer(w, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// RemoveGroupMember removes a session from a group.
-// DELETE /api/board/{project}/groups/{groupID}/members/{sessionID}
+// RemoveGroupMember removes a subscriber from a group.
+// DELETE /api/board/{project}/groups/{groupID}/members/{subscriberID}
 func (h *BoardHandler) RemoveGroupMember(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	groupID := chi.URLParam(r, "groupID")
-	sessionID := chi.URLParam(r, "sessionID")
-	removed, err := h.bs.RemoveFromGroup(r.Context(), project, groupID, sessionID)
+	subscriberID := chi.URLParam(r, "sessionID") // URL param name kept for route compat
+	removed, err := h.bs.RemoveFromGroup(r.Context(), project, groupID, subscriberID)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return

@@ -31,6 +31,7 @@ type AgentInfo struct {
 	AgentType        string
 	SessionID        string
 	WorkingDirectory string
+	DisplayName      string // role name, used as stable board subscriber_id
 }
 
 // NewGitPoller creates a new GitPoller.

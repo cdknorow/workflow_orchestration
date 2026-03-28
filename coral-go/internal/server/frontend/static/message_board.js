@@ -257,7 +257,7 @@ function renderMessages(messages) {
         const prevAgent = i > 0 ? (messages[i - 1].job_title || 'Unknown') : null;
         const sameAsPrev = agent === prevAgent;
         const spacing = sameAsPrev ? 'mb-message-grouped' : 'mb-message-first';
-        const isLeader = /orchestrator/i.test(agent) || m.session_id === 'dashboard';
+        const isLeader = /orchestrator/i.test(agent) || m.subscriber_id === 'dashboard';
         const alignClass = isLeader ? ' board-msg-left' : ' board-msg-right';
         return `
         <div class="mb-message ${spacing}${alignClass}" style="border-left:3px solid ${_hexToRgba(color.name, 0.55)}; border-bottom:2px solid ${_hexToRgba(color.name, 0.3)}">
@@ -296,11 +296,11 @@ async function loadBoardSubscribers(project) {
             return;
         }
         list.innerHTML = subs.map(s => {
-            const sid = escapeAttr(s.session_id);
+            const sid = escapeAttr(s.subscriber_id);
             const icon = s.icon ? `<span class="agent-icon">${escapeHtml(s.icon)}</span> ` : '';
             return `<li style="padding:6px 0;border-bottom:1px solid var(--border)">
                 <div style="font-weight:600;font-size:12px">${icon}<a href="javascript:void(0)" class="subscriber-history-link" onclick="selectHistorySession('${sid}')" title="View chat history">${escapeHtml(s.job_title)}</a></div>
-                <div style="font-size:10px;color:var(--text-muted)">${escapeHtml(s.session_id)}</div>
+                <div style="font-size:10px;color:var(--text-muted)">${escapeHtml(s.subscriber_id)}</div>
             </li>`;
         }).join('');
     } catch (e) {
@@ -315,7 +315,7 @@ async function subscribeDashboard(project) {
         await fetch(`/api/board/${encodeURIComponent(project)}/subscribe`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: 'dashboard', job_title: 'Operator' }),
+            body: JSON.stringify({ subscriber_id: 'dashboard', job_title: 'Operator' }),
         });
     } catch (e) {
         // Best effort
@@ -334,7 +334,7 @@ export async function postBoardMessage() {
         const resp = await fetch(`/api/board/${encodeURIComponent(currentProject)}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: 'dashboard', content }),
+            body: JSON.stringify({ subscriber_id: 'dashboard', content }),
         });
         if (!resp.ok) {
             console.error('Post failed:', resp.status, await resp.text());
@@ -537,10 +537,10 @@ export async function showExportBoardModal() {
 
     // Build modal HTML
     const agentCheckboxes = subs.map(s => {
-        const role = escapeHtml(s.job_title || s.session_id);
-        const sid = escapeAttr(s.session_id);
+        const role = escapeHtml(s.job_title || s.subscriber_id);
+        const sid = escapeAttr(s.subscriber_id);
         return `<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;white-space:nowrap">
-            <input type="checkbox" class="export-agent-cb" value="${sid}" data-role="${escapeAttr(s.job_title || s.session_id)}">
+            <input type="checkbox" class="export-agent-cb" value="${sid}" data-role="${escapeAttr(s.job_title || s.subscriber_id)}">
             <span style="font-weight:600;font-size:12px">${role}</span>
         </label>`;
     }).join('');
@@ -608,7 +608,7 @@ export async function doExportBoard() {
         // 3. Build entries from board messages
         const entries = boardMessages.map(m => ({
             timestamp: (m.created_at || '').substring(0, 16),
-            role: m.job_title || m.session_id || 'unknown',
+            role: m.job_title || m.subscriber_id || 'unknown',
             content: m.content || '',
             source: 'board',
         }));
@@ -621,7 +621,7 @@ export async function doExportBoard() {
         for (const agent of selectedAgents) {
             try {
                 // Find the live session for this subscriber to get name + working_directory
-                const live = liveSessions.find(s => s.session_id === agent.sessionId.replace('claude-', ''));
+                const live = liveSessions.find(s => s.display_name === agent.role);
                 let histData;
                 if (live) {
                     // Use live chat endpoint (has working_directory for JSONL resolution)
@@ -656,8 +656,8 @@ export async function doExportBoard() {
             project: currentProject,
             exported_at: new Date().toISOString(),
             subscribers: subscribers.map(s => ({
-                session_id: s.session_id,
-                role: s.job_title || s.session_id,
+                session_id: s.subscriber_id,
+                role: s.job_title || s.subscriber_id,
             })),
             messages: entries,
             stats: {
@@ -762,7 +762,7 @@ function renderExportMarkdown(d) {
     if (d.subscribers.length) {
         out += `**Subscribers**: ${d.subscribers.length}\n\n`;
         out += '| Agent | Role |\n|-------|------|\n';
-        d.subscribers.forEach(s => { out += `| ${s.session_id} | ${s.role} |\n`; });
+        d.subscribers.forEach(s => { out += `| ${s.subscriber_id} | ${s.role} |\n`; });
     }
     out += '\n---\n\n## Messages\n\n';
     d.messages.forEach(e => {

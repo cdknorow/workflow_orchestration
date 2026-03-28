@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cdknorow/coral/internal/naming"
 )
 
 // Pane represents a tmux pane with its metadata.
@@ -340,7 +342,7 @@ func (c *Client) KillSession(ctx context.Context, agentName, agentType, sessionI
 	// Clean up log file
 	if sessionID != "" {
 		logDir := os.TempDir()
-		logPath := filepath.Join(logDir, fmt.Sprintf("%s_coral_%s.log", agentType, sessionID))
+		logPath := naming.LogFile(logDir, agentType, sessionID)
 		os.Remove(logPath)
 
 		// Clean up settings temp file

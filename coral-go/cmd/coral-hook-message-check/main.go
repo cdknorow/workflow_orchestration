@@ -34,8 +34,16 @@ func main() {
 	}
 
 	project, _ := state["project"].(string)
-	sessionID, _ := state["session_id"].(string)
-	if project == "" || sessionID == "" {
+	if project == "" {
+		return
+	}
+
+	// Resolve subscriber_id: env var > state file job_title
+	subscriberID := os.Getenv("CORAL_SUBSCRIBER_ID")
+	if subscriberID == "" {
+		subscriberID, _ = state["job_title"].(string)
+	}
+	if subscriberID == "" {
 		return
 	}
 
@@ -49,7 +57,7 @@ func main() {
 	}
 
 	resp, err := hooks.CoralAPI(base, "GET",
-		fmt.Sprintf("/api/board/%s/messages/check?session_id=%s", project, sessionID), nil)
+		fmt.Sprintf("/api/board/%s/messages/check?subscriber_id=%s", project, subscriberID), nil)
 	if err != nil {
 		return
 	}
