@@ -1925,8 +1925,18 @@ func (h *SessionsHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If session_id is provided, look up the actual agent name from the live
+	// sessions DB. This is more reliable than the URL path name, which comes
+	// from the hook's cwd and can be wrong when multiple agents share a directory.
+	agentName := name
+	if body.SessionID != "" {
+		if ls, err := h.ss.GetLiveSession(r.Context(), body.SessionID); err == nil && ls != nil {
+			agentName = ls.AgentName
+		}
+	}
+
 	event := &store.AgentEvent{
-		AgentName: name,
+		AgentName: agentName,
 		EventType: body.EventType,
 		Summary:   body.Summary,
 	}

@@ -329,7 +329,7 @@
     font-size: 9px;
     font-weight: 500;
     color: var(--text-muted);
-    padding: 4px 16px !important;
+    padding: 4px 12px !important;
     text-transform: none;
     letter-spacing: 0.02em;
     cursor: pointer;
@@ -470,7 +470,7 @@
 }
 
 .session-group-item {
-    padding: 6px 16px 6px 33px !important;
+    padding: 6px 12px 6px 33px !important;
     cursor: grab;
     min-height: 0;
     border-left: 2px solid transparent;
