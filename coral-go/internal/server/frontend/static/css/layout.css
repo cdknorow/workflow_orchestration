@@ -89,16 +89,18 @@
 }
 
 .topbar-search-dropdown {
-    position: fixed;            /* fixed to escape parent stacking context */
-    top: auto;                  /* positioned by JS or auto from parent */
+    position: fixed;
+    top: auto;
     bottom: auto;
     left: auto;
     width: 300px;
-    margin-top: 4px;
-    margin-bottom: 0;
     max-height: 400px;
     overflow-y: auto;
-    z-index: 99999;             /* above everything */
+    z-index: 99999;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .top-bar-search-input::placeholder {

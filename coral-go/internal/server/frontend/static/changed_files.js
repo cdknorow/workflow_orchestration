@@ -290,13 +290,14 @@ export function initTopBarSearch() {
     input.addEventListener('blur', () => setTimeout(_hideTopBarDropdown, 200));
 }
 
-function _showWorkingDir() {
+async function _showWorkingDir() {
     const dir = state.currentSession?.working_directory;
     if (!dir) {
-        _renderTopBarResults(null, 'No agent selected');
+        _renderTopBarResults(null, 'Select an agent to search files');
         return;
     }
-    _renderTopBarResults(null, null, dir);
+    // Show directory header + loading, then fetch file list
+    _renderTopBarResults(null, 'Type to search files...', dir);
 }
 
 function _renderTopBarResults(files, message, workingDir) {
