@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -22,8 +23,9 @@ import (
 	"github.com/cdknorow/coral/internal/tracking"
 )
 
-// setupCrashLogging redirects log output to <coralDir>/coral.log so that panics
-// and errors are captured even when the server runs in the background.
+// setupCrashLogging logs to both terminal (stderr) and <coralDir>/coral.log.
+// This ensures panics are captured in the file while keeping terminal output
+// visible when running interactively.
 func setupCrashLogging(coralDir string) {
 	os.MkdirAll(coralDir, 0755)
 	logFile := filepath.Join(coralDir, "coral.log")
@@ -31,7 +33,7 @@ func setupCrashLogging(coralDir string) {
 	if err != nil {
 		return
 	}
-	log.SetOutput(f)
+	log.SetOutput(io.MultiWriter(os.Stderr, f))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 }
 
