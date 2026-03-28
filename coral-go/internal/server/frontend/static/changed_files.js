@@ -242,6 +242,17 @@ export function initFileSearch() {
         }
     });
 
+    input.addEventListener('focus', async () => {
+        if (!input.value.trim()) {
+            // Show all files on focus (empty query) — instant from cache
+            if (!state.currentSession || state.currentSession.type !== 'live') return;
+            const files = await fetchFileList();
+            if (files && files.length > 0) {
+                _renderSearchDropdown(files.slice(0, 50), '');
+            }
+        }
+    });
+
     input.addEventListener('blur', () => {
         setTimeout(_hideSearchDropdown, 200);
     });
