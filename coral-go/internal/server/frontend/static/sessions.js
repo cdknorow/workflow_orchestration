@@ -63,6 +63,10 @@ export async function selectLiveSession(name, agentType, sessionId) {
     document.getElementById("session-name").textContent = displayName || name;
     const termLabel = document.getElementById("terminal-header-label");
     if (termLabel) termLabel.textContent = `${displayName || name} -- ${sessionId || ''}`;
+    const termDot = document.getElementById("terminal-status-dot");
+    if (termDot && agentData) {
+        termDot.className = `terminal-status-dot ${agentData.working ? 'working' : agentData.waiting_for_input ? 'waiting' : agentData.sleeping ? 'sleeping' : 'stale'}`;
+    }
     const badge = document.getElementById("session-type-badge");
     badge.textContent = agentType || "claude";
     badge.className = `badge ${(agentType || "claude").toLowerCase()}`;
