@@ -758,8 +758,8 @@
 
     #mobile-session-list .session-group-item.active {
         border-left: 1px solid rgba(255, 255, 255, 0.06);
-        border-color: rgba(88, 166, 255, 0.45);
-        box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.18), 0 14px 28px rgba(0, 0, 0, 0.2);
+        border-color: rgba(167, 139, 250, 0.45);
+        box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.18), 0 14px 28px rgba(0, 0, 0, 0.2);
     }
 
     #mobile-session-list .session-group-item.needs-attention {

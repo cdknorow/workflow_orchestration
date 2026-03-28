@@ -13,11 +13,12 @@
 .chat-bubble {
     margin-bottom: 16px;
     padding: 12px 16px;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: 13px;
     line-height: 1.5;
     max-width: 85%;
     position: relative;
+    border: 1px solid var(--border);
 }
 
 .chat-bubble.human {
@@ -38,7 +39,7 @@
 .chat-bubble.assistant {
     background: var(--chat-assistant-bg, var(--bg-tertiary));
     color: var(--text-primary);
-    border-bottom-left-radius: 2px;
+    border-top-left-radius: 2px;
 }
 
 .chat-bubble .role-label {
@@ -483,7 +484,7 @@
     margin-bottom: 12px;
     background: var(--bg-secondary, #161b22);
     color: var(--text-muted);
-    border: 1px solid var(--border-color, #30363d);
+    border: 1px solid var(--border-color, #27272a);
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;

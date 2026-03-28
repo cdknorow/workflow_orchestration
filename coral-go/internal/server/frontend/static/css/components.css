@@ -24,14 +24,17 @@
 }
 
 .btn-primary {
-    background: var(--accent-dim);
-    border-color: var(--accent-dim);
-    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #09090b;
 }
 
 .btn-primary:hover {
-    background: var(--accent);
-    border-color: var(--accent);
+    opacity: 0.9;
+}
+
+.btn-primary:active {
+    transform: scale(0.95);
 }
 
 .btn-warning {
@@ -41,7 +44,7 @@
 }
 
 .btn-warning:hover {
-    background: rgba(210, 153, 34, 0.15);
+    background: rgba(255, 183, 129, 0.15);
     border-color: var(--warning);
     color: var(--warning);
 }
@@ -366,7 +369,7 @@
     font-weight: 700;
     padding: 6px 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(88, 166, 255, 0.25);
+    box-shadow: 0 2px 8px rgba(167, 139, 250, 0.25);
     transition: all 0.15s;
     border: none !important;
     border-bottom: none !important;
@@ -376,13 +379,13 @@
 
 .btn-send:hover {
     background: #70b8ff !important;
-    box-shadow: 0 4px 12px rgba(88, 166, 255, 0.35);
+    box-shadow: 0 4px 12px rgba(167, 139, 250, 0.35);
     transform: translateY(-1px);
     color: #fff !important;
 }
 
 .btn-team-send {
-    background: rgba(88, 166, 255, 0.15) !important;
+    background: rgba(167, 139, 250, 0.15) !important;
     color: var(--accent) !important;
     font-weight: 600;
     padding: 6px 12px;
@@ -396,7 +399,7 @@
 }
 
 .btn-team-send:hover {
-    background: rgba(88, 166, 255, 0.3) !important;
+    background: rgba(167, 139, 250, 0.3) !important;
     transform: translateY(-1px);
 }
 
@@ -1501,8 +1504,8 @@
 }
 
 .overflow-menu-tier .tier-pro {
-    background: rgba(88, 166, 255, 0.15);
-    color: #58a6ff;
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
 }
 
 .overflow-menu-tier .tier-trial {
@@ -1569,7 +1572,7 @@
     border-color: var(--accent);
     background: var(--bg-hover);
     color: var(--text-primary);
-    box-shadow: 0 2px 12px rgba(88, 166, 255, 0.15);
+    box-shadow: 0 2px 12px rgba(167, 139, 250, 0.15);
 }
 
 .launch-type-icon {
@@ -1875,7 +1878,7 @@
 }
 
 .team-agent-edit-btn:hover {
-    color: var(--accent-primary, #58a6ff);
+    color: var(--accent-primary, #a78bfa);
 }
 
 .team-agent-remove {
@@ -1909,7 +1912,7 @@
 }
 
 .team-agent-card.editing {
-    border-color: var(--accent-primary, #58a6ff);
+    border-color: var(--accent-primary, #a78bfa);
 }
 
 .team-agent-row label {
@@ -1969,7 +1972,7 @@
 }
 
 .agent-picker-custom {
-    color: var(--accent-primary, #58a6ff);
+    color: var(--accent-primary, #a78bfa);
     font-weight: 500;
 }
 
