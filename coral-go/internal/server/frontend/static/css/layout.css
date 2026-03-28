@@ -8,7 +8,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 20px 10px 12px;
+    padding: 7px 20px 7px 12px;
     background: var(--topbar-bg);
     border-bottom: 1px solid var(--topbar-border);
     position: relative;
@@ -154,7 +154,7 @@
 
 .layout {
     display: flex;
-    height: calc(100vh - 49px);
+    height: calc(100vh - 43px);
 }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
@@ -300,12 +300,12 @@
 
 .sidebar-new-btn-full {
     width: 100%;
-    padding: 6px 0;
+    padding: 8px 0;
     font-size: 13px;
     font-weight: 600;
     font-family: inherit;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
 }
 
@@ -630,7 +630,7 @@
     width: 120px;
     height: 100px;
     text-decoration: none;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 12px;
     color: var(--text-secondary);
@@ -646,7 +646,7 @@
 }
 
 .welcome-action-card:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
     border-color: var(--accent-dim);
     color: var(--text-primary);
     transform: translateY(-2px);
@@ -668,7 +668,7 @@
     gap: 6px;
     padding: 20px 24px;
     width: 190px;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 12px;
     cursor: pointer;
