@@ -56,10 +56,19 @@ done
 # ── Open browser ─────────────────────────────────────────────
 echo "==> Opening browser..."
 open "$DASH_URL"
+sleep 2
+
+# Try to navigate to the first live session for a more useful screenshot
+FIRST_SESSION=$(curl -sf "http://127.0.0.1:${PORT}/api/sessions/live" \
+    | python3 -c "import sys,json; ss=json.load(sys.stdin); print(ss[0]['name'] if ss else '')" 2>/dev/null || true)
+if [ -n "$FIRST_SESSION" ]; then
+    echo "==> Navigating to session: $FIRST_SESSION"
+    open "${DASH_URL}/#session=${FIRST_SESSION}"
+fi
 
 # ── Screenshot ───────────────────────────────────────────────
-echo "==> Waiting 4s for page render..."
-sleep 4
+echo "==> Waiting 3s for page render..."
+sleep 3
 
 echo "==> Taking screenshot..."
 screencapture -x "$SCREENSHOT"
