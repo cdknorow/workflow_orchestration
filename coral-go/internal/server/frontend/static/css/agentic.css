@@ -11,7 +11,7 @@
     background: var(--border);
     flex-shrink: 0;
     transition: background 0.15s, width 0.15s;
-    margin: 24px 0;
+    margin: 36px 0 24px;
 }
 
 .task-bar-resize-handle:hover,
