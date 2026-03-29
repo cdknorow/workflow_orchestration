@@ -644,7 +644,6 @@ async function _deletePersona(name) {
     await _setSavedPersonas(saved);
     showToast(`Deleted persona "${name}"`);
     _renderPresetButtons("agent-preset-selector", "window._selectAgentPreset");
-    _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
 }
 window._deletePersona = _deletePersona;
 
@@ -709,7 +708,6 @@ export async function importPersonas() {
     await _setSavedPersonas(existing);
     showToast(`Imported ${added} persona(s)`);
     _renderPresetButtons("agent-preset-selector", "window._selectAgentPreset");
-    _renderPresetButtons("add-agent-board-presets", "window._selectBoardAgentPreset");
 }
 
 export function exportTeamTemplates() {
@@ -784,27 +782,6 @@ export function hideAddAgentBoardModal() {
     document.getElementById("add-agent-board-modal").style.display = "none";
 }
 
-function _selectBoardAgentPreset(name) {
-    const nameInput = document.getElementById("add-agent-board-agent-name");
-    const promptInput = document.getElementById("add-agent-board-prompt");
-
-    if (name) {
-        const persona = _findPersona(name);
-        if (persona) {
-            nameInput.value = persona.name;
-            promptInput.value = persona.prompt;
-        }
-    } else {
-        nameInput.value = "";
-        promptInput.value = "";
-    }
-
-    document.querySelectorAll("#add-agent-board-presets .agent-preset-btn").forEach(btn => {
-        btn.classList.toggle("active", btn.dataset.preset === name);
-    });
-    nameInput.focus();
-}
-window._selectBoardAgentPreset = _selectBoardAgentPreset;
 
 export async function launchAgentToBoard() {
     const boardName = document.getElementById("add-agent-board-name").value;

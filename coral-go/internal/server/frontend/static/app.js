@@ -295,17 +295,21 @@ function applyAgentTemplate(template, target, btn) {
     if (target === 'team-new') {
         if (window._addTeamAgent) window._addTeamAgent(name, prompt);
     } else if (target === 'modal') {
-        const nameEl = document.getElementById('add-agent-board-agent-name');
-        const promptEl = document.getElementById('add-agent-board-prompt');
-        if (nameEl) nameEl.value = name;
-        if (promptEl) promptEl.value = prompt;
+        if (window.setAgentConfig) {
+            window.setAgentConfig('add-agent-board-acf', { name, prompt });
+        }
     } else if (target === 'row' && btn) {
         const row = btn.closest('.team-agent-row');
         if (!row) return;
-        const promptEl = row.querySelector('.team-agent-prompt');
-        if (promptEl) { promptEl.value = prompt; promptEl.dispatchEvent(new Event('input')); }
-        const nameEl = row.querySelector('.team-agent-name');
-        if (nameEl && template.name && !nameEl.value.trim()) { nameEl.value = name; nameEl.dispatchEvent(new Event('input')); }
+        const acfId = row.dataset.acfId;
+        if (acfId && window.setAgentConfig) {
+            window.setAgentConfig(acfId, { name, prompt });
+            // Update summary text
+            const nameEl = row.querySelector('.team-agent-role-name');
+            if (nameEl) nameEl.textContent = name || 'New Agent';
+            const previewEl = row.querySelector('.team-agent-prompt-preview');
+            if (previewEl) previewEl.textContent = prompt.substring(0, 200) + (prompt.length > 200 ? '\u2026' : '');
+        }
     }
 }
 window.browseAgentTemplatesNew = function() {
