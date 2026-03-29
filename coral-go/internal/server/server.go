@@ -654,17 +654,17 @@ const activationPage = `<!DOCTYPE html>
 
   <div class="pricing-row">
     <div class="price-card">
-      <h3>14-Day Pro Trial</h3>
-      <p class="price-desc">Full access, no credit card required</p>
+      <h3>14-Day Free Trial</h3>
+      <p class="price-desc">Full Pro access, cancel anytime</p>
       <div class="price-amount">Free</div>
-      <p class="price-note">1 machine activation via instant trial key</p>
+      <p class="price-note">Card required &middot; auto-converts to Pro after trial</p>
       <ul class="price-features">
         <li>Native desktop app (macOS &amp; Linux)</li>
         <li>Full Pro features for 14 days</li>
         <li>Unlimited Teams &amp; Agents</li>
         <li>Claude, Codex &amp; Gemini support</li>
         <li>Real-time dashboard &amp; message boards</li>
-        <li>Upgrade seamlessly when the trial ends</li>
+        <li>Cancel before trial ends — no charge</li>
       </ul>
       <a href="{{STORE_URL}}" class="price-btn price-btn-secondary" target="_blank">Start Free Trial</a>
     </div>

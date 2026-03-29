@@ -429,16 +429,15 @@ async function _showDemoLimitModal(message) {
     } else {
         modal.innerHTML = `
             <div class="modal-content" style="width:480px;text-align:center">
-                <h3 style="margin-bottom:12px">Free Trial Limit Reached</h3>
+                <h3 style="margin-bottom:12px">Limit Reached</h3>
                 <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin:0 0 16px">
-                    Your free trial includes:<br>
-                    <strong>Up to 8 agents</strong> and <strong>2 agent teams</strong>
+                    ${message || 'You have reached the maximum number of concurrent agents or teams.'}
                 </p>
                 <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px">
-                    Upgrade to <strong>Coral Pro</strong> for unlimited agents, teams, and priority support.
+                    Please stop existing sessions before launching new ones, or upgrade to <strong>Coral Pro</strong> for unlimited access.
                 </p>
                 <div class="modal-actions" style="justify-content:center;gap:12px">
-                    <button class="btn btn-secondary" data-action="close">Maybe Later</button>
+                    <button class="btn btn-secondary" data-action="close">OK</button>
                     <a href="${storeURL}" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration:none">Upgrade to Pro</a>
                 </div>
             </div>
