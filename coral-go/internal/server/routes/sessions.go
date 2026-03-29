@@ -1385,9 +1385,12 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var body struct {
-		AgentType  string `json:"agent_type"`
-		ExtraFlags string `json:"extra_flags"`
-		SessionID  string `json:"session_id"`
+		AgentType    string              `json:"agent_type"`
+		ExtraFlags   string              `json:"extra_flags"`
+		SessionID    string              `json:"session_id"`
+		Prompt       string              `json:"prompt"`
+		Model        string              `json:"model"`
+		Capabilities *agent.Capabilities `json:"capabilities"`
 	}
 	json.NewDecoder(r.Body).Decode(&body)
 
@@ -1438,10 +1441,12 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	folderName := filepath.Base(strings.TrimRight(pane.CurrentPath, "/"))
 	h.terminal.SetPaneTitle(ctx, target, fmt.Sprintf("%s — %s", folderName, agentType))
 
-	// Load stored flags, prompt, board_name, board_server from the DB
+	// Load stored config from the DB
 	agentImpl := agent.GetAgent(agentType)
 	var storedFlags []string
-	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType string
+	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType, storedModel string
+	var storedCaps *agent.Capabilities
+	var storedCapsJSON *string
 	if body.SessionID != "" {
 		if ls, err := h.ss.GetLiveSession(ctx, body.SessionID); err == nil && ls != nil {
 			storedFlags = store.UnmarshalFlags(ls.Flags)
@@ -1450,10 +1455,70 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 			storedBoardServer = derefStrPtr(ls.BoardServer)
 			storedDisplayName = derefStrPtr(ls.DisplayName)
 			storedBoardType = derefStrPtr(ls.BoardType)
+			storedModel = derefStrPtr(ls.Model)
+			storedCapsJSON = ls.Capabilities
+			if ls.Capabilities != nil && *ls.Capabilities != "" {
+				storedCaps = &agent.Capabilities{}
+				json.Unmarshal([]byte(*ls.Capabilities), storedCaps)
+			}
 		}
 	}
 
-	allFlags := append(storedFlags, strings.Fields(body.ExtraFlags)...)
+	// Request body overrides stored values (user edited in modal)
+	if body.Prompt != "" {
+		storedPrompt = body.Prompt
+	}
+	if body.Model != "" {
+		storedModel = body.Model
+	}
+	if body.Capabilities != nil {
+		storedCaps = body.Capabilities
+		storedCapsJSON = store.MarshalCapabilities(body.Capabilities)
+	}
+
+	// When capabilities are available, strip agent-specific permission flags
+	// from the stored flags — capabilities are the source of truth and
+	// BuildLaunchCommand will generate the correct flags for the target agent type.
+	// This prevents flag mismatches when changing agent type (e.g. Codex --full-auto → Claude).
+	agentPermFlags := map[string]bool{
+		"--full-auto": true, "--dangerously-skip-permissions": true,
+		"--dangerously-bypass-approvals-and-sandbox": true,
+		"--sandbox": true, "--search": true,
+		"--approval-mode": true, "--yolo": true,
+	}
+	var cleanFlags []string
+	skipNext := false
+	for _, f := range storedFlags {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if agentPermFlags[f] {
+			// Some flags take a value argument (e.g. --sandbox workspace-write, -a untrusted)
+			if f == "--sandbox" || f == "--approval-mode" || f == "-a" {
+				skipNext = true
+			}
+			continue
+		}
+		if f == "-a" {
+			skipNext = true
+			continue
+		}
+		cleanFlags = append(cleanFlags, f)
+	}
+	// Also strip --model from old flags (we'll re-add from storedModel)
+	var finalFlags []string
+	for i := 0; i < len(cleanFlags); i++ {
+		if cleanFlags[i] == "--model" || cleanFlags[i] == "-m" {
+			i++ // skip the value
+			continue
+		}
+		finalFlags = append(finalFlags, cleanFlags[i])
+	}
+	if storedModel != "" {
+		finalFlags = append(finalFlags, "--model", storedModel)
+	}
+	allFlags := append(finalFlags, strings.Fields(body.ExtraFlags)...)
 
 	role := naming.SubscriberID(storedDisplayName, agentType)
 
@@ -1470,6 +1535,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		Prompt:          storedPrompt,
 		PromptOverrides: promptOverrides(userSettings),
 		BoardType:       storedBoardType,
+		Capabilities:    storedCaps,
 	}))
 	log.Printf("[launch] restart session=%s cmd=%s", target, cmd)
 	h.terminal.SendToTarget(ctx, target, cmd)
@@ -1481,10 +1547,13 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		AgentName:    folderName,
 		WorkingDir:   pane.CurrentPath,
 		ResumeFromID: strPtr(body.SessionID),
+		Flags:        store.MarshalFlags(allFlags),
 		Prompt:       strPtr(storedPrompt),
 		BoardName:    strPtr(storedBoard),
 		BoardServer:  strPtr(storedBoardServer),
 		BoardType:    strPtr(storedBoardType),
+		Capabilities: storedCapsJSON,
+		Model:        strPtr(storedModel),
 	})
 	h.ss.MigrateDisplayName(ctx, body.SessionID, newSessionID)
 

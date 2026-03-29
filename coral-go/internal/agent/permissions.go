@@ -173,6 +173,13 @@ func TranslateToCodexPermissions(caps *Capabilities) *CodexPermissions {
 		return perms
 	}
 
+	// Search-only or other non-write capabilities should stay read-only.
+	if allowSet[CapWebAccess] {
+		perms.SandboxMode = "read-only"
+		perms.ApprovalPolicy = "untrusted"
+		return perms
+	}
+
 	// Default: workspace-write with untrusted
 	perms.SandboxMode = "workspace-write"
 	perms.ApprovalPolicy = "untrusted"

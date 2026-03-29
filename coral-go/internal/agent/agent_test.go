@@ -706,6 +706,19 @@ func TestTranslateToCodexPermissions_WebSearch(t *testing.T) {
 	}
 }
 
+func TestTranslateToCodexPermissions_WebOnlyIsReadOnly(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{Allow: []string{CapWebAccess}})
+	if result == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !result.Search {
+		t.Error("expected Search=true")
+	}
+	if result.SandboxMode != "read-only" || result.ApprovalPolicy != "untrusted" {
+		t.Errorf("unexpected: %+v", result)
+	}
+}
+
 // ── Gemini Permission Translation Tests ─────────────────────
 
 func TestTranslateToGeminiPermissions_Nil(t *testing.T) {
@@ -747,6 +760,17 @@ func TestTranslateToGeminiPermissions_Default(t *testing.T) {
 	result := TranslateToGeminiPermissions(&Capabilities{Allow: []string{CapWebAccess}})
 	if result == nil || result.ApprovalMode != "default" {
 		t.Error("expected default")
+	}
+}
+
+func TestTranslateToClaudePermissions_ShellPattern(t *testing.T) {
+	result := TranslateToClaudePermissions(&Capabilities{Allow: []string{"shell:npm test"}})
+	if result == nil {
+		t.Fatal("expected non-nil")
+	}
+	allowStr := strings.Join(result.Allow, ",")
+	if !strings.Contains(allowStr, "Bash(npm test)") {
+		t.Errorf("expected shell pattern translation, got %q", allowStr)
 	}
 }
 
@@ -811,6 +835,85 @@ func TestPresets_FullAccessHasAll(t *testing.T) {
 		if !allowSet[cap] {
 			t.Errorf("full_access missing %s", cap)
 		}
+	}
+}
+
+func TestPresetTranslations(t *testing.T) {
+	tests := []struct {
+		name      string
+		agentType string
+		preset    string
+		check     func(t *testing.T, got any)
+	}{
+		{
+			name:      "qa claude",
+			agentType: "claude",
+			preset:    "qa",
+			check: func(t *testing.T, got any) {
+				t.Helper()
+				perms, ok := got.(*ClaudePermissions)
+				if !ok || perms == nil {
+					t.Fatalf("expected *ClaudePermissions, got %T", got)
+				}
+				if !strings.Contains(strings.Join(perms.Allow, ","), "Read") {
+					t.Fatalf("expected read tools, got %+v", perms.Allow)
+				}
+				if !strings.Contains(strings.Join(perms.Deny, ","), "Bash") {
+					t.Fatalf("expected shell deny, got %+v", perms.Deny)
+				}
+			},
+		},
+		{
+			name:      "orchestrator codex",
+			agentType: "codex",
+			preset:    "orchestrator",
+			check: func(t *testing.T, got any) {
+				t.Helper()
+				perms, ok := got.(*CodexPermissions)
+				if !ok || perms == nil {
+					t.Fatalf("expected *CodexPermissions, got %T", got)
+				}
+				if perms.SandboxMode != "read-only" || perms.ApprovalPolicy != "untrusted" || !perms.Search {
+					t.Fatalf("unexpected codex perms: %+v", perms)
+				}
+			},
+		},
+		{
+			name:      "frontend gemini",
+			agentType: "gemini",
+			preset:    "frontend_dev",
+			check: func(t *testing.T, got any) {
+				t.Helper()
+				perms, ok := got.(*GeminiPermissions)
+				if !ok || perms == nil {
+					t.Fatalf("expected *GeminiPermissions, got %T", got)
+				}
+				if perms.ApprovalMode != "auto_edit" {
+					t.Fatalf("unexpected gemini perms: %+v", perms)
+				}
+			},
+		},
+		{
+			name:      "full access codex",
+			agentType: "codex",
+			preset:    "full_access",
+			check: func(t *testing.T, got any) {
+				t.Helper()
+				perms, ok := got.(*CodexPermissions)
+				if !ok || perms == nil {
+					t.Fatalf("expected *CodexPermissions, got %T", got)
+				}
+				if !perms.BypassSandbox || !perms.Search {
+					t.Fatalf("unexpected codex perms: %+v", perms)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.check(t, TranslatePermissions(tt.agentType, Presets[tt.preset]))
+		})
 	}
 }
 
