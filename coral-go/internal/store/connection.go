@@ -138,6 +138,7 @@ var columnMigrations = []columnMigration{
 	{"live_sessions", "git_diff_mode", "TEXT"},
 	{"live_sessions", "capabilities", "TEXT"},
 	{"live_sessions", "model", "TEXT"},
+	{"live_sessions", "pid", "INTEGER NOT NULL DEFAULT 0"},
 }
 
 var additionalIndexes = []string{

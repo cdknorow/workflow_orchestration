@@ -64,6 +64,7 @@ type LiveSession struct {
 	GitDiffMode  *string `db:"git_diff_mode" json:"git_diff_mode,omitempty"`
 	Capabilities *string `db:"capabilities" json:"capabilities,omitempty"`
 	Model        *string `db:"model" json:"model,omitempty"`
+	PID          int     `db:"pid" json:"pid,omitempty"`
 	CreatedAt    string  `db:"created_at" json:"created_at"`
 }
 
@@ -732,12 +733,12 @@ func (s *SessionStore) RegisterLiveSession(ctx context.Context, ls *LiveSession)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, pid, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ls.SessionID, ls.AgentType, ls.AgentName, ls.WorkingDir,
 		ls.DisplayName, ls.ResumeFromID, ls.Flags, ls.IsJob,
 		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.Icon, ls.IsSleeping, ls.BoardType,
-		ls.Capabilities, ls.Model, ls.CreatedAt)
+		ls.Capabilities, ls.Model, ls.PID, ls.CreatedAt)
 	return err
 }
 
@@ -774,6 +775,32 @@ func (s *SessionStore) CountLiveSessions(ctx context.Context) (int, error) {
 	err := s.db.GetContext(ctx, &count,
 		"SELECT COUNT(*) FROM live_sessions")
 	return count, err
+}
+
+// UpdateSessionPID stores the shell process PID for a live session.
+func (s *SessionStore) UpdateSessionPID(ctx context.Context, sessionID string, pid int) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE live_sessions SET pid = ? WHERE session_id = ?", pid, sessionID)
+	return err
+}
+
+// ResolveByPIDs looks up live sessions matching any of the given PIDs.
+// Returns the first match (used for process-tree-based identity resolution).
+func (s *SessionStore) ResolveByPIDs(ctx context.Context, pids []int) (*LiveSession, error) {
+	if len(pids) == 0 {
+		return nil, fmt.Errorf("no PIDs provided")
+	}
+	query := "SELECT session_id, agent_type, agent_name, working_dir, display_name, board_name, pid FROM live_sessions WHERE pid IN (?" + strings.Repeat(",?", len(pids)-1) + ") AND pid > 0 LIMIT 1"
+	args := make([]interface{}, len(pids))
+	for i, p := range pids {
+		args[i] = p
+	}
+	var ls LiveSession
+	err := s.db.GetContext(ctx, &ls, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return &ls, nil
 }
 
 // CountLiveTeams returns the number of distinct teams (board_name values),

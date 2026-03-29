@@ -2409,6 +2409,16 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		}
 	}
 
+	// Capture shell PID for process-tree-based identity resolution
+	var shellPID int
+	if backend == "tmux" {
+		if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
+			if pid, err := tmuxTerm.Client().GetPanePID(ctx, sessionName); err == nil {
+				shellPID = pid
+			}
+		}
+	}
+
 	// Register in DB
 	h.ss.RegisterLiveSession(ctx, &store.LiveSession{
 		SessionID:    sessionID,
@@ -2425,6 +2435,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		BoardType:    strPtr(boardType),
 		Capabilities: store.MarshalCapabilities(capabilities),
 		Model:        strPtr(model),
+		PID:          shellPID,
 	})
 
 	if displayName != "" {
@@ -3181,4 +3192,49 @@ func (h *SessionsHandler) WakeAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "sessions_relaunched": relaunched})
+}
+
+// ResolveByPIDs looks up the agent identity for a set of process IDs.
+// Used by coral-board to identify itself when env vars are stripped (e.g. Codex sandbox).
+// GET /api/sessions/resolve?pids=12345,12340,12335
+func (h *SessionsHandler) ResolveByPIDs(w http.ResponseWriter, r *http.Request) {
+	pidStr := r.URL.Query().Get("pids")
+	if pidStr == "" {
+		errBadRequest(w, "pids parameter required")
+		return
+	}
+	var pids []int
+	for _, s := range strings.Split(pidStr, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		pid, err := strconv.Atoi(s)
+		if err != nil {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	if len(pids) == 0 {
+		errBadRequest(w, "no valid PIDs")
+		return
+	}
+	ls, err := h.ss.ResolveByPIDs(r.Context(), pids)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no matching session"})
+		return
+	}
+	role := ""
+	if ls.DisplayName != nil {
+		role = *ls.DisplayName
+	}
+	boardName := ""
+	if ls.BoardName != nil {
+		boardName = *ls.BoardName
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"subscriber_id": naming.SubscriberID(role, ls.AgentType),
+		"project":       boardName,
+		"session_name":  ls.SessionID,
+	})
 }

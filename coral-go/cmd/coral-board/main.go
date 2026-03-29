@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -43,6 +45,10 @@ func stateFilePath() string {
 func loadState() *boardState {
 	data, err := os.ReadFile(stateFilePath())
 	if err != nil {
+		// Fallback: PID-based resolution (for sandboxed environments)
+		if resolved := resolveViaPID(); resolved != nil && resolved.Project != "" {
+			return &boardState{Project: resolved.Project, JobTitle: resolved.SubscriberID}
+		}
 		return nil
 	}
 	var s boardState
@@ -85,18 +91,112 @@ func resolveSessionName() string {
 }
 
 // resolveSubscriberID returns the stable board identity for this agent.
-// Uses CORAL_SUBSCRIBER_ID (role name) if set, falls back to the board_state
-// file's job_title (works in sandboxed environments that strip env vars),
-// then to session name for backwards compatibility.
+// Priority: env var > board_state file > PID resolution > session name.
 func resolveSubscriberID() string {
 	if id := os.Getenv("CORAL_SUBSCRIBER_ID"); id != "" {
 		return id
 	}
-	// Fallback: read from board_state file (works inside Codex sandbox)
+	// Fallback: read from board_state file
 	if st := loadState(); st != nil && st.JobTitle != "" {
 		return st.JobTitle
 	}
+	// Fallback: PID-based resolution (for sandboxed environments like Codex)
+	if resolved := resolveViaPID(); resolved != nil {
+		return resolved.SubscriberID
+	}
 	return resolveSessionName()
+}
+
+// pidResolution caches the result of PID-based identity resolution.
+type pidResolution struct {
+	SubscriberID string
+	Project      string
+	SessionName  string
+}
+
+var cachedPIDResolution *pidResolution
+var pidResolutionDone bool
+
+// resolveViaPID walks the process tree and asks the server to identify the agent.
+func resolveViaPID() *pidResolution {
+	if pidResolutionDone {
+		return cachedPIDResolution
+	}
+	pidResolutionDone = true
+
+	pids := getAncestorPIDs()
+	if len(pids) == 0 {
+		return nil
+	}
+
+	// Build comma-separated PID list
+	pidStrs := make([]string, len(pids))
+	for i, p := range pids {
+		pidStrs[i] = strconv.Itoa(p)
+	}
+
+	resp, err := http.Get(serverURL + "/api/sessions/resolve?pids=" + strings.Join(pidStrs, ","))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	cachedPIDResolution = &pidResolution{
+		SubscriberID: result["subscriber_id"],
+		Project:      result["project"],
+		SessionName:  result["session_name"],
+	}
+	return cachedPIDResolution
+}
+
+// getAncestorPIDs returns the current process's PID and its ancestor PIDs.
+func getAncestorPIDs() []int {
+	var pids []int
+	pid := os.Getpid()
+	for i := 0; i < 20 && pid > 1; i++ {
+		pids = append(pids, pid)
+		ppid := getParentPID(pid)
+		if ppid <= 1 || ppid == pid {
+			break
+		}
+		pid = ppid
+	}
+	return pids
+}
+
+// getParentPID returns the parent PID of the given process.
+func getParentPID(pid int) int {
+	if runtime.GOOS == "linux" {
+		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+		if err != nil {
+			return 0
+		}
+		// Format: pid (comm) state ppid ...
+		// Find the closing paren to skip the comm field (may contain spaces)
+		s := string(data)
+		idx := strings.LastIndex(s, ")")
+		if idx < 0 || idx+2 >= len(s) {
+			return 0
+		}
+		fields := strings.Fields(s[idx+2:])
+		if len(fields) < 2 {
+			return 0
+		}
+		ppid, _ := strconv.Atoi(fields[1])
+		return ppid
+	}
+	// macOS/BSD: use ps
+	out, err := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return 0
+	}
+	ppid, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+	return ppid
 }
 
 func apiCall(method, path string, body any) (map[string]any, error) {

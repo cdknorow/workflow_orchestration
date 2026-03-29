@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -500,6 +501,20 @@ func (c *Client) AttachCommand(sessionName string) string {
 // avoiding printf echo issues.
 func (c *Client) SetPaneTitle(ctx context.Context, target, title string) {
 	c.run(ctx, "select-pane", "-t", target, "-T", title)
+}
+
+// GetPanePID returns the shell PID running in the first pane of the given session.
+func (c *Client) GetPanePID(ctx context.Context, sessionName string) (int, error) {
+	out, err := c.run(ctx, "list-panes", "-t", sessionName, "-F", "#{pane_pid}")
+	if err != nil {
+		return 0, err
+	}
+	line := strings.TrimSpace(strings.Split(out, "\n")[0])
+	pid, err := strconv.Atoi(line)
+	if err != nil {
+		return 0, fmt.Errorf("invalid pane pid %q: %w", line, err)
+	}
+	return pid, nil
 }
 
 // ResizePaneTarget resizes a tmux pane by target address (both width and height).

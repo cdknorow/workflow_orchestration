@@ -262,6 +262,7 @@ func (s *Server) buildRouter() chi.Router {
 	themeHandler := routes.NewThemesHandler(s.cfg)
 
 	// Live sessions
+	r.Get("/api/sessions/resolve", sessHandler.ResolveByPIDs)
 	r.Get("/api/sessions/live", sessHandler.List)
 	r.Get("/api/sessions/live/{name}", sessHandler.Detail)
 	r.Get("/api/sessions/live/{name}/capture", sessHandler.Capture)
