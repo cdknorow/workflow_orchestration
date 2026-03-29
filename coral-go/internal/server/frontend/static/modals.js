@@ -169,7 +169,7 @@ window._checkAgentCLI = _checkAgentCLI;
 const PERM_FLAGS = {
     claude: '--dangerously-skip-permissions',
     codex: '--full-auto',
-    gemini: '--dangerously-skip-permissions',
+    gemini: '--yolo',
 };
 
 /** Update permission flag shortcut buttons in the same modal as the agent type select. */
@@ -1113,12 +1113,9 @@ function renderAgentConfigForm(containerId, opts = {}) {
     // Initialize permissions chips
     _setPermissions(`${uid}-perms`, caps);
 
-    // Render presets if enabled
+    // Render presets if enabled — pass containerId so the preset handler knows which ACF to update
     if (showPreset) {
-        _renderPresetButtons(`${uid}-presets`, `window._applyACFPreset`);
-        container.querySelectorAll(`#${uid}-presets .agent-preset-btn`).forEach(btn => {
-            btn.dataset.acfContainer = containerId;
-        });
+        _renderPresetButtons(`${uid}-presets`, `(function(v){ window._applyACFPresetFor('${containerId}', v) })`);
     }
 }
 window.renderAgentConfigForm = renderAgentConfigForm;
@@ -1170,13 +1167,8 @@ function setAgentConfig(containerId, values) {
 }
 window.setAgentConfig = setAgentConfig;
 
-/** Apply a preset to an AgentConfigForm */
-function _applyACFPreset(name) {
-    // Find the button that was clicked to get the container
-    const activeBtn = document.querySelector(`.agent-preset-btn[data-preset="${name}"]`);
-    const containerId = activeBtn?.dataset.acfContainer;
-    if (!containerId) return;
-
+/** Apply a preset to a specific AgentConfigForm by container ID */
+function _applyACFPresetFor(containerId, name) {
     const persona = name ? _findPersona(name) : null;
     if (persona) {
         setAgentConfig(containerId, {
@@ -1187,14 +1179,8 @@ function _applyACFPreset(name) {
     } else {
         setAgentConfig(containerId, {});
     }
-
-    // Update active state on preset buttons
-    const container = document.getElementById(containerId);
-    container?.querySelectorAll('.agent-preset-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.preset === name);
-    });
 }
-window._applyACFPreset = _applyACFPreset;
+window._applyACFPresetFor = _applyACFPresetFor;
 
 // Default team: first 3 presets
 const DEFAULT_TEAM_PRESETS = AGENT_PRESETS.slice(0, 3);
