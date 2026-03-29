@@ -67,7 +67,7 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 
 	// Whitelist Coral env vars through Codex's sandboxed shell so child processes
 	// like coral-board and hooks can access them.
-	parts = append(parts, "-c", `shell_environment_policy.inherit=["CORAL_SESSION_NAME","CORAL_SUBSCRIBER_ID","CORAL_URL","CORAL_PORT"]`)
+	parts = append(parts, "-c", `'shell_environment_policy.inherit=["CORAL_SESSION_NAME","CORAL_SUBSCRIBER_ID","CORAL_URL","CORAL_PORT"]'`)
 
 	// Permission flags from capabilities
 	if perms := TranslateToCodexPermissions(params.Capabilities); perms != nil {
