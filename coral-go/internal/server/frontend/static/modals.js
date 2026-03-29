@@ -172,6 +172,25 @@ const PERM_FLAGS = {
     gemini: '--yolo',
 };
 
+function _getPermFlagForAgent(agentType) {
+    return PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+}
+
+function _stripPermFlags(flagsStr) {
+    const known = new Set(Object.values(PERM_FLAGS));
+    return (flagsStr || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .filter(flag => !known.has(flag))
+        .join(' ');
+}
+
+function _getPermFlagHelp(agentType) {
+    const flag = _getPermFlagForAgent(agentType);
+    const agentLabel = getEngineName(agentType || 'claude');
+    return `High-autonomy launch for ${agentLabel}. Coral adds ${flag} so the agent can run without interactive permission prompts.`;
+}
+
 /** Update permission flag shortcut buttons in the same modal as the agent type select. */
 function _updatePermFlagButtons(selectEl) {
     const agentType = selectEl.value || 'claude';
@@ -213,12 +232,27 @@ window._updatePermFlagButtons = _updatePermFlagButtons;
 function _getPermFlag(selectId) {
     const el = document.getElementById(selectId);
     const agentType = el ? el.value : 'claude';
-    return PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+    return _getPermFlagForAgent(agentType);
 }
 
 /** Check if a flags string contains ANY known permission flag. */
 function _hasPermFlag(flagsStr) {
     return Object.values(PERM_FLAGS).some(f => flagsStr.includes(f));
+}
+
+function _syncACFAutoPermissions(container) {
+    if (!container) return;
+    const typeEl = container.querySelector('.acf-agent-type');
+    const toggleEl = container.querySelector('.acf-auto-permissions');
+    const noteEl = container.querySelector('.acf-auto-permissions-note');
+    const flagEl = container.querySelector('.acf-auto-permissions-flag');
+    if (!typeEl || !toggleEl || !noteEl || !flagEl) return;
+
+    const agentType = typeEl.value || 'claude';
+    const flag = _getPermFlagForAgent(agentType);
+    flagEl.textContent = flag;
+    noteEl.textContent = _getPermFlagHelp(agentType);
+    noteEl.style.opacity = toggleEl.checked ? '1' : '0.72';
 }
 
 /** Verify a CLI path by calling the backend check endpoint. */
@@ -1031,6 +1065,7 @@ function renderAgentConfigForm(containerId, opts = {}) {
     const mode = opts.mode || 'full';
     const showPreset = opts.showPreset !== false;
     const showName = opts.showName !== false;
+    const showAutoPermissions = opts.showAutoPermissions !== false;
     const v = opts.value || {};
 
     const agentTypeVal = v.agentType || v.agent_type || '';
@@ -1038,6 +1073,9 @@ function renderAgentConfigForm(containerId, opts = {}) {
     const nameVal = v.name || '';
     const promptVal = v.prompt || '';
     const flagsVal = v.flags || '';
+    const autoPermsVal = Object.prototype.hasOwnProperty.call(v, 'autoPermissions')
+        ? !!v.autoPermissions
+        : (Object.prototype.hasOwnProperty.call(v, 'flags') ? _hasPermFlag(flagsVal) : true);
 
     // Build permissions summary text
     const caps = v.capabilities || null;
@@ -1062,6 +1100,24 @@ function renderAgentConfigForm(containerId, opts = {}) {
             </label>`;
     }
 
+    let autoPermissionsHTML = '';
+    if (showAutoPermissions) {
+        const permFlag = _getPermFlagForAgent(agentTypeVal || 'claude');
+        autoPermissionsHTML = `
+            <label class="settings-toggle" style="margin:8px 0 6px">
+                <input type="checkbox" class="acf-auto-permissions"${autoPermsVal ? ' checked' : ''}>
+                <span>
+                    <strong>Run without permission prompts</strong>
+                    <div class="acf-auto-permissions-note" style="margin-top:4px;font-size:12px;color:var(--text-secondary)">
+                        ${escapeHtml(_getPermFlagHelp(agentTypeVal || 'claude'))}
+                    </div>
+                    <div style="margin-top:6px">
+                        <code class="acf-auto-permissions-flag">${escapeHtml(permFlag)}</code>
+                    </div>
+                </span>
+            </label>`;
+    }
+
     container.innerHTML = `
         ${presetHTML}
         ${nameHTML}
@@ -1080,6 +1136,7 @@ function renderAgentConfigForm(containerId, opts = {}) {
         <label>Behavior Prompt:
             <textarea class="acf-prompt" rows="4" placeholder="Describe the agent's role and behavior...">${escapeHtml(promptVal)}</textarea>
         </label>
+        ${autoPermissionsHTML}
         <div class="permissions-section">
             <button type="button" class="permissions-toggle-btn" onclick="window._togglePermissions('${uid}-perms')">
                 <svg class="permissions-chevron" width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4z"/></svg>
@@ -1104,7 +1161,7 @@ function renderAgentConfigForm(containerId, opts = {}) {
             <summary>Flags</summary>
             <div class="team-advanced-body">
                 <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
-                    <input type="text" class="acf-flags" placeholder="e.g. --verbose" value="${escapeAttr(flagsVal)}">
+                    <input type="text" class="acf-flags" placeholder="e.g. --verbose" value="${escapeAttr(_stripPermFlags(flagsVal))}">
                 </label>
             </div>
         </details>
@@ -1117,6 +1174,10 @@ function renderAgentConfigForm(containerId, opts = {}) {
     if (showPreset) {
         _renderPresetButtons(`${uid}-presets`, `(function(v){ window._applyACFPresetFor('${containerId}', v) })`);
     }
+
+    container.querySelector('.acf-agent-type')?.addEventListener('change', () => _syncACFAutoPermissions(container));
+    container.querySelector('.acf-auto-permissions')?.addEventListener('change', () => _syncACFAutoPermissions(container));
+    _syncACFAutoPermissions(container);
 }
 window.renderAgentConfigForm = renderAgentConfigForm;
 
@@ -1129,13 +1190,20 @@ function getAgentConfig(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return {};
     const uid = container.dataset.acfUid;
+    const agentType = container.querySelector('.acf-agent-type')?.value || 'claude';
+    const autoPerms = !!container.querySelector('.acf-auto-permissions')?.checked;
+    let flags = _stripPermFlags(container.querySelector('.acf-flags')?.value.trim() || '');
+    if (autoPerms) {
+        const permFlag = _getPermFlagForAgent(agentType);
+        flags = flags ? `${flags} ${permFlag}` : permFlag;
+    }
 
     return {
         name: container.querySelector('.acf-name')?.value.trim() || '',
-        agentType: container.querySelector('.acf-agent-type')?.value || 'claude',
+        agentType,
         model: container.querySelector('.acf-model')?.value.trim() || '',
         prompt: container.querySelector('.acf-prompt')?.value.trim() || '',
-        flags: container.querySelector('.acf-flags')?.value.trim() || '',
+        flags,
         capabilities: uid ? _getPermissions(`${uid}-perms`) : null,
     };
 }
@@ -1161,9 +1229,16 @@ function setAgentConfig(containerId, values) {
     const promptEl = container.querySelector('.acf-prompt');
     if (promptEl) promptEl.value = v.prompt || '';
     const flagsEl = container.querySelector('.acf-flags');
-    if (flagsEl) flagsEl.value = v.flags || '';
+    if (flagsEl) flagsEl.value = _stripPermFlags(v.flags || '');
+    const autoPermsEl = container.querySelector('.acf-auto-permissions');
+    if (autoPermsEl) {
+        autoPermsEl.checked = Object.prototype.hasOwnProperty.call(v, 'autoPermissions')
+            ? !!v.autoPermissions
+            : (Object.prototype.hasOwnProperty.call(v, 'flags') ? _hasPermFlag(v.flags || '') : true);
+    }
 
     if (uid) _setPermissions(`${uid}-perms`, v.capabilities || null);
+    _syncACFAutoPermissions(container);
 }
 window.setAgentConfig = setAgentConfig;
 
@@ -1518,6 +1593,7 @@ function _addTeamAgent(defaultName, defaultPrompt, defaultCapabilities, defaultA
     renderAgentConfigForm(acfId, {
         showPreset: false,
         showName: true,
+        showAutoPermissions: false,
         value: {
             name: defaultName || '',
             prompt: defaultPrompt || '',
