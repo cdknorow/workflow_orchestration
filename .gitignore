@@ -11,6 +11,11 @@ site/
 .claude/settings.local.json
 coral-go/coral
 coral-go/coral.exe
+coral-go/coral-dev
+coral-go/coral-prod
+coral-go/coral-app
+coral-go/coral-board
+coral-go/coral-dropboxers
 coral-go/launch-coral.exe
 coral-go/coral-board.exe
 coral-go/db-compare
@@ -18,6 +23,7 @@ coral-go/coral-hook-agentic-state
 coral-go/coral-hook-message-check
 coral-go/coral-hook-task-sync
 coral-go/cmd/db-compare/db-compare
+coral-go/agent.test
 *.exe
 
 # Frontend bundle backup (created during build, restored after)
