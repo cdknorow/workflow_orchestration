@@ -125,6 +125,7 @@ func resolveViaPID() *pidResolution {
 	pidResolutionDone = true
 
 	pids := getAncestorPIDs()
+	fmt.Fprintf(os.Stderr, "[coral-board] PID resolution: ancestors=%v serverURL=%s\n", pids, serverURL)
 	if len(pids) == 0 {
 		return nil
 	}
@@ -370,7 +371,7 @@ func cmdRead() {
 	} else if useLast {
 		path = fmt.Sprintf("/%s/messages/all?limit=%d", st.Project, lastN)
 	} else {
-		path = fmt.Sprintf("/%s/messages?subscriber_id=%s&limit=50", st.Project, subscriberID)
+		path = fmt.Sprintf("/%s/messages?subscriber_id=%s&limit=50", st.Project, url.QueryEscape(subscriberID))
 	}
 
 	resp, err := http.Get(serverURL + "/api/board" + path)
@@ -470,7 +471,7 @@ func cmdCheck() {
 		os.Exit(1)
 	}
 	subscriberID := resolveSubscriberID()
-	result, err := apiCall("GET", fmt.Sprintf("/%s/messages/check?subscriber_id=%s", st.Project, subscriberID), nil)
+	result, err := apiCall("GET", fmt.Sprintf("/%s/messages/check?subscriber_id=%s", st.Project, url.QueryEscape(subscriberID)), nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
