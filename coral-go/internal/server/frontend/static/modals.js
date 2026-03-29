@@ -1059,7 +1059,7 @@ window._togglePermChip = _togglePermChip;
 
 function _getPermissions(editorId) {
     const editor = document.getElementById(editorId);
-    if (!editor || editor.style.display === 'none') return null;
+    if (!editor) return null;
 
     const result = {};
     for (const type of ['allow', 'deny']) {
