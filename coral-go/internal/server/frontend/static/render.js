@@ -893,8 +893,12 @@ let _draggedSid = null;
 
 function _shortPath(fullPath, segments = 2) {
     if (!fullPath) return '';
-    const parts = fullPath.replace(/\/+$/, '').split('/');
-    return parts.length <= segments ? fullPath : '…/' + parts.slice(-segments).join('/');
+    let p = fullPath.replace(/\/+$/, '');
+    // Try to replace common home dir with tilde
+    p = p.replace(/^\/Users\/[^\/]+/, '~').replace(/^\/home\/[^\/]+/, '~');
+    const parts = p.split('/');
+    if (parts.length <= segments) return p;
+    return '…/' + parts.slice(-segments).join('/');
 }
 
 function _renderSessionItem(s, groupName, isCompact, collapsed, teamDefaultDir) {
@@ -1062,8 +1066,8 @@ function _renderAgentListWithSubgroups(agents, teamDefaultDir, isCompact, groupN
         return d && d !== teamDefaultDir;
     }).length;
 
-    // Phase 3 criteria: 3+ agents differ or 2+ directory clusters exist
-    const shouldSubgroup = numDiffer >= 3 || numClusters >= 2;
+    // Phase 3 criteria updated per review: numClusters >= 3 or (numClusters >= 2 and numDiffer >= 3)
+    const shouldSubgroup = numClusters >= 3 || (numClusters >= 2 && numDiffer >= 3);
 
     if (!shouldSubgroup) {
         return agents.map(s => _renderSessionItem(s, groupName, isCompact, false, teamDefaultDir)).join('');
@@ -1081,12 +1085,13 @@ function _renderAgentListWithSubgroups(agents, teamDefaultDir, isCompact, groupN
         const clusterAgents = clusters[dir];
         const isDefault = dir === teamDefaultDir;
 
-        // Render subgroup header
+        // Render subgroup header with agent count
         const shortDir = _shortPath(dir, 1);
         const fullDir = dir || "No directory";
+        const countBadge = ` <span class="session-group-count">${clusterAgents.length}</span>`;
         html += `<li class="agent-subgroup-header" title="${escapeAttr(fullDir)}">
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg>
-            <span>${escapeHtml(isDefault ? "Team Root" : (shortDir || "No Directory"))}</span>
+            <span>${escapeHtml(isDefault ? "Team Root" : (shortDir || "No Directory"))}${countBadge}</span>
         </li>`;
 
         for (const s of clusterAgents) {
