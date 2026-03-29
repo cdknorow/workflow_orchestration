@@ -270,7 +270,24 @@ func (h *BoardHandler) ReadMessages(w http.ResponseWriter, r *http.Request) {
 
 // ListAllMessages returns all messages (no cursor advancement).
 // GET /api/board/{project}/messages/all
+// Pass ?id=N to fetch a single message by ID (does not advance cursor).
 func (h *BoardHandler) ListAllMessages(w http.ResponseWriter, r *http.Request) {
+	// Single message lookup by ID
+	if idStr := r.URL.Query().Get("id"); idStr != "" {
+		msgID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			errBadRequest(w, "invalid message id")
+			return
+		}
+		msg, err := h.bs.GetMessageByID(r.Context(), msgID)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "message not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, []board.Message{*msg})
+		return
+	}
+
 	project := chi.URLParam(r, "project")
 	limit := queryInt(r, "limit", 200)
 	if limit > 500 {

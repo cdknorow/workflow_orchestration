@@ -407,6 +407,22 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 	return messages, err
 }
 
+// GetMessageByID returns a single message by its ID.
+func (s *Store) GetMessageByID(ctx context.Context, id int64) (*Message, error) {
+	var msg Message
+	err := s.db.GetContext(ctx, &msg,
+		`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
+		        COALESCE(s.job_title, 'Unknown') as job_title,
+		        m.target_group_id
+		 FROM board_messages m
+		 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
+		 WHERE m.id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
 // CountMessages returns the total message count for a project.
 func (s *Store) CountMessages(ctx context.Context, project string) (int, error) {
 	var count int

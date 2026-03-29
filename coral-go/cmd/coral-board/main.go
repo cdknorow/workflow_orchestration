@@ -163,7 +163,7 @@ func printUsage() {
 Commands:
   join <project> --as <role>   Subscribe to a board
   post "<message>"             Post a message
-  read [--last N]              Read new messages
+  read [--last N] [--id N]     Read new messages (or a specific message by ID)
   check [--quiet]              Check unread count
   projects                     List all boards
   subscribers                  List board subscribers
@@ -240,6 +240,14 @@ func cmdRead() {
 		os.Exit(1)
 	}
 
+	// Check for --id N
+	messageID := 0
+	for i, arg := range os.Args {
+		if arg == "--id" && i+1 < len(os.Args) {
+			fmt.Sscanf(os.Args[i+1], "%d", &messageID)
+		}
+	}
+
 	// Check for --last N
 	useLast := false
 	lastN := 0
@@ -252,7 +260,9 @@ func cmdRead() {
 
 	subscriberID := resolveSubscriberID()
 	var path string
-	if useLast {
+	if messageID > 0 {
+		path = fmt.Sprintf("/%s/messages/all?id=%d", st.Project, messageID)
+	} else if useLast {
 		path = fmt.Sprintf("/%s/messages/all?limit=%d", st.Project, lastN)
 	} else {
 		path = fmt.Sprintf("/%s/messages?subscriber_id=%s&limit=50", st.Project, subscriberID)
@@ -270,6 +280,10 @@ func cmdRead() {
 	json.Unmarshal(data, &messages)
 
 	if len(messages) == 0 {
+		if messageID > 0 {
+			fmt.Fprintf(os.Stderr, "Message #%d not found.\n", messageID)
+			os.Exit(1)
+		}
 		fmt.Println("No new messages.")
 		return
 	}
