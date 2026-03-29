@@ -661,7 +661,7 @@ const activationPage = `<!DOCTYPE html>
       <ul class="price-features">
         <li>Native desktop app (macOS &amp; Linux)</li>
         <li>Full Pro features for 14 days</li>
-        <li>2 Teams / 8 Agents max</li>
+        <li>Unlimited Teams &amp; Agents</li>
         <li>Claude, Codex &amp; Gemini support</li>
         <li>Real-time dashboard &amp; message boards</li>
         <li>Upgrade seamlessly when the trial ends</li>

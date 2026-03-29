@@ -65,32 +65,16 @@ func (h *SessionsHandler) SetLicenseManager(lm *license.Manager) {
 	h.licenseMgr = lm
 }
 
-// effectiveMaxAgents returns the max concurrent agents, considering both
-// compile-time tier limits and runtime trial limits.
+// effectiveMaxAgents returns the max concurrent agents.
+// Uses compile-time tier limits only (beta/dropboxers). Trial users with
+// card on file get full access — no runtime trial limits.
 func (h *SessionsHandler) effectiveMaxAgents() int {
-	// Compile-time limit (beta tier)
-	limit := h.cfg.MaxLiveAgents
-	// Runtime trial limit
-	if h.licenseMgr != nil && h.licenseMgr.IsTrialing() {
-		trialLimit := 8
-		if limit == 0 || trialLimit < limit {
-			limit = trialLimit
-		}
-	}
-	return limit
+	return h.cfg.MaxLiveAgents
 }
 
-// effectiveMaxTeams returns the max concurrent teams, considering both
-// compile-time tier limits and runtime trial limits.
+// effectiveMaxTeams returns the max concurrent teams.
 func (h *SessionsHandler) effectiveMaxTeams() int {
-	limit := h.cfg.MaxLiveTeams
-	if h.licenseMgr != nil && h.licenseMgr.IsTrialing() {
-		trialLimit := 2
-		if limit == 0 || trialLimit < limit {
-			limit = trialLimit
-		}
-	}
-	return limit
+	return h.cfg.MaxLiveTeams
 }
 
 type lastKnownState struct {
