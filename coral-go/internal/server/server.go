@@ -654,30 +654,36 @@ const activationPage = `<!DOCTYPE html>
 
   <div class="pricing-row">
     <div class="price-card">
-      <h3>14-Day Free Trial</h3>
-      <p class="price-desc">Full Pro access, cancel anytime</p>
+      <h3>14-Day Pro Trial</h3>
+      <p class="price-desc">Full access, no credit card required</p>
       <div class="price-amount">Free</div>
-      <p class="price-note">Card required &middot; billed after trial ends</p>
+      <p class="price-note">1 machine activation via instant trial key</p>
       <ul class="price-features">
-        <li>All Pro features for 14 days</li>
-        <li>2 teams &amp; 8 agents</li>
+        <li>Native desktop app (macOS &amp; Linux)</li>
+        <li>Full Pro features for 14 days</li>
+        <li>2 Teams / 8 Agents max</li>
         <li>Claude, Codex &amp; Gemini support</li>
-        <li>Cancel before trial ends — no charge</li>
+        <li>Real-time dashboard &amp; message boards</li>
+        <li>Upgrade seamlessly when the trial ends</li>
       </ul>
       <a href="{{STORE_URL}}" class="price-btn price-btn-secondary" target="_blank">Start Free Trial</a>
     </div>
 
     <div class="price-card featured">
-      <h3>Coral Pro</h3>
-      <p class="price-desc">For individual developers</p>
-      <div class="price-amount">$49/yr</div>
-      <p class="price-note">Billed annually after free trial</p>
+      <div class="price-badge">Early Adopter</div>
+      <h3>Pro</h3>
+      <p class="price-desc">Early adopter pricing for individual developers</p>
+      <div class="price-amount">$69/yr</div>
+      <p class="price-note">Price increases as we add features</p>
       <ul class="price-features">
         <li>1 machine activation</li>
-        <li>Unlimited teams &amp; agents</li>
+        <li>Unlimited Teams &amp; Agents</li>
+        <li>Agent team templates &amp; sharing</li>
         <li>Search chat history</li>
-        <li>Priority updates for one year</li>
+        <li>Priority auto-updates for one year</li>
+        <li>Email support</li>
       </ul>
+      <p style="font-size:11px;color:#484f58;margin-top:0;margin-bottom:12px;text-align:center;">Lock in early adopter pricing today.</p>
       <a href="{{STORE_URL}}" class="price-btn price-btn-primary" target="_blank">Get Coral Pro</a>
     </div>
   </div>
