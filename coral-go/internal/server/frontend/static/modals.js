@@ -2147,7 +2147,7 @@ async function _loadLicenseTierBadge() {
                     try {
                         const sResp = await fetch('/api/system/status');
                         const sData = await sResp.json();
-                        if (sData.store_pro_url) storeProURL = sData.store_pro_url;
+                        if (sData.store_url) storeProURL = sData.store_url;
                     } catch (_) {}
                     badge.innerHTML = `<span class="tier-label tier-trial">Free Trial — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left</span>` +
                         `<a href="${storeProURL}" target="_blank" rel="noopener" style="font-size:11px;color:#58a6ff;margin-left:8px;text-decoration:none">Upgrade to Pro</a>`;
@@ -2165,7 +2165,7 @@ async function _loadLicenseTierBadge() {
             try {
                 const sResp = await fetch('/api/system/status');
                 const sData = await sResp.json();
-                if (sData.store_pro_url) storeProURL = sData.store_pro_url;
+                if (sData.store_url) storeProURL = sData.store_url;
             } catch (_) {}
             badge.innerHTML = '<span class="tier-label tier-trial">Expired</span>' +
                 `<a href="${storeProURL}" target="_blank" rel="noopener" style="font-size:11px;color:#58a6ff;margin-left:8px;text-decoration:none">Upgrade to Pro</a>`;
