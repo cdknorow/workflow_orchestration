@@ -895,12 +895,12 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 		now := nowUTC()
 		_, err = tx.ExecContext(ctx,
 			`INSERT OR REPLACE INTO live_sessions
-			 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, is_sleeping, board_type, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, prompt, board_name, board_server, icon, is_sleeping, board_type, pid, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			newSession.SessionID, newSession.AgentType, newSession.AgentName,
 			newSession.WorkingDir, newSession.DisplayName, newSession.ResumeFromID,
 			newSession.Flags, newSession.Prompt, newSession.BoardName,
-			newSession.BoardServer, newSession.Icon, newSession.IsSleeping, newSession.BoardType, now)
+			newSession.BoardServer, newSession.Icon, newSession.IsSleeping, newSession.BoardType, newSession.PID, now)
 		return err
 	})
 }

@@ -1540,6 +1540,17 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[launch] restart session=%s cmd=%s", target, cmd)
 	h.terminal.SendToTarget(ctx, target, cmd)
 
+	// Capture shell PID for process-tree-based identity resolution
+	var restartPID int
+	if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
+		if pid, err := tmuxTerm.Client().GetPanePID(ctx, newSessionName); err == nil {
+			restartPID = pid
+			log.Printf("[launch] restart captured PID %d for session %s", pid, newSessionName)
+		} else {
+			log.Printf("[launch] restart failed to capture PID for session %s: %v", newSessionName, err)
+		}
+	}
+
 	// Replace live session in DB (carry forward stored fields)
 	h.ss.ReplaceLiveSession(ctx, body.SessionID, &store.LiveSession{
 		SessionID:    newSessionID,
@@ -1554,6 +1565,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		BoardType:    strPtr(storedBoardType),
 		Capabilities: storedCapsJSON,
 		Model:        strPtr(storedModel),
+		PID:          restartPID,
 	})
 	h.ss.MigrateDisplayName(ctx, body.SessionID, newSessionID)
 
@@ -1659,6 +1671,14 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	}))
 	h.terminal.SendToTarget(ctx, target, cmd)
 
+	// Capture shell PID
+	var resumePID int
+	if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
+		if pid, err := tmuxTerm.Client().GetPanePID(ctx, newSessionName); err == nil {
+			resumePID = pid
+		}
+	}
+
 	h.ss.ReplaceLiveSession(ctx, body.CurrentSessionID, &store.LiveSession{
 		SessionID:    newSessionID,
 		AgentType:    agentType,
@@ -1669,6 +1689,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		BoardName:    strPtr(storedBoard),
 		BoardServer:  strPtr(storedBoardServer),
 		BoardType:    strPtr(storedBoardType),
+		PID:          resumePID,
 	})
 
 	// Re-subscribe to board — subscriber_id (role) is stable, so the cursor persists automatically.
@@ -2409,12 +2430,17 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		}
 	}
 
-	// Capture shell PID for process-tree-based identity resolution
+	// Capture shell PID for process-tree-based identity resolution.
+	// Must happen after CreateSession (tmux session exists) but the pane PID
+	// is available immediately — it's the shell spawned by tmux new-session.
 	var shellPID int
 	if backend == "tmux" {
 		if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
 			if pid, err := tmuxTerm.Client().GetPanePID(ctx, sessionName); err == nil {
 				shellPID = pid
+				log.Printf("[launch] captured PID %d for session %s", pid, sessionName)
+			} else {
+				log.Printf("[launch] failed to capture PID for session %s: %v", sessionName, err)
 			}
 		}
 	}
@@ -2985,6 +3011,14 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 			h.terminal.SetPaneTitle(ctx, sessionName+".0", fmt.Sprintf("%s — %s", folderName, ls.AgentType))
 
 			h.terminal.SendToTarget(ctx, sessionName+".0", cmd)
+
+			// Capture shell PID
+			if tmuxTerm, ok := h.terminal.(*ptymanager.TmuxSessionTerminal); ok {
+				if pid, err := tmuxTerm.Client().GetPanePID(ctx, sessionName); err == nil {
+					h.ss.UpdateSessionPID(ctx, ls.SessionID, pid)
+					log.Printf("[wake] captured PID %d for session %s", pid, sessionName)
+				}
+			}
 		}
 	}
 
