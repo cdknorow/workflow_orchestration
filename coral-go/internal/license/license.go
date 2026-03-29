@@ -50,6 +50,7 @@ type CachedLicense struct {
 	ActivatedAt   string `json:"activated_at"`
 	LastValidated string `json:"last_validated"`
 	Valid         bool   `json:"valid"`
+	TrialEndsAt   string `json:"trial_ends_at,omitempty"`
 }
 
 // lsResponse is the Lemon Squeezy API response for activate/validate/deactivate.
@@ -62,7 +63,8 @@ type lsResponse struct {
 	Valid       bool   `json:"valid"`
 	Error       string `json:"error,omitempty"`
 	LicenseKey  struct {
-		Status string `json:"status"`
+		Status    string `json:"status"`
+		ExpiresAt string `json:"expires_at"`
 	} `json:"license_key"`
 	Instance struct {
 		ID string `json:"id"`
@@ -171,6 +173,9 @@ func (m *Manager) Revalidate() bool {
 	if resp.Meta.VariantName != "" {
 		m.cache.VariantName = resp.Meta.VariantName
 	}
+	if resp.LicenseKey.ExpiresAt != "" {
+		m.cache.TrialEndsAt = resp.LicenseKey.ExpiresAt
+	}
 	m.save()
 	return m.cache.Valid
 }
@@ -205,6 +210,7 @@ func (m *Manager) Activate(key string) error {
 		ActivatedAt:   now,
 		LastValidated: now,
 		Valid:         true,
+		TrialEndsAt:   resp.LicenseKey.ExpiresAt,
 	}
 	return m.save()
 }
@@ -249,6 +255,20 @@ func (m *Manager) Revoke() {
 		m.cache.Valid = false
 		m.save()
 	}
+}
+
+// IsTrialing returns true if the license is on a free trial (trial_ends_at is in the future).
+func (m *Manager) IsTrialing() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cache == nil || m.cache.TrialEndsAt == "" {
+		return false
+	}
+	trialEnd, err := time.Parse(time.RFC3339, m.cache.TrialEndsAt)
+	if err != nil {
+		return false
+	}
+	return time.Now().Before(trialEnd)
 }
 
 // GetInfo returns the cached license info (nil if not activated).

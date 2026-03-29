@@ -137,6 +137,7 @@ func (lr *Routes) Status(w http.ResponseWriter, r *http.Request) {
 		"last_validated":           info.LastValidated,
 		"machine_id":              machineFingerprint(),
 		"days_until_revalidation": daysUntilRevalidation,
+		"trial_ends_at":           info.TrialEndsAt,
 	})
 }
 
@@ -186,8 +187,15 @@ func (lr *Routes) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch event.Meta.EventName {
-	case "license_key.revoked", "subscription_cancelled", "subscription_expired":
+	case "license_key.revoked", "subscription_expired":
 		lr.mgr.Revoke()
+	case "subscription_cancelled":
+		// Cancelled = user opted out, but may still have access until period ends.
+		// Revoke immediately for simplicity.
+		lr.mgr.Revoke()
+	case "subscription_created", "subscription_updated":
+		// Trial started or status changed (on_trial → active). Re-validate to refresh cache.
+		lr.mgr.Revalidate()
 	}
 
 	w.WriteHeader(http.StatusOK)

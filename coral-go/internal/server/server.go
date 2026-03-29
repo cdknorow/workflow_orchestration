@@ -427,6 +427,7 @@ func (s *Server) buildRouter() chi.Router {
 	boardHandler.SetTerminal(s.terminal)
 	s.boardHandler = boardHandler
 	sessHandler.SetBoardHandler(boardHandler)
+	sessHandler.SetLicenseManager(s.licenseMgr)
 	r.Get("/api/board/projects", boardHandler.ListProjects)
 	r.Post("/api/board/{project}/subscribe", boardHandler.Subscribe)
 	r.Delete("/api/board/{project}/subscribe", boardHandler.Unsubscribe)
@@ -653,15 +654,15 @@ const activationPage = `<!DOCTYPE html>
 
   <div class="pricing-row">
     <div class="price-card featured">
-      <h3>Start Free Trial</h3>
-      <p class="price-desc">Full access for 14 days, no credit card required</p>
+      <h3>Start 14-Day Free Trial</h3>
+      <p class="price-desc">Full access to all Pro features</p>
       <ul class="price-features">
         <li>Unlimited teams &amp; agents</li>
         <li>Claude, Codex &amp; Gemini support</li>
         <li>Real-time dashboard</li>
         <li>All Pro features included</li>
       </ul>
-      <a href="{{STORE_URL}}" class="price-btn price-btn-primary" target="_blank">Start Free Trial</a>
+      <a href="{{STORE_URL}}" class="price-btn price-btn-primary" target="_blank">Start 14-Day Free Trial</a>
     </div>
   </div>
 

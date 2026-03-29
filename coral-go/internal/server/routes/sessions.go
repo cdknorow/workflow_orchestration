@@ -28,6 +28,7 @@ import (
 	"github.com/cdknorow/coral/internal/gitutil"
 	"github.com/cdknorow/coral/internal/httputil"
 	"github.com/cdknorow/coral/internal/jsonl"
+	"github.com/cdknorow/coral/internal/license"
 	"github.com/cdknorow/coral/internal/pulse"
 	"github.com/cdknorow/coral/internal/ptymanager"
 	"github.com/cdknorow/coral/internal/store"
@@ -46,7 +47,8 @@ type SessionsHandler struct {
 	jsonl   *jsonl.SessionReader
 	backend ptymanager.TerminalBackend // nil = use tmux directly
 
-	boardHandler *BoardHandler // for sleep/wake board pausing
+	boardHandler *BoardHandler       // for sleep/wake board pausing
+	licenseMgr   *license.Manager    // for runtime trial limit checks
 
 	// Deduplication state for status/summary events (mirrors Python _last_known)
 	lastKnownMu sync.RWMutex
@@ -56,6 +58,39 @@ type SessionsHandler struct {
 // SetBoardHandler sets the board handler reference for sleep/wake operations.
 func (h *SessionsHandler) SetBoardHandler(bh *BoardHandler) {
 	h.boardHandler = bh
+}
+
+// SetLicenseManager sets the license manager for runtime trial limit checks.
+func (h *SessionsHandler) SetLicenseManager(lm *license.Manager) {
+	h.licenseMgr = lm
+}
+
+// effectiveMaxAgents returns the max concurrent agents, considering both
+// compile-time tier limits and runtime trial limits.
+func (h *SessionsHandler) effectiveMaxAgents() int {
+	// Compile-time limit (beta tier)
+	limit := h.effectiveMaxAgents()
+	// Runtime trial limit
+	if h.licenseMgr != nil && h.licenseMgr.IsTrialing() {
+		trialLimit := 8
+		if limit == 0 || trialLimit < limit {
+			limit = trialLimit
+		}
+	}
+	return limit
+}
+
+// effectiveMaxTeams returns the max concurrent teams, considering both
+// compile-time tier limits and runtime trial limits.
+func (h *SessionsHandler) effectiveMaxTeams() int {
+	limit := h.effectiveMaxTeams()
+	if h.licenseMgr != nil && h.licenseMgr.IsTrialing() {
+		trialLimit := 2
+		if limit == 0 || trialLimit < limit {
+			limit = trialLimit
+		}
+	}
+	return limit
 }
 
 type lastKnownState struct {
@@ -1606,11 +1641,11 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Edition limits: check max live agents before resuming
-	if h.cfg.MaxLiveAgents > 0 {
+	if h.effectiveMaxAgents() > 0 {
 		count, err := h.ss.CountLiveSessions(ctx)
-		if err == nil && count >= h.cfg.MaxLiveAgents {
+		if err == nil && count >= h.effectiveMaxAgents() {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.cfg.MaxLiveAgents),
+				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.effectiveMaxAgents()),
 			})
 			return
 		}
@@ -1777,11 +1812,11 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Edition limits: check max live agents
-	if h.cfg.MaxLiveAgents > 0 {
+	if h.effectiveMaxAgents() > 0 {
 		count, err := h.ss.CountLiveSessions(r.Context())
-		if err == nil && count >= h.cfg.MaxLiveAgents {
+		if err == nil && count >= h.effectiveMaxAgents() {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.cfg.MaxLiveAgents),
+				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.effectiveMaxAgents()),
 			})
 			return
 		}
@@ -1840,22 +1875,22 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Edition limits: check max live teams
-	if h.cfg.MaxLiveTeams > 0 {
+	if h.effectiveMaxTeams() > 0 {
 		teamCount, err := h.ss.CountLiveTeams(ctx)
-		if err == nil && teamCount >= h.cfg.MaxLiveTeams {
+		if err == nil && teamCount >= h.effectiveMaxTeams() {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": fmt.Sprintf("Demo limit reached: maximum %d team allowed", h.cfg.MaxLiveTeams),
+				"error": fmt.Sprintf("Demo limit reached: maximum %d team allowed", h.effectiveMaxTeams()),
 			})
 			return
 		}
 	}
 
 	// Edition limits: check max live agents
-	if h.cfg.MaxLiveAgents > 0 {
+	if h.effectiveMaxAgents() > 0 {
 		agentCount, err := h.ss.CountLiveSessions(ctx)
-		if err == nil && agentCount+len(body.Agents) > h.cfg.MaxLiveAgents {
+		if err == nil && agentCount+len(body.Agents) > h.effectiveMaxAgents() {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.cfg.MaxLiveAgents),
+				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.effectiveMaxAgents()),
 			})
 			return
 		}
@@ -2899,9 +2934,9 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Edition limits: stop waking if we'd exceed max live agents
-		if h.cfg.MaxLiveAgents > 0 && activeCount+relaunched >= h.cfg.MaxLiveAgents {
+		if h.effectiveMaxAgents() > 0 && activeCount+relaunched >= h.effectiveMaxAgents() {
 			log.Printf("[wake] limit reached (%d/%d) — skipping remaining agents on board %s",
-				activeCount+relaunched, h.cfg.MaxLiveAgents, boardName)
+				activeCount+relaunched, h.effectiveMaxAgents(), boardName)
 			break
 		}
 
@@ -3089,16 +3124,16 @@ func (h *SessionsHandler) WakeSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Edition limits: check max live agents before waking
-	if h.cfg.MaxLiveAgents > 0 {
+	if h.effectiveMaxAgents() > 0 {
 		activeCount := 0
 		for _, ls := range allLive {
 			if ls.IsSleeping == 0 {
 				activeCount++
 			}
 		}
-		if activeCount >= h.cfg.MaxLiveAgents {
+		if activeCount >= h.effectiveMaxAgents() {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.cfg.MaxLiveAgents),
+				"error": fmt.Sprintf("Demo limit reached: maximum %d concurrent agents allowed", h.effectiveMaxAgents()),
 			})
 			return
 		}

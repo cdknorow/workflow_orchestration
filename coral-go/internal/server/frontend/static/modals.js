@@ -2137,18 +2137,38 @@ async function _loadLicenseTierBadge() {
         if (!resp.ok) return;
         const data = await resp.json();
         if (data.activated && data.valid) {
-            const label = data.product_name || 'Coral Pro';
-            badge.innerHTML = `<span class="tier-label tier-pro">${escapeHtml(label)}</span>`;
+            // Check if still on trial
+            if (data.trial_ends_at) {
+                const trialEnd = new Date(data.trial_ends_at);
+                const now = new Date();
+                const daysLeft = Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24)));
+                if (daysLeft > 0) {
+                    let storeProURL = 'https://store.coralai.ai';
+                    try {
+                        const sResp = await fetch('/api/system/status');
+                        const sData = await sResp.json();
+                        if (sData.store_pro_url) storeProURL = sData.store_pro_url;
+                    } catch (_) {}
+                    badge.innerHTML = `<span class="tier-label tier-trial">Free Trial — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left</span>` +
+                        `<a href="${storeProURL}" target="_blank" rel="noopener" style="font-size:11px;color:#58a6ff;margin-left:8px;text-decoration:none">Upgrade to Pro</a>`;
+                } else {
+                    const label = data.product_name || 'Coral Pro';
+                    badge.innerHTML = `<span class="tier-label tier-pro">${escapeHtml(label)}</span>`;
+                }
+            } else {
+                const label = data.product_name || 'Coral Pro';
+                badge.innerHTML = `<span class="tier-label tier-pro">${escapeHtml(label)}</span>`;
+            }
         } else {
-            // Fetch store URL for upgrade link
-            let storeURL = 'https://store.coralai.ai';
+            // Not activated or expired
+            let storeProURL = 'https://store.coralai.ai';
             try {
                 const sResp = await fetch('/api/system/status');
                 const sData = await sResp.json();
-                if (sData.store_url) storeURL = sData.store_url;
+                if (sData.store_pro_url) storeProURL = sData.store_pro_url;
             } catch (_) {}
-            badge.innerHTML = '<span class="tier-label tier-trial">Free Trial</span>' +
-                `<a href="${storeURL}" target="_blank" rel="noopener" style="font-size:11px;color:#58a6ff;margin-left:8px;text-decoration:none">Upgrade to Pro</a>`;
+            badge.innerHTML = '<span class="tier-label tier-trial">Expired</span>' +
+                `<a href="${storeProURL}" target="_blank" rel="noopener" style="font-size:11px;color:#58a6ff;margin-left:8px;text-decoration:none">Upgrade to Pro</a>`;
         }
         badge.style.display = '';
     } catch { /* silent — non-critical */ }

@@ -109,7 +109,8 @@ func TestActivate_Success(t *testing.T) {
 		json.NewEncoder(w).Encode(lsResponse{
 			Activated: true,
 			LicenseKey: struct {
-				Status string `json:"status"`
+				Status    string `json:"status"`
+				ExpiresAt string `json:"expires_at"`
 			}{Status: "active"},
 			Instance: struct {
 				ID string `json:"id"`
