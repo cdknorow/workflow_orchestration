@@ -1337,6 +1337,11 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 	// Clean up board state file so it doesn't accumulate over time
 	removeBoardStateFile(name, h.cfg)
 
+	// Clean up temp files (system prompts, settings, action prompts)
+	if body.SessionID != "" {
+		agent.CleanupTempFiles(body.SessionID)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -2307,8 +2312,10 @@ func (h *SessionsHandler) setupBoardAndPrompt(sessionID, sessionName, agentType,
 			receiveMode = "all"
 		}
 
-		// Preserve existing receive_mode on re-subscribe (e.g. restart)
-		existing, err := h.bs.GetSubscription(ctx, subscriberID)
+		// Preserve existing receive_mode on re-subscribe (e.g. restart).
+		// Use session-name lookup to find the subscription for THIS session,
+		// not a stale one from a previous board with the same subscriber_id.
+		existing, err := h.bs.GetSubscriptionBySessionName(ctx, sessionName)
 		if err == nil && existing != nil && existing.ReceiveMode != "" {
 			receiveMode = existing.ReceiveMode
 		}

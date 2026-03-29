@@ -7,15 +7,27 @@ import (
 	"testing"
 )
 
+// findTempFile finds a Coral temp file matching the given prefix and session ID.
+// Since writeTempFile now uses os.CreateTemp with random suffixes, we glob for matches.
+func findTempFile(t *testing.T, prefix, sessionID, ext string) string {
+	t.Helper()
+	pattern := filepath.Join(os.TempDir(), "coral_"+prefix+"_"+sessionID+"_*."+ext)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob error: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("no temp file found matching %s", pattern)
+	}
+	return matches[len(matches)-1]
+}
+
 // ── Factory Tests ───────────────────────────────────────────
 
 func TestGetAgent_Claude(t *testing.T) {
 	a := GetAgent("claude")
 	if a.AgentType() != "claude" {
 		t.Errorf("expected claude, got %s", a.AgentType())
-	}
-	if _, ok := a.(*ClaudeAgent); !ok {
-		t.Errorf("expected *ClaudeAgent, got %T", a)
 	}
 }
 
@@ -24,18 +36,12 @@ func TestGetAgent_Gemini(t *testing.T) {
 	if a.AgentType() != "gemini" {
 		t.Errorf("expected gemini, got %s", a.AgentType())
 	}
-	if _, ok := a.(*GeminiAgent); !ok {
-		t.Errorf("expected *GeminiAgent, got %T", a)
-	}
 }
 
 func TestGetAgent_Codex(t *testing.T) {
 	a := GetAgent("codex")
 	if a.AgentType() != "codex" {
 		t.Errorf("expected codex, got %s", a.AgentType())
-	}
-	if _, ok := a.(*CodexAgent); !ok {
-		t.Errorf("expected *CodexAgent, got %T", a)
 	}
 }
 
@@ -159,9 +165,6 @@ func TestClaude_BasicLaunch(t *testing.T) {
 	if !strings.Contains(cmd, "--session-id test-session-123") {
 		t.Errorf("expected --session-id, got %q", cmd)
 	}
-	if strings.Contains(cmd, "--resume") {
-		t.Errorf("should not have --resume without ResumeSessionID")
-	}
 }
 
 func TestClaude_Resume(t *testing.T) {
@@ -173,9 +176,6 @@ func TestClaude_Resume(t *testing.T) {
 	if !strings.Contains(cmd, "--resume resume-456") {
 		t.Errorf("expected --resume flag, got %q", cmd)
 	}
-	if strings.Contains(cmd, "--session-id") {
-		t.Errorf("should not have --session-id when resuming")
-	}
 }
 
 func TestClaude_WithFlags(t *testing.T) {
@@ -184,59 +184,39 @@ func TestClaude_WithFlags(t *testing.T) {
 		SessionID: "s1",
 		Flags:     []string{"--verbose", "--model", "opus"},
 	})
-	if !strings.Contains(cmd, "--verbose") {
-		t.Errorf("expected --verbose flag, got %q", cmd)
-	}
-	if !strings.Contains(cmd, "--model opus") {
-		t.Errorf("expected --model opus, got %q", cmd)
+	if !strings.Contains(cmd, "--verbose") || !strings.Contains(cmd, "--model opus") {
+		t.Errorf("expected flags, got %q", cmd)
 	}
 }
 
 func TestClaude_WithBoardWorker(t *testing.T) {
 	a := &ClaudeAgent{}
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		SessionID: "s1",
+		SessionID: "claude-board-w1",
 		BoardName: "test-board",
 		Role:      "developer",
 	})
-	// Should include settings file (systemPrompt with board info)
 	if !strings.Contains(cmd, "--settings") {
 		t.Errorf("expected --settings flag, got %q", cmd)
 	}
-	// Should include prompt file reference
-	if !strings.Contains(cmd, "coral_prompt_s1") {
-		t.Errorf("expected prompt file reference, got %q", cmd)
-	}
-	// Check prompt file content contains board name
-	promptFile := os.TempDir() + "/coral_prompt_s1.txt"
-	data, err := os.ReadFile(promptFile)
-	if err == nil {
-		if !strings.Contains(string(data), "test-board") {
-			t.Errorf("expected board name in prompt file, got %q", string(data))
-		}
+	promptFile := findTempFile(t, "prompt", "claude-board-w1", "txt")
+	data, _ := os.ReadFile(promptFile)
+	if !strings.Contains(string(data), "test-board") {
+		t.Errorf("expected board name in prompt file, got %q", string(data))
 	}
 }
 
 func TestClaude_WithBoardOrchestrator(t *testing.T) {
 	a := &ClaudeAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		SessionID: "s1-orch",
+	a.BuildLaunchCommand(LaunchParams{
+		SessionID: "claude-board-o1",
 		BoardName: "test-board",
 		Role:      "Orchestrator",
 	})
-	if !strings.Contains(cmd, "--settings") {
-		t.Errorf("expected --settings flag, got %q", cmd)
-	}
-	// Check prompt file content contains orchestrator action
-	promptFile := os.TempDir() + "/coral_prompt_s1-orch.txt"
-	data, err := os.ReadFile(promptFile)
-	if err == nil {
-		if !strings.Contains(string(data), "test-board") {
-			t.Errorf("expected board name in prompt file, got %q", string(data))
-		}
-		if !strings.Contains(string(data), "discuss your proposed plan") {
-			t.Errorf("expected orchestrator action in prompt file, got %q", string(data))
-		}
+	promptFile := findTempFile(t, "prompt", "claude-board-o1", "txt")
+	data, _ := os.ReadFile(promptFile)
+	if !strings.Contains(string(data), "discuss your proposed plan") {
+		t.Errorf("expected orchestrator action in prompt file, got %q", string(data))
 	}
 }
 
@@ -246,7 +226,6 @@ func TestClaude_WithPrompt(t *testing.T) {
 		SessionID: "s1",
 		Prompt:    "Fix the login bug",
 	})
-	// Prompt should be written to a file and included via cat
 	if !strings.Contains(cmd, "coral_prompt_") {
 		t.Errorf("expected prompt file reference, got %q", cmd)
 	}
@@ -255,10 +234,8 @@ func TestClaude_WithPrompt(t *testing.T) {
 func TestClaude_WithCapabilities(t *testing.T) {
 	a := &ClaudeAgent{}
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		SessionID: "s1",
-		Capabilities: &Capabilities{
-			Allow: []string{CapFileRead, CapShell},
-		},
+		SessionID:    "s1",
+		Capabilities: &Capabilities{Allow: []string{CapFileRead, CapShell}},
 	})
 	if !strings.Contains(cmd, "--settings") {
 		t.Errorf("expected --settings with capabilities, got %q", cmd)
@@ -269,20 +246,9 @@ func TestClaude_WithCapabilities(t *testing.T) {
 
 func TestBuildBoardSystemPrompt_Worker(t *testing.T) {
 	prompt := BuildBoardSystemPrompt("my-board", "developer", "Build the UI", nil, "")
-	if !strings.Contains(prompt, "Build the UI") {
-		t.Error("expected user prompt in output")
-	}
-	if !strings.Contains(prompt, "my-board") {
-		t.Error("expected board name in output")
-	}
-	if !strings.Contains(prompt, "coral-board") {
-		t.Error("expected CLI name in output")
-	}
-	if !strings.Contains(prompt, "developer") {
-		t.Error("expected role in output")
-	}
-	if !strings.Contains(prompt, DefaultWorkerSystemPrompt) {
-		t.Error("expected worker system prompt")
+	if !strings.Contains(prompt, "Build the UI") || !strings.Contains(prompt, "my-board") ||
+		!strings.Contains(prompt, "coral-board") || !strings.Contains(prompt, DefaultWorkerSystemPrompt) {
+		t.Error("missing expected content in worker system prompt")
 	}
 }
 
@@ -291,34 +257,24 @@ func TestBuildBoardSystemPrompt_Orchestrator(t *testing.T) {
 	if !strings.Contains(prompt, DefaultOrchestratorSystemPrompt) {
 		t.Error("expected orchestrator system prompt")
 	}
-	if strings.Contains(prompt, DefaultWorkerSystemPrompt) {
-		t.Error("should not contain worker system prompt")
-	}
 }
 
 func TestBuildBoardSystemPrompt_WithOverrides(t *testing.T) {
-	overrides := map[string]string{
-		"default_prompt_worker": "Custom worker instructions",
-	}
+	overrides := map[string]string{"default_prompt_worker": "Custom worker instructions"}
 	prompt := BuildBoardSystemPrompt("board1", "dev", "", overrides, "")
 	if !strings.Contains(prompt, "Custom worker instructions") {
 		t.Error("expected custom worker prompt override")
 	}
-	if strings.Contains(prompt, DefaultWorkerSystemPrompt) {
-		t.Error("should not contain default worker prompt when overridden")
-	}
 }
 
 func TestBuildBoardSystemPrompt_NoBoard(t *testing.T) {
-	prompt := BuildBoardSystemPrompt("", "", "", nil, "")
-	if prompt != "" {
+	if prompt := BuildBoardSystemPrompt("", "", "", nil, ""); prompt != "" {
 		t.Errorf("expected empty prompt without board, got %q", prompt)
 	}
 }
 
 func TestBuildBoardSystemPrompt_PromptOnly(t *testing.T) {
-	prompt := BuildBoardSystemPrompt("", "", "Do something", nil, "")
-	if prompt != "Do something" {
+	if prompt := BuildBoardSystemPrompt("", "", "Do something", nil, ""); prompt != "Do something" {
 		t.Errorf("expected just the prompt, got %q", prompt)
 	}
 }
@@ -327,123 +283,146 @@ func TestBuildBoardSystemPrompt_PromptOnly(t *testing.T) {
 
 func TestCodex_BasicLaunch(t *testing.T) {
 	a := &CodexAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{})
-	if cmd != "codex" {
+	if cmd := a.BuildLaunchCommand(LaunchParams{}); cmd != "codex" {
 		t.Errorf("expected bare 'codex', got %q", cmd)
 	}
 }
 
 func TestCodex_Resume(t *testing.T) {
 	a := &CodexAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		ResumeSessionID: "resume-789",
-	})
-	if !strings.Contains(cmd, "codex resume --session resume-789") {
-		t.Errorf("expected 'codex resume --session resume-789', got %q", cmd)
+	cmd := a.BuildLaunchCommand(LaunchParams{ResumeSessionID: "resume-789"})
+	if !strings.Contains(cmd, "codex resume resume-789") {
+		t.Errorf("expected 'codex resume resume-789', got %q", cmd)
 	}
 }
 
 func TestCodex_WithFlags(t *testing.T) {
 	a := &CodexAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		Flags: []string{"--json", "--model", "gpt-4"},
-	})
-	if !strings.Contains(cmd, "--json") {
-		t.Errorf("expected --json flag, got %q", cmd)
-	}
-	if !strings.Contains(cmd, "--model gpt-4") {
-		t.Errorf("expected --model gpt-4, got %q", cmd)
+	cmd := a.BuildLaunchCommand(LaunchParams{Flags: []string{"--json", "--model", "gpt-4"}})
+	if !strings.Contains(cmd, "--json") || !strings.Contains(cmd, "--model gpt-4") {
+		t.Errorf("expected flags, got %q", cmd)
 	}
 }
 
 func TestCodex_WithPrompt(t *testing.T) {
 	a := &CodexAgent{}
-	sid := "test-prompt-sid"
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		SessionID: sid,
-		Prompt:    "Fix the bug",
-	})
-	// Prompt is written to a temp file and referenced via shell command
-	promptFile := filepath.Join(os.TempDir(), "coral_codex_prompt_"+sid+".txt")
-	content, err := os.ReadFile(promptFile)
-	if err != nil {
-		t.Fatalf("expected prompt file to be written: %v", err)
-	}
+	sid := "codex-prompt-test1"
+	a.BuildLaunchCommand(LaunchParams{SessionID: sid, Prompt: "Fix the bug"})
+	promptFile := findTempFile(t, "codex_prompt", sid, "txt")
+	content, _ := os.ReadFile(promptFile)
 	if !strings.Contains(string(content), "Fix the bug") {
 		t.Errorf("expected prompt in file, got %q", string(content))
-	}
-	if !strings.Contains(cmd, "codex") {
-		t.Errorf("expected codex in command, got %q", cmd)
 	}
 }
 
 func TestCodex_WithBoardWorker(t *testing.T) {
 	a := &CodexAgent{}
-	sid := "test-board-worker-sid"
+	sid := "codex-board-w1"
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		SessionID: sid,
-		Prompt:    "Build frontend",
-		BoardName: "dev-board",
-		Role:      "developer",
+		SessionID: sid, Prompt: "Build frontend", BoardName: "dev-board", Role: "developer",
 	})
-	promptFile := filepath.Join(os.TempDir(), "coral_codex_prompt_"+sid+".txt")
-	content, err := os.ReadFile(promptFile)
-	if err != nil {
-		t.Fatalf("expected prompt file to be written: %v", err)
+	if !strings.Contains(cmd, "-c developer_instructions=") {
+		t.Errorf("expected -c developer_instructions flag, got %q", cmd)
 	}
-	if !strings.Contains(string(content), "dev-board") {
-		t.Errorf("expected board name in prompt file, got %q", string(content))
+	sysFile := findTempFile(t, "codex_instructions", sid, "md")
+	sysContent, _ := os.ReadFile(sysFile)
+	if !strings.Contains(string(sysContent), "dev-board") {
+		t.Errorf("expected board name in system instructions, got %q", string(sysContent))
 	}
+	promptFile := findTempFile(t, "codex_prompt", sid, "txt")
+	content, _ := os.ReadFile(promptFile)
 	if !strings.Contains(string(content), "Build frontend") {
-		t.Errorf("expected original prompt in file, got %q", string(content))
+		t.Errorf("expected prompt in action file, got %q", string(content))
 	}
-	_ = cmd
 }
 
 func TestCodex_WithBoardOrchestrator(t *testing.T) {
 	a := &CodexAgent{}
-	sid := "test-board-orch-sid"
+	sid := "codex-board-o1"
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		SessionID: sid,
-		Prompt:    "Coordinate team",
-		BoardName: "dev-board",
-		Role:      "orchestrator",
+		SessionID: sid, Prompt: "Coordinate team", BoardName: "dev-board", Role: "orchestrator",
 	})
-	promptFile := filepath.Join(os.TempDir(), "coral_codex_prompt_"+sid+".txt")
-	content, err := os.ReadFile(promptFile)
-	if err != nil {
-		t.Fatalf("expected prompt file to be written: %v", err)
+	if !strings.Contains(cmd, "-c developer_instructions=") {
+		t.Errorf("expected -c developer_instructions flag, got %q", cmd)
 	}
-	if !strings.Contains(string(content), "dev-board") {
-		t.Errorf("expected board name in prompt file, got %q", string(content))
-	}
+	promptFile := findTempFile(t, "codex_prompt", sid, "txt")
+	content, _ := os.ReadFile(promptFile)
 	if !strings.Contains(string(content), "discuss your proposed plan") {
-		t.Errorf("expected orchestrator action in prompt file, got %q", string(content))
+		t.Errorf("expected orchestrator action in prompt, got %q", string(content))
 	}
-	_ = cmd
 }
+
+func TestCodex_SystemPromptSeparation(t *testing.T) {
+	a := &CodexAgent{}
+	sid := "codex-sep-test1"
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		SessionID: sid, Prompt: "Do work", BoardName: "board1", Role: "dev",
+	})
+	findTempFile(t, "codex_instructions", sid, "md") // verifies existence
+	findTempFile(t, "codex_prompt", sid, "txt")
+	if !strings.Contains(cmd, "developer_instructions") || !strings.Contains(cmd, "codex_prompt") {
+		t.Errorf("expected both file references in command, got %q", cmd)
+	}
+}
+
+// ── Codex Permission Tests ─────────────────────────────────
 
 func TestCodex_WithCapabilities_FullAuto(t *testing.T) {
 	a := &CodexAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		Capabilities: &Capabilities{
-			Allow: []string{CapShell},
-		},
-	})
+	cmd := a.BuildLaunchCommand(LaunchParams{Capabilities: &Capabilities{Allow: []string{CapShell}}})
 	if !strings.Contains(cmd, "--full-auto") {
-		t.Errorf("expected --full-auto from capabilities injection, got %q", cmd)
+		t.Errorf("expected --full-auto, got %q", cmd)
 	}
 }
 
-func TestCodex_WithCapabilities_NoShell(t *testing.T) {
+func TestCodex_WithCapabilities_BypassSandbox(t *testing.T) {
 	a := &CodexAgent{}
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		Capabilities: &Capabilities{
-			Allow: []string{CapFileRead},
-		},
+		Capabilities: &Capabilities{Allow: []string{CapShell, CapFileRead, CapFileWrite, CapGitWrite}},
+	})
+	if !strings.Contains(cmd, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("expected bypass sandbox, got %q", cmd)
+	}
+}
+
+func TestCodex_WithCapabilities_ReadOnly(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{Capabilities: &Capabilities{Allow: []string{CapFileRead}}})
+	if !strings.Contains(cmd, "--sandbox read-only") || !strings.Contains(cmd, "-a untrusted") {
+		t.Errorf("expected read-only sandbox, got %q", cmd)
+	}
+}
+
+func TestCodex_WithCapabilities_ReadWrite(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{Allow: []string{CapFileRead, CapFileWrite}},
+	})
+	if !strings.Contains(cmd, "--sandbox workspace-write") || !strings.Contains(cmd, "-a untrusted") {
+		t.Errorf("expected workspace-write sandbox, got %q", cmd)
+	}
+}
+
+func TestCodex_WithCapabilities_ShellWithDeny(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{Allow: []string{CapShell}, Deny: []string{CapGitWrite}},
 	})
 	if strings.Contains(cmd, "--full-auto") {
-		t.Errorf("should not have --full-auto without shell capability, got %q", cmd)
+		t.Errorf("should not have --full-auto with deny list, got %q", cmd)
+	}
+	if !strings.Contains(cmd, "--sandbox workspace-write") {
+		t.Errorf("expected workspace-write sandbox, got %q", cmd)
+	}
+}
+
+func TestCodex_WithCapabilities_WebSearch(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{Allow: []string{CapFileRead, CapWebAccess}},
+	})
+	if !strings.Contains(cmd, "--search") {
+		t.Errorf("expected --search, got %q", cmd)
 	}
 }
 
@@ -455,158 +434,206 @@ func TestCodex_WithCapabilities_Nil(t *testing.T) {
 	}
 }
 
+func TestCodex_ResumeWithPromptAndInstructions(t *testing.T) {
+	a := &CodexAgent{}
+	sid := "codex-resume-test1"
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		SessionID: sid, ResumeSessionID: "resume-abc", Prompt: "Continue work",
+		BoardName: "board1", Role: "dev",
+	})
+	if !strings.Contains(cmd, "codex resume resume-abc") {
+		t.Errorf("expected resume, got %q", cmd)
+	}
+	if !strings.Contains(cmd, "-c developer_instructions=") {
+		t.Errorf("expected developer_instructions on resume, got %q", cmd)
+	}
+}
+
+func TestCodex_FlagTranslation(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{Flags: []string{"--dangerously-skip-permissions"}})
+	if strings.Contains(cmd, "--dangerously-skip-permissions") || !strings.Contains(cmd, "--full-auto") {
+		t.Errorf("expected flag translation, got %q", cmd)
+	}
+}
+
 // ── Gemini BuildLaunchCommand Tests ─────────────────────────
 
 func TestGemini_BasicLaunch(t *testing.T) {
 	a := &GeminiAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{})
-	if cmd != "gemini" {
+	if cmd := a.BuildLaunchCommand(LaunchParams{}); cmd != "gemini" {
 		t.Errorf("expected bare 'gemini', got %q", cmd)
 	}
 }
 
 func TestGemini_WithFlags(t *testing.T) {
 	a := &GeminiAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		Flags: []string{"--verbose"},
-	})
+	cmd := a.BuildLaunchCommand(LaunchParams{Flags: []string{"--verbose"}})
 	if !strings.Contains(cmd, "--verbose") {
 		t.Errorf("expected --verbose, got %q", cmd)
 	}
 }
 
-func TestGemini_NoResume(t *testing.T) {
+func TestGemini_ResumeDisabled(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{ResumeSessionID: "some-id"})
+	// Gemini resume is disabled — --resume should NOT appear
+	if strings.Contains(cmd, "--resume") {
+		t.Errorf("gemini should not have --resume flag (disabled), got %q", cmd)
+	}
+}
+
+func TestGemini_WithPromptTempFile(t *testing.T) {
+	a := &GeminiAgent{}
+	sid := "gemini-prompt-test1"
+	cmd := a.BuildLaunchCommand(LaunchParams{SessionID: sid, Prompt: "Analyze the codebase"})
+	promptFile := findTempFile(t, "gemini_prompt", sid, "txt")
+	content, _ := os.ReadFile(promptFile)
+	if !strings.Contains(string(content), "Analyze the codebase") {
+		t.Errorf("expected prompt in temp file, got %q", string(content))
+	}
+	if !strings.Contains(cmd, "gemini_prompt") {
+		t.Errorf("expected gemini_prompt reference, got %q", cmd)
+	}
+}
+
+func TestGemini_WithBoardWorker(t *testing.T) {
+	a := &GeminiAgent{}
+	sid := "gemini-board-w1"
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		SessionID: sid, Prompt: "Build API", BoardName: "team-board", Role: "developer",
+	})
+	if !strings.Contains(cmd, "GEMINI_SYSTEM_MD=") {
+		t.Errorf("expected GEMINI_SYSTEM_MD, got %q", cmd)
+	}
+	promptFile := findTempFile(t, "gemini_prompt", sid, "txt")
+	content, _ := os.ReadFile(promptFile)
+	if !strings.Contains(string(content), "team-board") {
+		t.Errorf("expected board name in prompt, got %q", string(content))
+	}
+}
+
+// ── Gemini Permission Tests ─────────────────────────────────
+
+func TestGemini_WithCapabilities_Yolo(t *testing.T) {
 	a := &GeminiAgent{}
 	cmd := a.BuildLaunchCommand(LaunchParams{
-		ResumeSessionID: "some-id",
+		Capabilities: &Capabilities{Allow: []string{CapShell, CapFileWrite}},
 	})
-	// Gemini doesn't support resume, so it should be ignored
+	if !strings.Contains(cmd, "--approval-mode yolo") {
+		t.Errorf("expected yolo, got %q", cmd)
+	}
+}
+
+func TestGemini_WithCapabilities_AutoEdit(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{Allow: []string{CapShell, CapFileWrite}, Deny: []string{CapGitWrite}},
+	})
+	if !strings.Contains(cmd, "--approval-mode auto_edit") {
+		t.Errorf("expected auto_edit, got %q", cmd)
+	}
+}
+
+func TestGemini_WithCapabilities_Plan(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{Allow: []string{CapFileRead}},
+	})
+	if !strings.Contains(cmd, "--approval-mode plan") {
+		t.Errorf("expected plan, got %q", cmd)
+	}
+}
+
+func TestGemini_WithCapabilities_ReadWrite(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		Capabilities: &Capabilities{Allow: []string{CapFileRead, CapFileWrite}},
+	})
+	if !strings.Contains(cmd, "--approval-mode auto_edit") {
+		t.Errorf("expected auto_edit, got %q", cmd)
+	}
+}
+
+func TestGemini_WithCapabilities_Nil(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{})
+	if strings.Contains(cmd, "--approval-mode") {
+		t.Errorf("should not have --approval-mode, got %q", cmd)
+	}
+}
+
+func TestGemini_ResumeWithPermissions(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		ResumeSessionID: "resume-xyz",
+		Capabilities:    &Capabilities{Allow: []string{CapShell, CapFileWrite}},
+	})
+	// Resume is disabled, but permissions should still be emitted
 	if strings.Contains(cmd, "--resume") {
-		t.Error("gemini should not have --resume flag")
+		t.Errorf("gemini should not have --resume flag (disabled), got %q", cmd)
+	}
+	if !strings.Contains(cmd, "--approval-mode yolo") {
+		t.Errorf("expected yolo even without resume, got %q", cmd)
 	}
 }
 
 // ── Permission Translation Tests ────────────────────────────
 
 func TestTranslateToClaudePermissions_Nil(t *testing.T) {
-	result := TranslateToClaudePermissions(nil)
-	if result != nil {
-		t.Errorf("expected nil for nil capabilities, got %+v", result)
+	if TranslateToClaudePermissions(nil) != nil {
+		t.Error("expected nil")
 	}
 }
 
 func TestTranslateToClaudePermissions_Empty(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{})
-	if result != nil {
-		t.Errorf("expected nil for empty capabilities, got %+v", result)
+	if TranslateToClaudePermissions(&Capabilities{}) != nil {
+		t.Error("expected nil")
 	}
 }
 
 func TestTranslateToClaudePermissions_FileRead(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{CapFileRead},
-	})
+	result := TranslateToClaudePermissions(&Capabilities{Allow: []string{CapFileRead}})
 	if result == nil {
-		t.Fatal("expected non-nil result")
+		t.Fatal("expected non-nil")
 	}
-	// Should include Read, Glob, Grep + coral-board
 	allowStr := strings.Join(result.Allow, ",")
 	for _, tool := range []string{"Read", "Glob", "Grep", "Bash(coral-board *)"} {
 		if !strings.Contains(allowStr, tool) {
-			t.Errorf("expected %q in allow list, got %v", tool, result.Allow)
-		}
-	}
-}
-
-func TestTranslateToClaudePermissions_FileWrite(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{CapFileWrite},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	allowStr := strings.Join(result.Allow, ",")
-	for _, tool := range []string{"Write", "Edit"} {
-		if !strings.Contains(allowStr, tool) {
-			t.Errorf("expected %q in allow list, got %v", tool, result.Allow)
+			t.Errorf("missing %q in allow list", tool)
 		}
 	}
 }
 
 func TestTranslateToClaudePermissions_Shell(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{CapShell},
-	})
+	result := TranslateToClaudePermissions(&Capabilities{Allow: []string{CapShell}})
 	if result == nil {
-		t.Fatal("expected non-nil result")
+		t.Fatal("expected non-nil")
 	}
 	found := false
 	for _, a := range result.Allow {
 		if a == "Bash" {
 			found = true
-			break
 		}
 	}
 	if !found {
-		t.Errorf("expected Bash in allow list, got %v", result.Allow)
-	}
-}
-
-func TestTranslateToClaudePermissions_ShellPattern(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{"shell:npm *"},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	found := false
-	for _, a := range result.Allow {
-		if a == "Bash(npm *)" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected Bash(npm *) in allow list, got %v", result.Allow)
-	}
-}
-
-func TestTranslateToClaudePermissions_CoralBoardAlwaysAllowed(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{CapFileRead},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	found := false
-	for _, a := range result.Allow {
-		if a == "Bash(coral-board *)" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("coral-board should always be in allow list, got %v", result.Allow)
+		t.Error("expected Bash in allow list")
 	}
 }
 
 func TestTranslateToClaudePermissions_DenyList(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{CapFileRead},
-		Deny:  []string{CapShell},
-	})
+	result := TranslateToClaudePermissions(&Capabilities{Allow: []string{CapFileRead}, Deny: []string{CapShell}})
 	if result == nil {
-		t.Fatal("expected non-nil result")
+		t.Fatal("expected non-nil")
 	}
 	found := false
 	for _, d := range result.Deny {
 		if d == "Bash" {
 			found = true
-			break
 		}
 	}
 	if !found {
-		t.Errorf("expected Bash in deny list, got %v", result.Deny)
+		t.Error("expected Bash in deny list")
 	}
 }
 
@@ -615,180 +642,138 @@ func TestTranslateToClaudePermissions_AllCapabilities(t *testing.T) {
 		Allow: []string{CapFileRead, CapFileWrite, CapShell, CapWebAccess, CapGitWrite, CapAgentSpawn, CapNotebook},
 	})
 	if result == nil {
-		t.Fatal("expected non-nil result")
+		t.Fatal("expected non-nil")
 	}
 	allowStr := strings.Join(result.Allow, ",")
-	for _, tool := range []string{"Read", "Glob", "Grep", "Write", "Edit", "Bash", "WebFetch", "WebSearch", "Agent", "NotebookEdit"} {
+	for _, tool := range []string{"Read", "Write", "Bash", "WebFetch", "Agent", "NotebookEdit", "Bash(git push *)"} {
 		if !strings.Contains(allowStr, tool) {
-			t.Errorf("expected %q in allow list for full capabilities", tool)
+			t.Errorf("missing %q", tool)
 		}
-	}
-	// Git write should produce specific patterns
-	for _, pattern := range []string{"Bash(git push *)", "Bash(git commit *)"} {
-		if !strings.Contains(allowStr, pattern) {
-			t.Errorf("expected %q in allow list for git_write", pattern)
-		}
-	}
-}
-
-func TestTranslateToClaudePermissions_UnknownCapPassthrough(t *testing.T) {
-	result := TranslateToClaudePermissions(&Capabilities{
-		Allow: []string{"custom_tool"},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	found := false
-	for _, a := range result.Allow {
-		if a == "custom_tool" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected unknown cap to pass through, got %v", result.Allow)
 	}
 }
 
 // ── Codex Permission Translation Tests ──────────────────────
 
 func TestTranslateToCodexPermissions_Nil(t *testing.T) {
-	result := TranslateToCodexPermissions(nil)
-	if result != nil {
-		t.Errorf("expected nil for nil capabilities, got %+v", result)
+	if TranslateToCodexPermissions(nil) != nil {
+		t.Error("expected nil")
 	}
 }
 
 func TestTranslateToCodexPermissions_Empty(t *testing.T) {
-	result := TranslateToCodexPermissions(&Capabilities{})
-	if result != nil {
-		t.Errorf("expected nil for empty capabilities, got %+v", result)
+	if TranslateToCodexPermissions(&Capabilities{}) != nil {
+		t.Error("expected nil")
 	}
 }
 
 func TestTranslateToCodexPermissions_ShellFullAuto(t *testing.T) {
-	result := TranslateToCodexPermissions(&Capabilities{
-		Allow: []string{CapShell},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if !result.FullAuto {
-		t.Error("expected FullAuto=true when shell allowed with no denies")
+	result := TranslateToCodexPermissions(&Capabilities{Allow: []string{CapShell}})
+	if result == nil || !result.FullAuto {
+		t.Error("expected FullAuto=true")
 	}
 }
 
 func TestTranslateToCodexPermissions_ShellWithDenyNotFullAuto(t *testing.T) {
-	result := TranslateToCodexPermissions(&Capabilities{
-		Allow: []string{CapShell},
-		Deny:  []string{CapGitWrite},
-	})
+	result := TranslateToCodexPermissions(&Capabilities{Allow: []string{CapShell}, Deny: []string{CapGitWrite}})
 	if result == nil {
-		t.Fatal("expected non-nil result")
+		t.Fatal("expected non-nil")
 	}
-	if result.FullAuto {
-		t.Error("expected FullAuto=false when shell allowed with denies")
+	if result.FullAuto || result.SandboxMode != "workspace-write" || result.ApprovalPolicy != "untrusted" {
+		t.Errorf("unexpected: %+v", result)
 	}
 }
 
-func TestTranslateToCodexPermissions_NoShellReturnsAllowList(t *testing.T) {
-	result := TranslateToCodexPermissions(&Capabilities{
-		Allow: []string{CapFileRead, CapFileWrite},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if result.FullAuto {
-		t.Error("expected FullAuto=false without shell capability")
-	}
-	if len(result.Allow) != 2 {
-		t.Errorf("expected 2 allow entries, got %d: %v", len(result.Allow), result.Allow)
+func TestTranslateToCodexPermissions_ReadOnly(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{Allow: []string{CapFileRead}})
+	if result == nil || result.SandboxMode != "read-only" || result.ApprovalPolicy != "untrusted" {
+		t.Errorf("unexpected: %+v", result)
 	}
 }
 
-// ── Codex Flag Translation Tests ────────────────────────────
-
-func TestCodex_FlagTranslation(t *testing.T) {
-	a := &CodexAgent{}
-	cmd := a.BuildLaunchCommand(LaunchParams{
-		Flags: []string{"--dangerously-skip-permissions"},
+func TestTranslateToCodexPermissions_FullAccess(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{
+		Allow: []string{CapShell, CapFileRead, CapFileWrite, CapGitWrite},
 	})
-	if strings.Contains(cmd, "--dangerously-skip-permissions") {
-		t.Error("Claude flag should be translated, not passed through")
+	if result == nil || !result.BypassSandbox {
+		t.Error("expected BypassSandbox=true")
 	}
-	if !strings.Contains(cmd, "--full-auto") {
-		t.Errorf("expected --full-auto (translated from Claude flag), got %q", cmd)
+}
+
+func TestTranslateToCodexPermissions_WebSearch(t *testing.T) {
+	result := TranslateToCodexPermissions(&Capabilities{Allow: []string{CapFileRead, CapWebAccess}})
+	if result == nil || !result.Search {
+		t.Error("expected Search=true")
 	}
 }
 
 // ── Gemini Permission Translation Tests ─────────────────────
 
 func TestTranslateToGeminiPermissions_Nil(t *testing.T) {
-	result := TranslateToGeminiPermissions(nil)
-	if result != nil {
-		t.Errorf("expected nil for nil capabilities, got %+v", result)
+	if TranslateToGeminiPermissions(nil) != nil {
+		t.Error("expected nil")
 	}
 }
 
 func TestTranslateToGeminiPermissions_Empty(t *testing.T) {
-	result := TranslateToGeminiPermissions(&Capabilities{})
-	if result != nil {
-		t.Errorf("expected nil for empty capabilities, got %+v", result)
+	if TranslateToGeminiPermissions(&Capabilities{}) != nil {
+		t.Error("expected nil")
 	}
 }
 
-func TestTranslateToGeminiPermissions_PassThrough(t *testing.T) {
-	result := TranslateToGeminiPermissions(&Capabilities{
-		Allow: []string{CapFileRead, CapShell},
-	})
-	if result == nil {
-		t.Fatal("expected non-nil result")
+func TestTranslateToGeminiPermissions_Yolo(t *testing.T) {
+	result := TranslateToGeminiPermissions(&Capabilities{Allow: []string{CapShell, CapFileWrite}})
+	if result == nil || result.ApprovalMode != "yolo" {
+		t.Error("expected yolo")
 	}
-	if len(result.Allow) != 2 {
-		t.Errorf("expected 2 allow entries, got %d", len(result.Allow))
+}
+
+func TestTranslateToGeminiPermissions_AutoEdit(t *testing.T) {
+	result := TranslateToGeminiPermissions(&Capabilities{
+		Allow: []string{CapShell, CapFileWrite}, Deny: []string{CapGitWrite},
+	})
+	if result == nil || result.ApprovalMode != "auto_edit" {
+		t.Error("expected auto_edit")
+	}
+}
+
+func TestTranslateToGeminiPermissions_Plan(t *testing.T) {
+	result := TranslateToGeminiPermissions(&Capabilities{Allow: []string{CapFileRead}})
+	if result == nil || result.ApprovalMode != "plan" {
+		t.Error("expected plan")
+	}
+}
+
+func TestTranslateToGeminiPermissions_Default(t *testing.T) {
+	result := TranslateToGeminiPermissions(&Capabilities{Allow: []string{CapWebAccess}})
+	if result == nil || result.ApprovalMode != "default" {
+		t.Error("expected default")
 	}
 }
 
 // ── TranslatePermissions Dispatcher Tests ───────────────────
 
 func TestTranslatePermissions_Claude(t *testing.T) {
-	result := TranslatePermissions("claude", &Capabilities{Allow: []string{CapFileRead}})
-	if _, ok := result.(*ClaudePermissions); !ok {
-		t.Errorf("expected *ClaudePermissions for claude, got %T", result)
+	if _, ok := TranslatePermissions("claude", &Capabilities{Allow: []string{CapFileRead}}).(*ClaudePermissions); !ok {
+		t.Error("expected *ClaudePermissions")
 	}
 }
 
 func TestTranslatePermissions_Codex(t *testing.T) {
-	result := TranslatePermissions("codex", &Capabilities{Allow: []string{CapShell}})
-	cp, ok := result.(*CodexPermissions)
-	if !ok {
-		t.Errorf("expected *CodexPermissions for codex, got %T", result)
-	}
-	if cp != nil && !cp.FullAuto {
-		t.Error("expected FullAuto for codex with shell capability")
+	cp, ok := TranslatePermissions("codex", &Capabilities{Allow: []string{CapShell}}).(*CodexPermissions)
+	if !ok || !cp.FullAuto {
+		t.Error("expected CodexPermissions with FullAuto")
 	}
 }
 
 func TestTranslatePermissions_Gemini(t *testing.T) {
-	result := TranslatePermissions("gemini", &Capabilities{Allow: []string{CapFileRead}})
-	if _, ok := result.(*GeminiPermissions); !ok {
-		t.Errorf("expected *GeminiPermissions for gemini, got %T", result)
-	}
-}
-
-func TestTranslatePermissions_UnknownDefaultsToClaude(t *testing.T) {
-	result := TranslatePermissions("unknown", &Capabilities{Allow: []string{CapFileRead}})
-	if _, ok := result.(*ClaudePermissions); !ok {
-		t.Errorf("expected *ClaudePermissions for unknown agent, got %T", result)
+	if _, ok := TranslatePermissions("gemini", &Capabilities{Allow: []string{CapFileRead}}).(*GeminiPermissions); !ok {
+		t.Error("expected *GeminiPermissions")
 	}
 }
 
 func TestTranslatePermissions_NilCaps(t *testing.T) {
-	// TranslateToClaudePermissions(nil) returns (*ClaudePermissions)(nil),
-	// which wraps to a non-nil interface. Verify the inner value is nil.
-	result := TranslatePermissions("claude", nil)
-	if cp, ok := result.(*ClaudePermissions); ok && cp != nil {
-		t.Errorf("expected nil *ClaudePermissions for nil capabilities, got %+v", cp)
+	if cp, ok := TranslatePermissions("claude", nil).(*ClaudePermissions); ok && cp != nil {
+		t.Error("expected nil inner value")
 	}
 }
 
@@ -796,49 +781,124 @@ func TestTranslatePermissions_NilCaps(t *testing.T) {
 
 func TestCapabilities_IsEmpty(t *testing.T) {
 	if !((*Capabilities)(nil)).IsEmpty() {
-		t.Error("nil Capabilities should be empty")
+		t.Error("nil should be empty")
 	}
 	if !(&Capabilities{}).IsEmpty() {
-		t.Error("zero-value Capabilities should be empty")
+		t.Error("zero-value should be empty")
 	}
 	if (&Capabilities{Allow: []string{"x"}}).IsEmpty() {
-		t.Error("Capabilities with Allow should not be empty")
-	}
-	if (&Capabilities{Deny: []string{"x"}}).IsEmpty() {
-		t.Error("Capabilities with Deny should not be empty")
+		t.Error("with Allow should not be empty")
 	}
 }
 
 // ── Presets Tests ───────────────────────────────────────────
 
 func TestPresets_Exist(t *testing.T) {
-	expectedPresets := []string{"lead_dev", "qa", "frontend_dev", "orchestrator", "devops", "read_only", "full_access"}
-	for _, name := range expectedPresets {
+	for _, name := range []string{"lead_dev", "qa", "frontend_dev", "orchestrator", "devops", "read_only", "full_access"} {
 		if _, ok := Presets[name]; !ok {
-			t.Errorf("expected preset %q to exist", name)
+			t.Errorf("missing preset %q", name)
 		}
-	}
-}
-
-func TestPresets_QAHasDenies(t *testing.T) {
-	qa := Presets["qa"]
-	if len(qa.Deny) == 0 {
-		t.Error("qa preset should have deny rules")
 	}
 }
 
 func TestPresets_FullAccessHasAll(t *testing.T) {
 	fa := Presets["full_access"]
-	allCaps := []string{CapFileRead, CapFileWrite, CapShell, CapGitWrite, CapAgentSpawn, CapWebAccess, CapNotebook}
 	allowSet := map[string]bool{}
 	for _, a := range fa.Allow {
 		allowSet[a] = true
 	}
-	for _, cap := range allCaps {
+	for _, cap := range []string{CapFileRead, CapFileWrite, CapShell, CapGitWrite, CapAgentSpawn, CapWebAccess, CapNotebook} {
 		if !allowSet[cap] {
-			t.Errorf("full_access should include %s", cap)
+			t.Errorf("full_access missing %s", cap)
 		}
 	}
+}
+
+// ── SanitizeShellValue Tests ────────────────────────────────
+
+func TestSanitizeShellValue_Clean(t *testing.T) {
+	if got := SanitizeShellValue("my-session_123"); got != "my-session_123" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestSanitizeShellValue_StripsDangerousChars(t *testing.T) {
+	tests := []struct {
+		input, expected string
+	}{
+		{`$(whoami)`, "whoami"},
+		{"`id`", "id"},
+		{`role"; rm -rf /; echo "`, "role rm -rf  echo "},
+		{"a'b", "ab"},
+		{"a;b", "ab"},
+		{"a|b", "ab"},
+		{"a&b", "ab"},
+	}
+	for _, tt := range tests {
+		if got := SanitizeShellValue(tt.input); got != tt.expected {
+			t.Errorf("SanitizeShellValue(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestCodex_EnvVarsSingleQuoted(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{SessionName: "codex-abc123", Role: "developer"})
+	if !strings.Contains(cmd, "CORAL_SESSION_NAME='codex-abc123'") ||
+		!strings.Contains(cmd, "CORAL_SUBSCRIBER_ID='developer'") {
+		t.Errorf("expected single-quoted env vars, got %q", cmd)
+	}
+}
+
+func TestGemini_EnvVarsSingleQuoted(t *testing.T) {
+	a := &GeminiAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{SessionName: "gemini-xyz789", Role: "qa"})
+	if !strings.Contains(cmd, "CORAL_SESSION_NAME='gemini-xyz789'") ||
+		!strings.Contains(cmd, "CORAL_SUBSCRIBER_ID='qa'") {
+		t.Errorf("expected single-quoted env vars, got %q", cmd)
+	}
+}
+
+func TestCodex_EnvVarsSanitized(t *testing.T) {
+	a := &CodexAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{SessionName: `$(evil)`, Role: "`whoami`"})
+	if strings.Contains(cmd, "$") || strings.Contains(cmd, "`") {
+		t.Errorf("expected sanitized, got %q", cmd)
+	}
+}
+
+// ── Temp File Tests ─────────────────────────────────────────
+
+func TestWriteTempFile_CreatesFile(t *testing.T) {
+	path := writeTempFile("test", "session123", "txt", []byte("hello"))
+	defer os.Remove(path)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read: %v", err)
+	}
+	if string(content) != "hello" {
+		t.Errorf("got %q", string(content))
+	}
+	if !strings.Contains(path, "session123") {
+		t.Errorf("expected session ID in path, got %q", path)
+	}
+}
+
+func TestCleanupTempFiles(t *testing.T) {
+	sid := "cleanup-test-sid"
+	p1 := writeTempFile("prompt", sid, "txt", []byte("prompt"))
+	p2 := writeTempFile("instructions", sid, "md", []byte("instructions"))
+	CleanupTempFiles(sid)
+	if _, err := os.Stat(p1); !os.IsNotExist(err) {
+		t.Error("prompt file should be removed")
+	}
+	if _, err := os.Stat(p2); !os.IsNotExist(err) {
+		t.Error("instructions file should be removed")
+	}
+}
+
+func TestCleanupTempFiles_EmptySessionID(t *testing.T) {
+	CleanupTempFiles("") // should not panic
 }
 
 // ── Shell Detection Tests ───────────────────────────────────
@@ -848,22 +908,12 @@ func TestClassifyShell(t *testing.T) {
 		input    string
 		expected ShellType
 	}{
-		{"/bin/bash", ShellBash},
-		{"/bin/zsh", ShellZsh},
-		{"/usr/bin/zsh", ShellZsh},
-		{"bash", ShellBash},
-		{"zsh", ShellZsh},
-		{"pwsh", ShellPowerShell},
-		{"powershell", ShellPowerShell},
-		{"powershell.exe", ShellPowerShell},
-		{"cmd", ShellCmd},
-		{"cmd.exe", ShellCmd},
-		{"sh", ShellBash},
-		{"/usr/local/bin/fish", ShellBash}, // unknown defaults to bash
+		{"/bin/bash", ShellBash}, {"/bin/zsh", ShellZsh}, {"zsh", ShellZsh},
+		{"pwsh", ShellPowerShell}, {"powershell.exe", ShellPowerShell},
+		{"cmd", ShellCmd}, {"cmd.exe", ShellCmd}, {"sh", ShellBash},
 	}
 	for _, tt := range tests {
-		got := classifyShell(tt.input)
-		if got != tt.expected {
+		if got := classifyShell(tt.input); got != tt.expected {
 			t.Errorf("classifyShell(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}

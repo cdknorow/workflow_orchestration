@@ -87,6 +87,21 @@ func AppBundleBinDir() string {
 	return ""
 }
 
+// SanitizeShellValue strips characters that could enable shell injection.
+// Only allows alphanumeric characters, hyphens, underscores, dots, and spaces.
+// This is used for values interpolated into shell command strings.
+func SanitizeShellValue(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			r == '-' || r == '_' || r == '.' || r == ' ' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // PrefixWithPathEnv returns a shell command prefix that prepends the given
 // directory to PATH. Returns empty string if binDir is empty.
 func PrefixWithPathEnv(binDir string) string {

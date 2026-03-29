@@ -17,9 +17,10 @@ import (
 
 // BoardHandler handles message board HTTP endpoints.
 type BoardHandler struct {
-	bs     *board.Store
-	mu     sync.RWMutex
-	paused map[string]bool // in-memory set of paused project names
+	bs       *board.Store
+	mu       sync.RWMutex
+	paused   map[string]bool // in-memory set of paused project names
+	notifyFn func()          // triggers immediate board notification pass
 }
 
 func NewBoardHandler(bs *board.Store) *BoardHandler {
@@ -49,6 +50,11 @@ func (h *BoardHandler) SetPaused(project string, paused bool) {
 // IsPaused returns whether a board is paused (exported for use by notifier).
 func (h *BoardHandler) IsPaused(project string) bool {
 	return h.isPaused(project)
+}
+
+// SetNotifyFn sets a callback that triggers an immediate board notification pass.
+func (h *BoardHandler) SetNotifyFn(fn func()) {
+	h.notifyFn = fn
 }
 
 // ListProjects returns all boards with subscriber and message counts.
@@ -168,6 +174,11 @@ func (h *BoardHandler) PostMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Fire-and-forget webhook dispatch
 	go h.dispatchWebhooks(project, subscriberID, msg)
+
+	// Trigger immediate board notification so subscribers get nudged right away
+	if h.notifyFn != nil {
+		h.notifyFn()
+	}
 
 	writeJSON(w, http.StatusOK, msg)
 }

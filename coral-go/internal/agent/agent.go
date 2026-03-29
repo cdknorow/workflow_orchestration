@@ -3,6 +3,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,12 +134,44 @@ func readProtocolFile(path string) string {
 	return string(content)
 }
 
-// writeTempFile writes content to a temp file named coral_{prefix}_{id}.{ext}
-// and returns the file path.
+// writeTempFile creates a temp file with an unpredictable name using os.CreateTemp
+// (O_CREATE|O_EXCL) to prevent symlink attacks. The file name includes the session
+// ID for later cleanup via CleanupTempFiles. Returns the file path.
 func writeTempFile(prefix, id, ext string, content []byte) string {
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("coral_%s_%s.%s", prefix, id, ext))
-	os.WriteFile(path, content, 0600)
-	return path
+	pattern := fmt.Sprintf("coral_%s_%s_*.%s", prefix, id, ext)
+	f, err := os.CreateTemp("", pattern)
+	if err != nil {
+		slog.Warn("failed to create temp file", "prefix", prefix, "id", id, "error", err)
+		// Fall back to predictable path so launch can still attempt to proceed
+		path := filepath.Join(os.TempDir(), fmt.Sprintf("coral_%s_%s.%s", prefix, id, ext))
+		if writeErr := os.WriteFile(path, content, 0600); writeErr != nil {
+			slog.Warn("failed to write temp file", "path", path, "error", writeErr)
+		}
+		return path
+	}
+	defer f.Close()
+	if _, err := f.Write(content); err != nil {
+		slog.Warn("failed to write temp file content", "path", f.Name(), "error", err)
+	}
+	return f.Name()
+}
+
+// CleanupTempFiles removes all Coral temp files associated with the given session ID.
+// Called during session teardown to prevent sensitive content from persisting in /tmp.
+func CleanupTempFiles(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	pattern := filepath.Join(os.TempDir(), fmt.Sprintf("coral_*_%s*", sessionID))
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+	for _, path := range matches {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Debug("failed to remove temp file", "path", path, "error", err)
+		}
+	}
 }
 
 // Default board system-prompt fragments (used by all agents).
@@ -146,12 +179,16 @@ const DefaultOrchestratorSystemPrompt = "Post a message with coral-board post \"
 	"then discuss your proposed plan with the operator (the human user) before posting assignments to the team."
 
 const DefaultWorkerSystemPrompt = "Post a message with coral-board post \"<your introduction>\" that introduces yourself, " +
-	"then wait for instructions from the Orchestrator."
+	"then STOP and wait. Do NOT poll the message board in a loop. Coral will notify you when there are new messages."
 
 // Default action prompts (appended to user prompt as CLI positional arg).
-const DefaultOrchestratorActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments. When you have a new message, Coral will notify you.`
+const DefaultOrchestratorActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments.
 
-const DefaultWorkerActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then wait for Coral to notify you of new messages.`
+CRITICAL: Do NOT poll or loop on 'coral-board read'. After posting your introduction or any message, STOP. Coral will send you a notification (as a user message) when new messages arrive. Only run 'coral-board read' after receiving such a notification.`
+
+const DefaultWorkerActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then STOP.
+
+CRITICAL: Do NOT poll or loop on 'coral-board read'. Coral will automatically notify you (as a user message) when new messages arrive — only run 'coral-board read' after receiving a notification. Between notifications, do nothing and wait.`
 
 // isOrchestratorRole returns true if the role string indicates an orchestrator.
 func isOrchestratorRole(role string) bool {

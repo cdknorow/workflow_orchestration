@@ -189,6 +189,47 @@ func TestListProjects(t *testing.T) {
 	assert.Len(t, projects, 2)
 }
 
+func TestGetSubscription_MultipleBoards(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// Subscribe the same subscriber_id ("Orchestrator") to two different boards.
+	// This simulates the stale subscription bug: same role on multiple teams.
+	_, err := s.Subscribe(ctx, "board-A", "Orchestrator", "Orchestrator", "tmux-session-A", nil, nil, "")
+	require.NoError(t, err)
+	_, err = s.Subscribe(ctx, "board-B", "Orchestrator", "Orchestrator", "tmux-session-B", nil, nil, "")
+	require.NoError(t, err)
+
+	// GetSubscription by subscriber_id returns *some* active subscription.
+	// When timestamps collide (same second), which board is returned is not
+	// guaranteed — this is exactly why GetSubscriptionBySessionName was added.
+	result, err := s.GetSubscription(ctx, "Orchestrator")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "Orchestrator", result.SubscriberID)
+	assert.Contains(t, []string{"board-A", "board-B"}, result.Project,
+		"GetSubscription should return one of the active subscriptions")
+
+	// GetSubscriptionBySessionName is the precise lookup — always returns
+	// the exact board for the given tmux session.
+	resultA, err := s.GetSubscriptionBySessionName(ctx, "tmux-session-A")
+	require.NoError(t, err)
+	require.NotNil(t, resultA)
+	assert.Equal(t, "board-A", resultA.Project)
+	assert.Equal(t, "Orchestrator", resultA.SubscriberID)
+
+	resultB, err := s.GetSubscriptionBySessionName(ctx, "tmux-session-B")
+	require.NoError(t, err)
+	require.NotNil(t, resultB)
+	assert.Equal(t, "board-B", resultB.Project)
+	assert.Equal(t, "Orchestrator", resultB.SubscriberID)
+
+	// GetSubscriptionBySessionName for nonexistent session returns nil
+	resultNone, err := s.GetSubscriptionBySessionName(ctx, "tmux-nonexistent")
+	require.NoError(t, err)
+	assert.Nil(t, resultNone)
+}
+
 func TestDeleteProject(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

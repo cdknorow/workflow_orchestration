@@ -312,7 +312,9 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	boardNotifier.SetDiscoverFn(discoverFn)
 	if bh := srv.BoardHandler(); bh != nil {
 		boardNotifier.SetIsPausedFn(bh.IsPaused)
+		bh.SetNotifyFn(boardNotifier.NotifyNow)
 	}
+	boardNotifier.SeedFromDB(ctx)
 	safeGo(ctx, "board_notifier", func() { boardNotifier.Run(ctx) })
 
 	// Remote board poller

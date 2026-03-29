@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,63 +28,84 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 	bin := resolveBinary(params.CLIPath, "codex")
 	var parts []string
 
+	// Environment variable prefix — use single quotes to prevent shell expansion
 	if params.SessionName != "" {
-		parts = append(parts, fmt.Sprintf(`CORAL_SESSION_NAME="%s"`, params.SessionName))
+		parts = append(parts, fmt.Sprintf(`CORAL_SESSION_NAME='%s'`, SanitizeShellValue(params.SessionName)))
 	}
 	if params.Role != "" {
-		parts = append(parts, fmt.Sprintf(`CORAL_SUBSCRIBER_ID="%s"`, params.Role))
+		parts = append(parts, fmt.Sprintf(`CORAL_SUBSCRIBER_ID='%s'`, SanitizeShellValue(params.Role)))
 	}
 
+	// NOTE: PATH injection is handled by callers via WrapWithBundlePath()
+
+	// Binary and resume
 	if params.ResumeSessionID != "" {
-		// codex resume takes session ID as a positional argument, not --session flag
 		parts = append(parts, bin, "resume", params.ResumeSessionID)
 	} else {
 		parts = append(parts, bin)
 	}
 
-	// Inject permissions from capabilities
-	if perms := TranslateToCodexPermissions(params.Capabilities); perms != nil && perms.FullAuto {
-		parts = append(parts, "--full-auto")
+	// System prompt injection via -c developer_instructions
+	// Combines protocol file + board system prompt (CLI usage, role instructions)
+	// Note: The $(cat '...') pattern shell-expands the file path but not its content.
+	// The temp file path is from os.TempDir() (safe). Content sources (protocol files,
+	// board prompts) are trusted internal strings.
+	var sysParts []string
+	if proto := readProtocolFile(params.ProtocolPath); proto != "" {
+		sysParts = append(sysParts, proto)
+	}
+	boardSysPrompt := BuildBoardSystemPrompt(params.BoardName, params.Role, "", params.PromptOverrides, params.BoardType)
+	if boardSysPrompt != "" {
+		sysParts = append(sysParts, boardSysPrompt)
 	}
 
+	if len(sysParts) > 0 {
+		sysFile := writeTempFile("codex_instructions", params.SessionID, "md", []byte(strings.Join(sysParts, "\n\n")))
+		parts = append(parts, fmt.Sprintf(`-c developer_instructions="$(cat '%s')"`, sysFile))
+	}
+
+	// Permission flags from capabilities
+	if perms := TranslateToCodexPermissions(params.Capabilities); perms != nil {
+		if perms.BypassSandbox {
+			parts = append(parts, "--dangerously-bypass-approvals-and-sandbox")
+		} else if perms.FullAuto {
+			parts = append(parts, "--full-auto")
+		} else {
+			if perms.SandboxMode != "" {
+				parts = append(parts, "--sandbox", perms.SandboxMode)
+			}
+			if perms.ApprovalPolicy != "" {
+				parts = append(parts, "-a", perms.ApprovalPolicy)
+			}
+		}
+		if perms.Search {
+			parts = append(parts, "--search")
+		}
+	}
+
+	// User-provided flags (translate Claude-specific flags)
+	claudeOnlyFlags := map[string]bool{
+		"--settings": true, "--session-id": true, "--resume": true,
+	}
 	for _, flag := range params.Flags {
-		// Translate Claude-specific flags to Codex equivalents
 		if flag == "--dangerously-skip-permissions" {
 			flag = "--full-auto"
+		} else if claudeOnlyFlags[flag] {
+			slog.Warn("Claude-specific flag passed to Codex agent, may not work as expected", "flag", flag)
 		}
 		parts = append(parts, flag)
 	}
 
-	// Build combined prompt: protocol + board system prompt + action prompt
-	// Codex doesn't have a --system-prompt flag, so we prepend instructions
-	// to the positional PROMPT argument
-	var promptParts []string
-
-	// Add protocol content
-	if proto := readProtocolFile(params.ProtocolPath); proto != "" {
-		promptParts = append(promptParts, proto)
-	}
-
-	// Add board system prompt (CLI usage instructions)
-	boardSysPrompt := BuildBoardSystemPrompt(params.BoardName, params.Role, "", params.PromptOverrides, params.BoardType)
-	if boardSysPrompt != "" {
-		promptParts = append(promptParts, boardSysPrompt)
-	}
-
-	// Add action prompt (what to do first)
+	// Action prompt as separate positional argument
 	actionPrompt := BuildBoardActionPrompt(params.BoardName, params.Role, params.Prompt, params.PromptOverrides, params.BoardType)
-	if actionPrompt != "" {
-		promptParts = append(promptParts, actionPrompt)
-	} else if params.Prompt != "" {
-		promptParts = append(promptParts, params.Prompt)
+	if actionPrompt == "" {
+		actionPrompt = params.Prompt
 	}
 
-	if len(promptParts) > 0 {
-		combined := strings.Join(promptParts, "\n\n")
-		promptFile := writeTempFile("codex_prompt", params.SessionID, "txt", []byte(combined))
+	if actionPrompt != "" {
+		promptFile := writeTempFile("codex_prompt", params.SessionID, "txt", []byte(actionPrompt))
 		parts = append(parts, FormatPromptFileArg(promptFile))
 	}
 
 	return strings.Join(parts, " ")
 }
-

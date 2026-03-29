@@ -110,8 +110,11 @@ func TranslatePermissions(agentType string, caps *Capabilities) any {
 
 // CodexPermissions represents codex-cli sandbox/permission settings.
 type CodexPermissions struct {
-	FullAuto bool     `json:"full_auto,omitempty"`
-	Allow    []string `json:"allow,omitempty"`
+	FullAuto       bool   `json:"full_auto,omitempty"`
+	BypassSandbox  bool   `json:"bypass_sandbox,omitempty"`
+	SandboxMode    string `json:"sandbox_mode,omitempty"`    // "read-only", "workspace-write", "danger-full-access"
+	ApprovalPolicy string `json:"approval_policy,omitempty"` // "untrusted", "on-request", "never"
+	Search         bool   `json:"search,omitempty"`
 }
 
 // TranslateToCodexPermissions converts Coral capabilities to Codex CLI flags.
@@ -119,30 +122,107 @@ func TranslateToCodexPermissions(caps *Capabilities) *CodexPermissions {
 	if caps.IsEmpty() {
 		return nil
 	}
-	// Codex uses --full-auto for unrestricted access
+
+	allowSet := map[string]bool{}
 	for _, cap := range caps.Allow {
-		if cap == CapShell && len(caps.Deny) == 0 {
-			return &CodexPermissions{FullAuto: true}
-		}
+		allowSet[cap] = true
 	}
-	// Otherwise pass through as allow list
-	return &CodexPermissions{Allow: caps.Allow}
+	hasDeny := len(caps.Deny) > 0
+
+	perms := &CodexPermissions{}
+
+	// Check for web_access → --search
+	if allowSet[CapWebAccess] {
+		perms.Search = true
+	}
+
+	// Full access (all major caps, no deny) → bypass sandbox entirely.
+	// Design decision: this matches the "full_access" preset from the spec. The combination
+	// of CapShell + CapFileRead + CapFileWrite + CapGitWrite with no deny list represents
+	// an explicitly unrestricted agent. Individual caps (e.g. CapGitWrite alone) do NOT
+	// trigger bypass — only the full combination does.
+	if allowSet[CapShell] && allowSet[CapFileRead] && allowSet[CapFileWrite] && allowSet[CapGitWrite] && !hasDeny {
+		perms.BypassSandbox = true
+		return perms
+	}
+
+	// Shell with no deny → --full-auto (workspace-write + on-request)
+	if allowSet[CapShell] && !hasDeny {
+		perms.FullAuto = true
+		return perms
+	}
+
+	// Shell with deny list → workspace-write but untrusted approval
+	if allowSet[CapShell] && hasDeny {
+		perms.SandboxMode = "workspace-write"
+		perms.ApprovalPolicy = "untrusted"
+		return perms
+	}
+
+	// file_read + file_write → workspace-write, untrusted
+	if allowSet[CapFileRead] && allowSet[CapFileWrite] {
+		perms.SandboxMode = "workspace-write"
+		perms.ApprovalPolicy = "untrusted"
+		return perms
+	}
+
+	// file_read only → read-only, untrusted
+	if allowSet[CapFileRead] {
+		perms.SandboxMode = "read-only"
+		perms.ApprovalPolicy = "untrusted"
+		return perms
+	}
+
+	// Default: workspace-write with untrusted
+	perms.SandboxMode = "workspace-write"
+	perms.ApprovalPolicy = "untrusted"
+	return perms
 }
 
-// GeminiPermissions is a stub for Gemini CLI permissions.
+// GeminiPermissions represents Gemini CLI permission settings.
 type GeminiPermissions struct {
-	// Gemini CLI does not currently have a permission model.
-	// This is a placeholder for future support.
-	Allow []string `json:"allow,omitempty"`
+	ApprovalMode string `json:"approval_mode,omitempty"` // "default", "auto_edit", "yolo", "plan"
+	Sandbox      bool   `json:"sandbox,omitempty"`
 }
 
-// TranslateToGeminiPermissions converts Coral capabilities to Gemini settings.
+// TranslateToGeminiPermissions converts Coral capabilities to Gemini CLI flags.
 func TranslateToGeminiPermissions(caps *Capabilities) *GeminiPermissions {
 	if caps.IsEmpty() {
 		return nil
 	}
-	// Gemini has no native permission system; pass through for informational purposes
-	return &GeminiPermissions{Allow: caps.Allow}
+
+	allowSet := map[string]bool{}
+	for _, cap := range caps.Allow {
+		allowSet[cap] = true
+	}
+
+	// Full access (shell + file_write + no deny) → yolo
+	if allowSet[CapShell] && allowSet[CapFileWrite] && len(caps.Deny) == 0 {
+		return &GeminiPermissions{ApprovalMode: "yolo"}
+	}
+
+	// Shell + file_write with restrictions → auto_edit
+	if allowSet[CapShell] && allowSet[CapFileWrite] {
+		return &GeminiPermissions{ApprovalMode: "auto_edit"}
+	}
+
+	// Shell without file_write → auto_edit (shell implies some write)
+	if allowSet[CapShell] {
+		return &GeminiPermissions{ApprovalMode: "auto_edit"}
+	}
+
+	// file_read only → plan mode (read-only)
+	if allowSet[CapFileRead] && !allowSet[CapFileWrite] && !allowSet[CapShell] {
+		return &GeminiPermissions{ApprovalMode: "plan"}
+	}
+
+	// file_read + file_write → auto_edit
+	if allowSet[CapFileRead] && allowSet[CapFileWrite] {
+		return &GeminiPermissions{ApprovalMode: "auto_edit"}
+	}
+
+	// Default
+	return &GeminiPermissions{ApprovalMode: "default"}
 }
 
 // Preset permission profiles for built-in agent roles.

@@ -555,6 +555,343 @@ else
     warn "Could not find agents on $MENTION_BOARD for mention test"
 fi
 
+# ── Phase 3.6: Cross-board notification isolation ──────────────────────
+# Verifies that when the same role name exists on multiple boards, notifications
+# target the correct board (regression test for stale subscription lookup bug).
+log ""
+log "Phase 3.6: Cross-board notification isolation..."
+
+if [[ $TEAMS -ge 2 ]]; then
+    XBOARD1="stress-team-1"
+    XBOARD2="stress-team-2"
+
+    # Find an agent on board-1 and one on board-2 with matching display_names
+    XBOARD1_AGENTS=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json
+sessions = json.load(sys.stdin)
+board1 = [s.get('display_name','') for s in sessions if s.get('board_project') == '${XBOARD1}']
+print('\n'.join(board1[:1]))
+" 2>/dev/null || true)
+    XBOARD2_AGENTS=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json
+sessions = json.load(sys.stdin)
+board2 = [s for s in sessions if s.get('board_project') == '${XBOARD2}']
+# Get first two agents: one to post, one to receive
+for s in board2[:2]:
+    print(s.get('display_name',''))
+" 2>/dev/null || true)
+
+    XBOARD2_TARGET=$(echo "$XBOARD2_AGENTS" | head -1)
+    XBOARD2_SENDER=$(echo "$XBOARD2_AGENTS" | tail -1)
+
+    if [[ -n "$XBOARD2_TARGET" ]] && [[ -n "$XBOARD2_SENDER" ]] && [[ "$XBOARD2_TARGET" != "$XBOARD2_SENDER" ]]; then
+        XBOARD2_TARGET_ENC=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${XBOARD2_TARGET}', safe=''))" 2>/dev/null)
+        XBOARD2_SENDER_ENC=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${XBOARD2_SENDER}', safe=''))" 2>/dev/null)
+
+        # Clear target's unread on board-2
+        api GET "/api/board/${XBOARD2}/messages?subscriber_id=${XBOARD2_TARGET_ENC}" > /dev/null 2>&1
+
+        # Post a message on board-2 mentioning the target
+        XBODY=$(python3 -c "
+import json
+print(json.dumps({'subscriber_id': '${XBOARD2_SENDER}', 'content': '@${XBOARD2_TARGET} cross-board notification test'}))
+" 2>/dev/null)
+        api POST "/api/board/${XBOARD2}/messages" -H "Content-Type: application/json" -d "$XBODY" > /dev/null 2>&1
+        sleep 1
+
+        # Check unread on board-2 for the target — should have unread
+        XUNREAD2=$(api GET "/api/board/${XBOARD2}/messages/check?subscriber_id=${XBOARD2_TARGET_ENC}" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('unread', data.get('count', 0)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+        # Check unread on board-1 for the same display name — should have 0
+        XUNREAD1=$(api GET "/api/board/${XBOARD1}/messages/check?subscriber_id=${XBOARD2_TARGET_ENC}" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('unread', data.get('count', 0)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+        log "  Cross-board test: mentioned @${XBOARD2_TARGET} on ${XBOARD2}"
+        log "    board-2 unread=$XUNREAD2, board-1 unread=$XUNREAD1"
+
+        if [[ "$XUNREAD2" -gt 0 ]]; then
+            pass "Cross-board: notification targets correct board (board-2 unread=$XUNREAD2)"
+        else
+            fail "Cross-board: expected unread on board-2 for @${XBOARD2_TARGET}"
+        fi
+        # Board-1 may have unread from other activity, so we just log (not fail)
+    else
+        warn "Could not find distinct agents on $XBOARD2 for cross-board test"
+    fi
+else
+    warn "Need at least 2 teams for cross-board notification test (have $TEAMS)"
+fi
+
+# ── Phase 3.7: Server restart — state preservation ────────────────────
+# Shut down the server process mid-test, restart it, and verify that all
+# persistent state (sessions DB, board messages, subscriptions, unread
+# cursors) survives the restart without loss.
+log ""
+log "Phase 3.7: Server restart — state preservation..."
+
+# ── Snapshot state BEFORE restart ──────────────────────────────────────
+PRE_RESTART_SESSIONS=$(api GET /api/sessions/live 2>/dev/null || echo "[]")
+PRE_RESTART_SESSION_COUNT=$(echo "$PRE_RESTART_SESSIONS" | python3 -c "
+import sys, json
+try: print(len(json.load(sys.stdin)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+PRE_RESTART_BOARDS=$(api GET /api/board/projects 2>/dev/null || echo "[]")
+PRE_RESTART_BOARD_COUNT=$(echo "$PRE_RESTART_BOARDS" | python3 -c "
+import sys, json
+try: print(len(json.load(sys.stdin)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+# Capture per-board message counts and subscriber counts
+PRE_RESTART_BOARD_STATE=$(echo "$PRE_RESTART_BOARDS" | python3 -c "
+import sys, json
+try:
+    boards = json.load(sys.stdin)
+    for b in sorted(boards, key=lambda x: x.get('project','')):
+        print(f\"{b['project']}|{b.get('message_count',0)}|{b.get('subscriber_count',0)}\")
+except: pass
+" 2>/dev/null || true)
+
+# Capture session IDs and board assignments
+PRE_RESTART_SESSION_IDS=$(echo "$PRE_RESTART_SESSIONS" | python3 -c "
+import sys, json
+try:
+    for s in sorted(json.load(sys.stdin), key=lambda x: x.get('session_id','')):
+        print(f\"{s.get('session_id','')}|{s.get('board_project','')}|{s.get('display_name','')}\")
+except: pass
+" 2>/dev/null || true)
+
+# Post a marker message on each board so we can verify it survives restart
+for t in $(seq 1 $TEAMS); do
+    RESTART_BOARD="stress-team-${t}"
+    RESTART_SENDER=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json, urllib.parse
+for s in json.load(sys.stdin):
+    if s.get('board_project') == '${RESTART_BOARD}':
+        print(s.get('display_name', ''))
+        break
+" 2>/dev/null || true)
+    if [[ -n "$RESTART_SENDER" ]]; then
+        MARKER_BODY=$(python3 -c "
+import json
+print(json.dumps({'subscriber_id': '${RESTART_SENDER}', 'content': 'RESTART_MARKER_${t}: message posted before server restart'}))
+" 2>/dev/null)
+        api POST "/api/board/${RESTART_BOARD}/messages" -H "Content-Type: application/json" -d "$MARKER_BODY" > /dev/null 2>&1
+    fi
+done
+
+# Re-snapshot board state after marker messages
+PRE_RESTART_MSG_COUNTS=""
+for t in $(seq 1 $TEAMS); do
+    RESTART_BOARD="stress-team-${t}"
+    MC=$(api GET "/api/board/${RESTART_BOARD}/messages/all" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    msgs = data if isinstance(data, list) else data.get('messages', [])
+    print(len(msgs))
+except: print(0)
+" 2>/dev/null || echo "0")
+    PRE_RESTART_MSG_COUNTS="${PRE_RESTART_MSG_COUNTS}${RESTART_BOARD}=${MC} "
+done
+
+log "  Pre-restart state:"
+log "    Sessions: $PRE_RESTART_SESSION_COUNT"
+log "    Boards: $PRE_RESTART_BOARD_COUNT"
+log "    Messages: $PRE_RESTART_MSG_COUNTS"
+
+# ── Kill the server ────────────────────────────────────────────────────
+log "  Stopping server (PID $SERVER_PID)..."
+kill "$SERVER_PID" 2>/dev/null || true
+wait "$SERVER_PID" 2>/dev/null || true
+SERVER_PID=""
+sleep 2
+
+# Verify server is actually down
+if curl -s --max-time 2 "http://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
+    fail "Server still responding after kill — not a clean shutdown"
+else
+    log "  Server stopped"
+fi
+
+# ── Restart the server ─────────────────────────────────────────────────
+log "  Restarting server..."
+"$CORAL_BIN" --home "$DATA_DIR" --host 127.0.0.1 --port "$PORT" --backend "$BACKEND" --no-browser >> "$LOG_FILE" 2>&1 &
+SERVER_PID=$!
+log "  New server PID: $SERVER_PID"
+
+if wait_for_server; then
+    pass "Server restarted successfully"
+else
+    fail "Server failed to restart within 30s"
+    cat "$LOG_FILE" | tail -30
+    exit 1
+fi
+
+# Re-configure mock-agent CLI (settings are in DB, but verify)
+SETTINGS_BODY=$(cat <<EOJSON
+{"cli_path_claude":"${MOCK_AGENT_BIN}"}
+EOJSON
+)
+api PUT /api/settings -H "Content-Type: application/json" -d "$SETTINGS_BODY" > /dev/null 2>&1
+
+# ── Verify state AFTER restart ─────────────────────────────────────────
+sleep 2  # Brief settle time for DB reconnection
+
+# 1. Check board projects survived
+POST_RESTART_BOARDS=$(api GET /api/board/projects 2>/dev/null || echo "[]")
+POST_RESTART_BOARD_COUNT=$(echo "$POST_RESTART_BOARDS" | python3 -c "
+import sys, json
+try: print(len(json.load(sys.stdin)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+if [[ "$POST_RESTART_BOARD_COUNT" -eq "$PRE_RESTART_BOARD_COUNT" ]]; then
+    pass "Server restart: board count preserved ($POST_RESTART_BOARD_COUNT boards)"
+else
+    fail "Server restart: board count changed ($PRE_RESTART_BOARD_COUNT → $POST_RESTART_BOARD_COUNT)"
+fi
+
+# 2. Check per-board message counts (should be >= pre-restart, mock agents may post more)
+RESTART_MSG_OK=0
+RESTART_MSG_TOTAL=0
+for t in $(seq 1 $TEAMS); do
+    RESTART_BOARD="stress-team-${t}"
+    POST_MC=$(api GET "/api/board/${RESTART_BOARD}/messages/all" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    msgs = data if isinstance(data, list) else data.get('messages', [])
+    print(len(msgs))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+    # Extract pre-restart count for this board
+    PRE_MC=$(echo "$PRE_RESTART_MSG_COUNTS" | grep -o "${RESTART_BOARD}=[0-9]*" | cut -d= -f2)
+    PRE_MC="${PRE_MC:-0}"
+
+    RESTART_MSG_TOTAL=$((RESTART_MSG_TOTAL + 1))
+    if [[ "$POST_MC" -ge "$PRE_MC" ]]; then
+        RESTART_MSG_OK=$((RESTART_MSG_OK + 1))
+        log "    $RESTART_BOARD: $PRE_MC → $POST_MC messages (OK)"
+    else
+        log "    $RESTART_BOARD: $PRE_MC → $POST_MC messages (LOST MESSAGES)"
+    fi
+done
+
+if [[ "$RESTART_MSG_OK" -eq "$RESTART_MSG_TOTAL" ]]; then
+    pass "Server restart: all board messages preserved"
+else
+    fail "Server restart: messages lost on $((RESTART_MSG_TOTAL - RESTART_MSG_OK))/$RESTART_MSG_TOTAL boards"
+fi
+
+# 3. Check marker messages are still readable
+MARKERS_FOUND=0
+for t in $(seq 1 $TEAMS); do
+    RESTART_BOARD="stress-team-${t}"
+    MARKER_FOUND=$(api GET "/api/board/${RESTART_BOARD}/messages/all" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    msgs = data if isinstance(data, list) else data.get('messages', [])
+    found = any('RESTART_MARKER_${t}' in m.get('content','') for m in msgs)
+    print(1 if found else 0)
+except: print(0)
+" 2>/dev/null || echo "0")
+    if [[ "$MARKER_FOUND" == "1" ]]; then
+        MARKERS_FOUND=$((MARKERS_FOUND + 1))
+    fi
+done
+
+if [[ "$MARKERS_FOUND" -eq "$TEAMS" ]]; then
+    pass "Server restart: all $TEAMS marker messages survived restart"
+else
+    fail "Server restart: only $MARKERS_FOUND/$TEAMS marker messages found after restart"
+fi
+
+# 4. Check board subscribers survived
+POST_RESTART_BOARD_STATE=$(echo "$POST_RESTART_BOARDS" | python3 -c "
+import sys, json
+try:
+    boards = json.load(sys.stdin)
+    for b in sorted(boards, key=lambda x: x.get('project','')):
+        print(f\"{b['project']}|{b.get('message_count',0)}|{b.get('subscriber_count',0)}\")
+except: pass
+" 2>/dev/null || true)
+
+SUBS_MATCH=true
+while IFS='|' read -r project msgs subs; do
+    [[ -z "$project" ]] && continue
+    PRE_SUBS=$(echo "$PRE_RESTART_BOARD_STATE" | grep "^${project}|" | cut -d'|' -f3)
+    if [[ "$subs" -ne "${PRE_SUBS:-0}" ]]; then
+        log "    $project: subscriber count changed ($PRE_SUBS → $subs)"
+        SUBS_MATCH=false
+    fi
+done <<< "$POST_RESTART_BOARD_STATE"
+
+if [[ "$SUBS_MATCH" == "true" ]]; then
+    pass "Server restart: board subscriber counts preserved"
+else
+    fail "Server restart: board subscriber counts changed after restart"
+fi
+
+# 5. Check sessions DB survived (live_sessions may differ since tmux sessions are still running)
+POST_RESTART_SESSIONS=$(api GET /api/sessions/live 2>/dev/null || echo "[]")
+POST_RESTART_SESSION_COUNT=$(echo "$POST_RESTART_SESSIONS" | python3 -c "
+import sys, json
+try: print(len(json.load(sys.stdin)))
+except: print(0)
+" 2>/dev/null || echo "0")
+
+# Sessions should still be in the DB (agents are still running in tmux)
+if [[ "$POST_RESTART_SESSION_COUNT" -gt 0 ]]; then
+    pass "Server restart: sessions DB has $POST_RESTART_SESSION_COUNT live sessions"
+else
+    fail "Server restart: sessions DB is empty after restart"
+fi
+
+# 6. Verify the server is fully functional by posting a new message
+FUNCTIONAL_BOARD="stress-team-1"
+FUNCTIONAL_SENDER=$(api GET /api/sessions/live 2>/dev/null | python3 -c "
+import sys, json
+for s in json.load(sys.stdin):
+    if s.get('board_project') == '${FUNCTIONAL_BOARD}':
+        print(s.get('display_name', ''))
+        break
+" 2>/dev/null || true)
+
+if [[ -n "$FUNCTIONAL_SENDER" ]]; then
+    POST_BODY=$(python3 -c "
+import json
+print(json.dumps({'subscriber_id': '${FUNCTIONAL_SENDER}', 'content': 'Post-restart functional test message'}))
+" 2>/dev/null)
+    POST_RESP=$(api POST "/api/board/${FUNCTIONAL_BOARD}/messages" -H "Content-Type: application/json" -d "$POST_BODY" 2>/dev/null || echo "")
+    if echo "$POST_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('id',0) > 0" 2>/dev/null; then
+        pass "Server restart: post-restart message posting works"
+    else
+        fail "Server restart: failed to post message after restart"
+    fi
+else
+    warn "Server restart: no agent found for post-restart functional test"
+fi
+
+log "  Post-restart state:"
+log "    Sessions: $POST_RESTART_SESSION_COUNT (was $PRE_RESTART_SESSION_COUNT)"
+log "    Boards: $POST_RESTART_BOARD_COUNT"
+
 # ── Phase 4: Sleep/wake cycles ──────────────────────────────────────────
 log ""
 log "Phase 4: Sleep/wake cycles..."

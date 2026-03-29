@@ -109,11 +109,15 @@ func (h *SystemHandler) PutSettings(w http.ResponseWriter, r *http.Request) {
 
 const DefaultOrchestratorSystemPrompt = `Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments to the team.`
 
-const DefaultWorkerSystemPrompt = `Post a message with coral-board post "<your introduction>" that introduces yourself, then wait for instructions from the Orchestrator.`
+const DefaultWorkerSystemPrompt = `Post a message with coral-board post "<your introduction>" that introduces yourself, then STOP and wait. Do NOT poll the message board in a loop. Coral will notify you when there are new messages.`
 
-const DefaultOrchestratorPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments. When you have a new message, Coral will notify you.`
+const DefaultOrchestratorPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments.
 
-const DefaultWorkerPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then wait for Coral to notify you of new messages.`
+CRITICAL: Do NOT poll or loop on 'coral-board read'. After posting your introduction or any message, STOP. Coral will send you a notification (as a user message) when new messages arrive. Only run 'coral-board read' after receiving such a notification.`
+
+const DefaultWorkerPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then STOP.
+
+CRITICAL: Do NOT poll or loop on 'coral-board read'. Coral will automatically notify you (as a user message) when new messages arrive — only run 'coral-board read' after receiving a notification. Between notifications, do nothing and wait.`
 
 // GetDefaultPrompts returns the hardcoded default prompt templates.
 // GET /api/settings/default-prompts

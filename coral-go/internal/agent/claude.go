@@ -2,7 +2,6 @@ package agent
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,10 +100,9 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		merged["env"] = envMap
 	}
 
-	// Write settings to temp file
-	settingsFile := filepath.Join(os.TempDir(), fmt.Sprintf("coral_settings_%s.json", effectiveID))
+	// Write settings to temp file using writeTempFile for safe creation
 	data, _ := json.MarshalIndent(merged, "", "  ")
-	os.WriteFile(settingsFile, append(data, '\n'), 0600)
+	settingsFile := writeTempFile("settings", effectiveID, "json", append(data, '\n'))
 	parts = append(parts, "--settings", settingsFile)
 
 	if len(params.Flags) > 0 {
