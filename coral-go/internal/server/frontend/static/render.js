@@ -897,10 +897,17 @@ function _shortPath(fullPath, segments = 2) {
     return parts.length <= segments ? fullPath : '…/' + parts.slice(-segments).join('/');
 }
 
-function _renderSessionItem(s, groupName, isCompact, collapsed) {
+function _renderSessionItem(s, groupName, isCompact, collapsed, teamDefaultDir) {
     const dotClass = getDotClass(s);
     const isActive = state.currentSession && state.currentSession.type === "live" && state.currentSession.session_id === s.session_id;
-    const typeTag = s.agent_type && s.agent_type !== "claude" ? ` <span class="badge ${escapeHtml(s.agent_type)}">${escapeHtml(s.agent_type)}</span>` : "";
+
+    // Spec: remove agent type from the default row layout
+    const typeTag = "";
+
+    // Directory override chip
+    const hasDirOverride = teamDefaultDir && s.working_directory && s.working_directory !== teamDefaultDir;
+    const dirChip = hasDirOverride ? ` <span class="agent-dir-chip" title="${escapeAttr(s.working_directory)}">${escapeHtml(_shortPath(s.working_directory, 1))}</span>` : "";
+
     // Branch is shown at folder level, not per agent
     const branchTag = "";
     const waitingBadge = s.waiting_for_input
@@ -908,7 +915,7 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
         : '';
     const isTerminal = s.agent_type === "terminal";
     const sid = s.session_id ? escapeAttr(s.session_id) : "";
-    const goalText = s.summary ? escapeHtml(s.summary) : null;
+    const goalText = (isActive && s.summary) ? escapeHtml(s.summary) : null;
     const goal = goalText || "";
     const goalBtn = (!goalText && !isTerminal) ? `<button class="sidebar-goal-btn" onclick="event.stopPropagation(); requestGoal('${escapeAttr(s.name)}', '${escapeAttr(s.agent_type)}', '${sid}')" title="Generate Goal"><span class="material-icons" style="font-size:16px">auto_awesome</span></button>` : "";
     const displayLabel = s.display_name || (isCompact && s.board_job_title) || (isTerminal ? "Terminal" : "Agent");
@@ -1015,7 +1022,7 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
         <span class="session-dot ${dotClass}"></span>
         <div class="session-info">
             <div class="session-name-row">
-                <span class="session-label">${isTerminal ? '<svg class="terminal-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg> ' : ''}${sleepIcon}${agentIcon}${orchIcon}${escapeHtml(displayLabel)}${typeTag}</span>
+                <span class="session-label">${isTerminal ? '<svg class="terminal-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 8,8 4,12"/><line x1="9" y1="12" x2="13" y2="12"/></svg> ' : ''}${sleepIcon}${agentIcon}${orchIcon}${escapeHtml(displayLabel)}${typeTag}${dirChip}</span>
                 <span class="session-name-spacer"></span>
                 ${waitingBadge}
                 ${goalBtn}
@@ -1035,6 +1042,58 @@ function _renderSessionItem(s, groupName, isCompact, collapsed) {
         </div>
         <div class="session-tooltip">${tooltip}</div>
     </li>`;
+}
+
+function _renderAgentListWithSubgroups(agents, teamDefaultDir, isCompact, groupName) {
+    if (!agents.length) return "";
+
+    // Group agents by directory
+    const clusters = {};
+    for (const s of agents) {
+        const dir = s.working_directory || teamDefaultDir || "";
+        if (!clusters[dir]) clusters[dir] = [];
+        clusters[dir].push(s);
+    }
+
+    const clusterKeys = Object.keys(clusters);
+    const numClusters = clusterKeys.length;
+    const numDiffer = agents.filter(s => {
+        const d = s.working_directory || teamDefaultDir;
+        return d && d !== teamDefaultDir;
+    }).length;
+
+    // Phase 3 criteria: 3+ agents differ or 2+ directory clusters exist
+    const shouldSubgroup = numDiffer >= 3 || numClusters >= 2;
+
+    if (!shouldSubgroup) {
+        return agents.map(s => _renderSessionItem(s, groupName, isCompact, false, teamDefaultDir)).join('');
+    }
+
+    // Sort clusters: put default directory cluster first, then sort by name
+    clusterKeys.sort((a, b) => {
+        if (a === teamDefaultDir) return -1;
+        if (b === teamDefaultDir) return 1;
+        return a.localeCompare(b);
+    });
+
+    let html = "";
+    for (const dir of clusterKeys) {
+        const clusterAgents = clusters[dir];
+        const isDefault = dir === teamDefaultDir;
+
+        // Render subgroup header
+        const shortDir = _shortPath(dir, 1);
+        const fullDir = dir || "No directory";
+        html += `<li class="agent-subgroup-header" title="${escapeAttr(fullDir)}">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg>
+            <span>${escapeHtml(isDefault ? "Team Root" : (shortDir || "No Directory"))}</span>
+        </li>`;
+
+        for (const s of clusterAgents) {
+            html += _renderSessionItem(s, groupName, isCompact, false, teamDefaultDir);
+        }
+    }
+    return html;
 }
 
 export function toggleGroupByTeam() {
@@ -1158,11 +1217,12 @@ export function renderLiveSessions(sessions) {
                 </button>
             </div>
         </div>`;
+        const teamDirLine = boardWorkDir ? `<div class="board-card-dir" title="${escapeAttr(boardWorkDir)}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg> ${escapeHtml(_shortPath(boardWorkDir, 3))}</div>` : '';
         const teamSubline = `<div class="board-card-subline"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 11a4 4 0 0 1 4 4v2"/></svg> Agent Team · ${boardSessions.length} agents</div>`;
         const sleepingClass = boardIsSleeping ? ' team-sleeping' : '';
         html += `<li class="session-board-card session-board-card-toplevel${sleepingClass}" style="border-left-color: ${accentColor}">
             <div class="session-group-header board-card-header" data-group-name="${escapeAttr(boardName)}" onclick="toggleGroupCollapse('${escapeAttr(boardName)}')">
-                <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)}${boardSleepIcon}</div>${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
+                <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)}${boardSleepIcon}</div>${teamDirLine}${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
             </div>
             <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
 
@@ -1175,19 +1235,8 @@ export function renderLiveSessions(sessions) {
             if (!aOrch && bOrch) return 1;
             return 0;
         });
-        for (const s of orderedBoard) {
-            html += _renderSessionItem(s, boardName, true);
-        }
-        html += `</ul>`;
-        // Folder footer card showing working directory
-        const folderPath = boardWorkDir;
-        const copyBtn = `<button class="folder-copy-btn" onclick="event.stopPropagation(); copyFolderPath('${escapeAttr(folderPath)}')" title="Copy path"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M5.5 10.5h-1a1.5 1.5 0 0 1-1.5-1.5v-5a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5v1"/></svg></button>`;
-        html += `<div class="board-card-folder-footer">
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg>
-            <span class="board-card-folder-path">${escapeHtml(_shortPath(folderPath, 3))}</span>
-            ${copyBtn}
-        </div>`;
-        html += `</li>`;
+        html += _renderAgentListWithSubgroups(orderedBoard, boardWorkDir, true, boardName);
+        html += `</ul></li>`;
     }
 
     // Step 3: Render standalone agents grouped by folder
@@ -1224,14 +1273,13 @@ export function renderLiveSessions(sessions) {
         const fTags = getFolderTags(groupName);
         const tagDots = renderFolderTagPills(fTags);
         const groupWorkDir = sorted[0]?.working_directory || '';
+        const groupDirLine = groupWorkDir ? `<div class="board-card-dir" title="${escapeAttr(groupWorkDir)}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg> ${escapeHtml(_shortPath(groupWorkDir, 3))}</div>` : '';
         const copyBtn = `<button class="folder-copy-btn" onclick="event.stopPropagation(); copyFolderPath('${escapeAttr(groupWorkDir)}')" title="Copy path"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M5.5 10.5h-1a1.5 1.5 0 0 1-1.5-1.5v-5a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5v1"/></svg></button>`;
         html += `<li class="session-group-header" data-group-name="${escapeAttr(groupName)}" onclick="toggleGroupCollapse('${escapeAttr(groupName)}')">
-            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${copyBtn}${groupKebab}</li>`;
+            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupDirLine}${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${copyBtn}${groupKebab}</li>`;
 
         if (!collapsed) {
-            for (const s of sorted) {
-                html += _renderSessionItem(s, groupName, false);
-            }
+            html += _renderAgentListWithSubgroups(sorted, groupWorkDir, false, groupName);
         }
     }
 
@@ -1279,9 +1327,10 @@ export function renderLiveSessions(sessions) {
         const fTags = getFolderTags(groupName);
         const tagDots = renderFolderTagPills(fTags);
         const groupWorkDir = sorted[0]?.working_directory || '';
+        const groupDirLine = groupWorkDir ? `<div class="board-card-dir" title="${escapeAttr(groupWorkDir)}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg> ${escapeHtml(_shortPath(groupWorkDir, 3))}</div>` : '';
         const copyBtn = `<button class="folder-copy-btn" onclick="event.stopPropagation(); copyFolderPath('${escapeAttr(groupWorkDir)}')" title="Copy path"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M5.5 10.5h-1a1.5 1.5 0 0 1-1.5-1.5v-5a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5v1"/></svg></button>`;
         html += `<li class="session-group-header" data-group-name="${escapeAttr(groupName)}" onclick="toggleGroupCollapse('${escapeAttr(groupName)}')">
-            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${copyBtn}${groupKebab}</li>`;
+            <span class="group-chevron">${chevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(groupName)}${countBadge}</div>${groupDirLine}${groupBranchLine}</div>${tagDots}<span class="session-name-spacer"></span>${copyBtn}${groupKebab}</li>`;
 
         if (collapsed) {
             // Skip rendering items when collapsed
@@ -1339,10 +1388,11 @@ export function renderLiveSessions(sessions) {
                         </button>
                     </div>
                 </div>`;
+                const teamDirLine = boardWorkDir ? `<div class="board-card-dir" title="${escapeAttr(boardWorkDir)}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3H3a1 1 0 0 0-1 1z"/></svg> ${escapeHtml(_shortPath(boardWorkDir, 3))}</div>` : '';
                 const teamSubline = `<div class="board-card-subline"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 11a4 4 0 0 1 4 4v2"/></svg> Agent Team</div>`;
                 html += `<li class="session-board-card" style="border-left-color: ${accentColor}">
                     <div class="session-group-header board-card-header" onclick="toggleGroupCollapse('${escapeAttr(boardName)}')">
-                        <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)}${boardSleepIcon} <span class="session-group-count">${boardSessions.length}</span></div>${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
+                        <span class="group-chevron">${bChevron}</span><div class="group-header-text"><div class="group-name-line">${escapeHtml(boardName)}${boardSleepIcon} <span class="session-group-count">${boardSessions.length}</span></div>${teamDirLine}${teamSubline}</div><span class="session-name-spacer"></span>${boardLink}${bKebab}
                     </div>
                     <ul class="board-card-agents${boardCollapsed ? ' board-card-collapsed' : ''}">`;
                 const orderedBoardNested = _sortByOrder(boardSessions);
@@ -1353,16 +1403,12 @@ export function renderLiveSessions(sessions) {
                     if (!aOrch && bOrch) return 1;
                     return 0;
                 });
-                for (const s of orderedBoardNested) {
-                    html += _renderSessionItem(s, groupName, true);
-                }
+                html += _renderAgentListWithSubgroups(orderedBoardNested, boardWorkDir, true, groupName);
                 html += `</ul></li>`;
             }
 
-            // Render unboarded items as flat list
-            for (const s of unboardedItems) {
-                html += _renderSessionItem(s, groupName, false);
-            }
+            // Render unboarded items as flat list with subgroups
+            html += _renderAgentListWithSubgroups(unboardedItems, groupWorkDir, false, groupName);
         }
     }
 

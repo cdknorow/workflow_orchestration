@@ -288,6 +288,58 @@
     margin-top: 1px;
 }
 
+.board-card-dir {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+.board-card-dir svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.agent-dir-chip {
+    font-size: 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    color: var(--text-muted);
+    padding: 0 4px;
+    border-radius: 4px;
+    margin-left: 4px;
+    white-space: nowrap;
+    opacity: 0.8;
+}
+
+.agent-subgroup-header {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 6px 8px 4px 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    margin-top: 4px;
+    user-select: none;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.agent-subgroup-header:first-child {
+    margin-top: 0;
+}
+
+.agent-subgroup-header svg {
+    opacity: 0.6;
+}
+
 .board-card-agents {
     list-style: none;
     padding: 4px 0 4px 8px;
@@ -849,39 +901,6 @@
 .session-board-card.team-sleeping .group-board-link,
 .session-board-card.team-sleeping .board-card-agents {
     color: var(--text-muted);
-}
-
-.board-card-folder-footer {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 5px 12px 6px 22px;
-    font-size: 10px;
-    color: var(--text-muted);
-    border-top: 1px solid var(--border);
-    opacity: 0.7;
-    height: 24px;
-    box-sizing: border-box;
-}
-
-.board-card-folder-path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    min-width: 0;
-}
-
-.board-card-folder-footer .folder-copy-btn {
-    flex-shrink: 0;
-    display: none;
-    padding: 0 2px;
-    line-height: 1;
-}
-
-.board-card-folder-footer:hover .folder-copy-btn {
-    display: inline-flex;
-    align-items: center;
 }
 
 .agent-folder-path {
