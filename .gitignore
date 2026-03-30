@@ -28,6 +28,13 @@ coral-go/cmd/db-compare/db-compare
 coral-go/agent.test
 *.exe
 
+# Test/dev artifacts
+coral-go/cmd/coral/messageboard.db*
+coral-go/cmd/coral/api_key
+coral-go/cmd/coral/themes/
+coral-go/internal/server/routes/board_state_claude-*.json
+coral-go/new_theme.json
+
 # Frontend bundle backup (created during build, restored after)
 coral-go/internal/server/frontend/static/_src/
 coral-go/internal/server/frontend/static/app.js.map

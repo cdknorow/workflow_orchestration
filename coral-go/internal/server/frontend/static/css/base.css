@@ -44,6 +44,34 @@ body.no-scrollbars {
     scrollbar-width: none;
 }
 
+/* ── Utility classes ──────────────────────────────────────── */
+
+.hidden { display: none; }
+
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.loading-indicator::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: loading-spin 0.6s linear infinite;
+}
+
+@keyframes loading-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* ── Focus-visible outlines for accessibility ──────────────── */
 
 button:focus-visible,

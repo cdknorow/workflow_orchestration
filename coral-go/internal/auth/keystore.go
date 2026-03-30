@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -49,28 +51,39 @@ type KeyStore struct {
 }
 
 // NewKeyStore creates or loads an API key from the given directory.
-func NewKeyStore(coralDir string) *KeyStore {
+func NewKeyStore(coralDir string) (*KeyStore, error) {
 	ks := &KeyStore{
 		keyPath:  filepath.Join(coralDir, "api_key"),
 		sessions: make(map[string]*Session),
 		rateMap:  make(map[string]*rateLimitEntry),
 	}
-	ks.loadOrGenerate()
-	return ks
+	if err := ks.loadOrGenerate(); err != nil {
+		return nil, err
+	}
+	return ks, nil
 }
 
-func (ks *KeyStore) loadOrGenerate() {
+func (ks *KeyStore) loadOrGenerate() error {
 	data, err := os.ReadFile(ks.keyPath)
 	if err == nil {
 		key := strings.TrimSpace(string(data))
 		if len(key) >= keyLength {
 			ks.key = key
-			return
+			return nil
 		}
 	}
-	ks.key = generateToken(keyLength)
-	os.MkdirAll(filepath.Dir(ks.keyPath), 0755)
-	os.WriteFile(ks.keyPath, []byte(ks.key+"\n"), 0600)
+	key, err := generateToken(keyLength)
+	if err != nil {
+		return fmt.Errorf("generate API key: %w", err)
+	}
+	ks.key = key
+	if err := os.MkdirAll(filepath.Dir(ks.keyPath), 0755); err != nil {
+		log.Printf("[auth] warning: failed to create key directory: %v", err)
+	}
+	if err := os.WriteFile(ks.keyPath, []byte(ks.key+"\n"), 0600); err != nil {
+		log.Printf("[auth] warning: failed to persist API key to disk: %v", err)
+	}
+	return nil
 }
 
 // Key returns the current API key.
@@ -81,12 +94,18 @@ func (ks *KeyStore) Key() string {
 }
 
 // RegenerateKey generates a new API key and persists it.
-func (ks *KeyStore) RegenerateKey() string {
+func (ks *KeyStore) RegenerateKey() (string, error) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
-	ks.key = generateToken(keyLength)
-	os.WriteFile(ks.keyPath, []byte(ks.key+"\n"), 0600)
-	return ks.key
+	key, err := generateToken(keyLength)
+	if err != nil {
+		return "", fmt.Errorf("regenerate API key: %w", err)
+	}
+	ks.key = key
+	if err := os.WriteFile(ks.keyPath, []byte(ks.key+"\n"), 0600); err != nil {
+		log.Printf("[auth] warning: failed to persist regenerated key to disk: %v", err)
+	}
+	return ks.key, nil
 }
 
 // ValidateKey checks if the given key matches the stored key.
@@ -97,11 +116,14 @@ func (ks *KeyStore) ValidateKey(key string) bool {
 }
 
 // CreateSession creates a new authenticated session and returns the token.
-func (ks *KeyStore) CreateSession(clientIP, userAgent string) string {
+func (ks *KeyStore) CreateSession(clientIP, userAgent string) (string, error) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
-	token := generateToken(sessionLength)
+	token, err := generateToken(sessionLength)
+	if err != nil {
+		return "", fmt.Errorf("create session token: %w", err)
+	}
 	ks.sessions[token] = &Session{
 		Token:     token,
 		CreatedAt: time.Now(),
@@ -117,7 +139,7 @@ func (ks *KeyStore) CreateSession(clientIP, userAgent string) string {
 		delete(ks.sessions, oldest)
 	}
 
-	return token
+	return token, nil
 }
 
 // ValidateSession checks if a session token is valid and not expired.
@@ -215,10 +237,10 @@ func SetSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
 	})
 }
 
-func generateToken(length int) string {
+func generateToken(length int) (string, error) {
 	b := make([]byte, length/2)
 	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand failed: " + err.Error())
+		return "", fmt.Errorf("crypto/rand failed: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }

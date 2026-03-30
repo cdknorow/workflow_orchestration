@@ -1949,7 +1949,6 @@ function _truncatePrompt(text, maxLen) {
 }
 
 function _addTeamAgent(defaultName, defaultPrompt, defaultCapabilities, defaultAgentType, defaultModel) {
-    console.log('[coral] _addTeamAgent internal:', { defaultName, promptLen: (defaultPrompt||'').length });
     _teamAgentCounter++;
     const idx = _teamAgentCounter;
     const acfId = `team-agent-acf-${idx}`;
@@ -2111,7 +2110,6 @@ function _addPresetAgent(name) {
 }
 window._addPresetAgent = _addPresetAgent;
 window._addTeamAgent = (name, prompt) => {
-    console.log('[coral] window._addTeamAgent called with:', { name, promptLen: (prompt||'').length });
     _addTeamAgent(name || "", prompt || "");
     const picker = document.getElementById("team-agent-picker");
     if (picker) picker.style.display = "none";
@@ -3057,18 +3055,62 @@ document.addEventListener("click", (e) => {
     if (e.target === confirmModal) window.hideConfirmModal?.();
 });
 
-// Close modals on Escape
+// Close topmost visible modal on Escape and trap focus inside it
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-        hideLaunchModal();
-        hideInfoModal();
-        hideResumeModal();
-        hideSettingsModal();
-        hideRestartModal();
-        const mm = document.getElementById("macro-modal");
-        if (mm) mm.style.display = "none";
-        window.hideWebhookModal?.();
-        window.hideAlertModal?.();
+        // Find topmost visible modal and close only that one
+        const modals = document.querySelectorAll('.modal');
+        for (let i = modals.length - 1; i >= 0; i--) {
+            if (modals[i].style.display !== 'none' && modals[i].offsetParent !== null) {
+                const id = modals[i].id;
+                if (id === 'launch-modal') hideLaunchModal();
+                else if (id === 'info-modal') hideInfoModal();
+                else if (id === 'resume-modal') hideResumeModal();
+                else if (id === 'settings-modal') hideSettingsModal();
+                else if (id === 'restart-modal') hideRestartModal();
+                else if (id === 'macro-modal') modals[i].style.display = 'none';
+                else if (id === 'webhook-modal') window.hideWebhookModal?.();
+                else if (id === 'alert-modal') window.hideAlertModal?.();
+                else if (id === 'confirm-modal') window.hideConfirmModal?.();
+                else if (id === 'prompt-modal') window.hidePromptModal?.();
+                else if (id === 'team-agent-modal') window.hideTeamAgentModal?.();
+                else if (id === 'default-prompts-modal') hideDefaultPromptsModal();
+                else if (id === 'team-wizard-modal') window.hideTeamWizardModal?.();
+                else if (id === 'save-template-modal') modals[i].style.display = 'none';
+                else if (id === 'job-modal') modals[i].style.display = 'none';
+                else if (id === 'quick-launch-modal') modals[i].style.display = 'none';
+                else if (id === 'add-agent-board-modal') window.hideAddAgentBoardModal?.();
+                else if (id === 'custom-view-modal') modals[i].style.display = 'none';
+                else if (id === 'mobile-connect-modal') modals[i].style.display = 'none';
+                else if (id === 'theme-configurator-modal') modals[i].style.display = 'none';
+                else modals[i].style.display = 'none';
+                e.preventDefault();
+                return;
+            }
+        }
+    }
+
+    // Focus trapping: Tab/Shift+Tab stays inside the topmost visible modal
+    if (e.key === "Tab") {
+        const modals = document.querySelectorAll('.modal');
+        for (let i = modals.length - 1; i >= 0; i--) {
+            if (modals[i].style.display !== 'none' && modals[i].offsetParent !== null) {
+                const focusable = modals[i].querySelectorAll(
+                    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+                );
+                if (focusable.length === 0) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+                return;
+            }
+        }
     }
 });
 

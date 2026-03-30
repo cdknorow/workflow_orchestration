@@ -322,7 +322,7 @@ func (h *HistoryHandler) Resummarize(w http.ResponseWriter, r *http.Request) {
 
 	if h.summarizeFn != nil {
 		if err := h.summarizeFn(r.Context(), sid); err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{"error": err.Error()})
+			errInternalServer(w, err.Error())
 			return
 		}
 	}
@@ -398,7 +398,7 @@ func (h *HistoryHandler) GetSessionDetail(w http.ResponseWriter, r *http.Request
 	// Use the JSONL reader to load messages. Pass empty working dir
 	// so it searches all project directories for the session file.
 	messages, _ := h.jsonl.ReadNewMessages(sid, "", "claude")
-	if messages == nil || len(messages) == 0 {
+	if len(messages) == 0 {
 		// Try gemini as fallback
 		h.jsonl.ClearSession(sid)
 		messages, _ = h.jsonl.ReadNewMessages(sid, "", "gemini")

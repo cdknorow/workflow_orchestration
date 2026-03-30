@@ -127,10 +127,13 @@ export function showMessageBoardProjects() {
 // ── Project list view ────────────────────────────────────────────────────
 
 async function loadBoardProjectList() {
+    const ul = document.getElementById('mb-projects-ul');
+    const empty = document.getElementById('mb-projects-empty');
+    // Show loading indicator while fetching
+    empty.style.display = 'none';
+    ul.innerHTML = '<li class="loading-indicator">Loading projects</li>';
     try {
         const projects = await fetchProjects();
-        const ul = document.getElementById('mb-projects-ul');
-        const empty = document.getElementById('mb-projects-empty');
         if (!projects.length) {
             ul.innerHTML = '';
             empty.style.display = '';
@@ -155,6 +158,17 @@ async function loadBoardProjectList() {
 // ── Messages ─────────────────────────────────────────────────────────────
 
 async function loadBoardMessages(project) {
+    const msgsEl = document.getElementById('mb-messages');
+    const empty = document.getElementById('mb-messages-empty');
+    if (empty) empty.style.display = 'none';
+    // Show loading indicator below any existing messages
+    let loadingEl = msgsEl?.querySelector('.loading-indicator');
+    if (!loadingEl && msgsEl) {
+        loadingEl = document.createElement('div');
+        loadingEl.className = 'loading-indicator';
+        loadingEl.textContent = 'Loading messages';
+        msgsEl.appendChild(loadingEl);
+    }
     try {
         // Load the latest page — calculate offset to get the last PAGE_SIZE messages
         const countResult = await fetchMessages(project, 1, 0);

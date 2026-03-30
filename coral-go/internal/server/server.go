@@ -80,7 +80,10 @@ func New(cfg *config.Config, db *store.DB, backend ptymanager.TerminalBackend, t
 	}
 
 	// Initialize API key auth
-	keyStore := auth.NewKeyStore(cfg.CoralDir())
+	keyStore, err := auth.NewKeyStore(cfg.CoralDir())
+	if err != nil {
+		log.Fatalf("Failed to initialize API key store: %v", err)
+	}
 	log.Printf("API Key: %s...", keyStore.Key()[:8])
 
 	s := &Server{

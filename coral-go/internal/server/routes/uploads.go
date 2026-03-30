@@ -43,21 +43,17 @@ func InitUploadDir(coralDir string) {
 	uploadDir = filepath.Join(coralDir, "uploads")
 }
 
-func mustHomeDir() string {
-	home, _ := os.UserHomeDir()
-	return home
-}
 
 // UploadFile handles POST /api/upload — upload an image and return its path.
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(maxFileSize); err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "File too large or invalid multipart form"})
+		errBadRequest(w, "File too large or invalid multipart form")
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "No file provided"})
+		errBadRequest(w, "No file provided")
 		return
 	}
 	defer file.Close()
@@ -88,21 +84,17 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		for k := range allowedExtensions {
 			allowed = append(allowed, k)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"error": fmt.Sprintf("Unsupported file type: %s. Allowed: %s", ext, strings.Join(allowed, ", ")),
-		})
+		errBadRequest(w, fmt.Sprintf("Unsupported file type: %s. Allowed: %s", ext, strings.Join(allowed, ", ")))
 		return
 	}
 
 	content, err := io.ReadAll(io.LimitReader(file, maxFileSize+1))
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "Failed to read file"})
+		errInternalServer(w, "Failed to read file")
 		return
 	}
 	if int64(len(content)) > maxFileSize {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"error": fmt.Sprintf("File too large (%d bytes). Max: %d bytes", len(content), maxFileSize),
-		})
+		errBadRequest(w, fmt.Sprintf("File too large (%d bytes). Max: %d bytes", len(content), maxFileSize))
 		return
 	}
 

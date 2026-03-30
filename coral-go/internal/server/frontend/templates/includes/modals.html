@@ -1,6 +1,6 @@
 {{ define "includes/modals.html" }}
     <!-- Launch Modal -->
-    <div id="launch-modal" class="modal" style="display:none">
+    <div id="launch-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <!-- Step 1: Session type chooser -->
             <div id="launch-step-chooser" class="launch-modal-step">
@@ -93,7 +93,7 @@
                             <details class="team-advanced">
                                 <summary>Advanced</summary>
                                 <div class="team-advanced-body">
-                                    <label>Message Board <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                                    <label>Message Board <span class="text-muted-sm">(optional)</span>:
                                         <select id="launch-board-select" onchange="window._onAgentBoardChange()">
                                             <option value="">None</option>
                                             <option value="__new__">Create new board...</option>
@@ -105,7 +105,7 @@
                                         </label>
                                     </div>
                                     <div id="launch-board-server-row" style="display:none">
-                                        <label>Remote Server <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                                        <label>Remote Server <span class="text-muted-sm">(optional)</span>:
                                             <input type="text" id="launch-board-server" placeholder="e.g. http://remote-machine:8420">
                                         </label>
                                     </div>
@@ -157,7 +157,7 @@
                     <button class="launch-back-btn" onclick="window._selectLaunchType('back')" title="Back">&larr;</button>
                     Launch Terminal
                 </h3>
-                <label>Session Name <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <label>Session Name <span class="text-muted-sm">(optional)</span>:
                     <input type="text" id="launch-terminal-name" placeholder="e.g. build server, test runner">
                 </label>
                 <label>Working Directory:
@@ -209,7 +209,7 @@
                                         </select>
                                     </label>
                                     <div class="team-template-actions">
-                                        <button class="btn btn-small btn-subtle team-generate-ai-btn" onclick="window.showTeamWizardModal()" title="Generate a team with AI"><span class="material-icons" style="font-size:14px;vertical-align:-2px;margin-right:2px">auto_awesome</span> Generate with AI</button>
+                                        <button class="btn btn-small btn-subtle team-generate-ai-btn" onclick="window.showTeamWizardModal()" title="Generate a team with AI"><span class="material-icons icon-btn-inline">auto_awesome</span> Generate with AI</button>
                                         <button class="btn btn-small btn-subtle" onclick="importTeamTemplates()" title="Import team templates from file">Import Template</button>
                                         <button class="btn btn-small btn-subtle" onclick="window._importTeamFromFolder()" title="Import team from a folder with .md agent files">Import from Folder</button>
                                         <button class="btn btn-small btn-subtle" onclick="window._saveTeamTemplate()" title="Save team configuration as reusable template">Save as Template</button>
@@ -257,7 +257,7 @@
                                 <summary>Advanced</summary>
                                 <div class="team-advanced-body">
                                     <div>
-                                        <label>Remote Server <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                                        <label>Remote Server <span class="text-muted-sm">(optional)</span>:
                                             <input type="text" id="team-board-server" placeholder="e.g. http://remote-machine:8420">
                                         </label>
                                     </div>
@@ -296,7 +296,7 @@
         </div>
     </div>
 
-    <div id="team-agent-modal" class="modal" style="display:none">
+    <div id="team-agent-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <div class="modal-header">
                 <h3 id="team-agent-modal-title">Add Team Agent</h3>
@@ -312,8 +312,8 @@
         </div>
     </div>
 
-    <div id="save-template-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:420px">
+    <div id="save-template-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-md">
             <div class="modal-header">
                 <h3>Save Team Template</h3>
             </div>
@@ -330,7 +330,7 @@
         </div>
     </div>
 
-    <div id="team-wizard-modal" class="modal" style="display:none">
+    <div id="team-wizard-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <div class="modal-header">
                 <h3>Create Your Own Team</h3>
@@ -363,8 +363,8 @@
     </div>
 
     <!-- Generic Prompt Modal (reusable replacement for browser prompt()) -->
-    <div id="prompt-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:420px">
+    <div id="prompt-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-md">
             <div class="modal-header">
                 <h3 id="prompt-modal-title">Enter value</h3>
             </div>
@@ -379,13 +379,13 @@
         </div>
     </div>
 
-    <div id="alert-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:420px">
+    <div id="alert-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-md">
             <div class="modal-header">
                 <h3 id="alert-modal-title">Notice</h3>
             </div>
             <div class="modal-body">
-                <p id="alert-modal-message" style="color:var(--text-secondary);font-size:13px;margin:8px 0 16px"></p>
+                <p id="alert-modal-message" class="text-secondary-sm" style="margin:8px 0 16px"></p>
             </div>
             <div class="modal-actions modal-footer">
                 <button id="alert-modal-ok" class="btn btn-primary">OK</button>
@@ -394,8 +394,8 @@
     </div>
 
     <!-- Save Template Modal -->
-    <div id="save-template-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:400px">
+    <div id="save-template-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-sm">
             <div class="modal-header">
                 <h3>Save Team Template</h3>
             </div>
@@ -411,13 +411,13 @@
     </div>
 
     <!-- Confirm Modal (reusable) -->
-    <div id="confirm-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:420px">
+    <div id="confirm-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-md">
             <div class="modal-header">
                 <h3 id="confirm-modal-title">Are you sure?</h3>
             </div>
             <div class="modal-body">
-                <p id="confirm-modal-message" style="color:var(--text-secondary);font-size:13px;margin:8px 0 16px"></p>
+                <p id="confirm-modal-message" class="text-secondary-sm" style="margin:8px 0 16px"></p>
             </div>
             <div class="modal-actions modal-footer">
                 <button class="btn" onclick="hideConfirmModal()">Cancel</button>
@@ -427,7 +427,7 @@
     </div>
 
     <!-- Restart Modal -->
-    <div id="restart-modal" class="modal" style="display:none">
+    <div id="restart-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <div class="modal-header">
                 <h3>Restart Session</h3>
@@ -444,8 +444,8 @@
     </div>
 
     <!-- Info Modal -->
-    <div id="info-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:480px">
+    <div id="info-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-lg">
             <div class="modal-header">
                 <h3>Session Info</h3>
             </div>
@@ -487,7 +487,7 @@
     </div>
 
     <!-- Resume Modal -->
-    <div id="resume-modal" class="modal" style="display:none">
+    <div id="resume-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content" style="width:440px">
             <div class="modal-header">
                 <h3>Resume Session</h3>
@@ -505,14 +505,14 @@
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="modal" style="display:none">
+    <div id="settings-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide settings-modal-content">
             <div class="modal-header">
                 <h3>Settings</h3>
             </div>
             <div class="modal-body settings-modal-body">
                 <button class="btn btn-primary settings-theme-btn" onclick="hideSettingsModal(); showThemeConfigurator()">
-                    <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px">palette</span>
+                    <span class="material-icons icon-inline">palette</span>
                     Customize Theme
                 </button>
                 <dl class="info-grid settings-grid">
@@ -638,14 +638,14 @@
                 </button>
 
                 <!-- License Section -->
-                <div class="settings-section" id="license-section" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-                    <h4 style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-secondary)">License</h4>
+                <div class="settings-section settings-license-section" id="license-section">
+                    <h4 class="settings-license-title">License</h4>
                     <div id="license-status-display">
-                        <span style="color:var(--text-secondary);font-size:13px">Loading...</span>
+                        <span class="settings-license-loading">Loading...</span>
                     </div>
-                    <div id="app-version-label" style="font-size:11px;color:var(--text-muted);margin-top:8px;"></div>
+                    <div id="app-version-label" class="settings-version-label"></div>
                 </div>
-                <div id="tier-branding-label" style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:none;"></div>
+                <div id="tier-branding-label" class="tier-branding" style="display:none"></div>
             </div>
             <div class="modal-actions modal-footer">
                 <button class="btn" onclick="hideSettingsModal()">Cancel</button>
@@ -655,46 +655,46 @@
     </div>
 
     <!-- Default Prompts Modal -->
-    <div id="default-prompts-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:600px">
+    <div id="default-prompts-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-xl">
             <div class="modal-header">
                 <h3>Edit Default Prompts</h3>
             </div>
             <div class="modal-body">
-                <p style="color:var(--text-secondary);font-size:12px;margin:0 0 12px">
+                <p class="prompts-description">
                     Customize the board instructions injected when agents launch. Use <code>{board_name}</code> as a placeholder.
                 </p>
-                <div style="margin-bottom:16px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                        <label style="font-weight:600;font-size:13px">Orchestrator Prompt</label>
-                        <button class="btn" style="font-size:11px;padding:2px 8px" onclick="resetDefaultPrompt('orchestrator')">Reset to Default</button>
+                <div class="prompt-field">
+                    <div class="prompt-field-header">
+                        <label class="prompt-field-label">Orchestrator Prompt</label>
+                        <button class="btn prompt-field-reset" onclick="resetDefaultPrompt('orchestrator')">Reset to Default</button>
                     </div>
-                    <textarea id="settings-prompt-orchestrator" class="settings-input" rows="5" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+                    <textarea id="settings-prompt-orchestrator" class="settings-input prompt-textarea" rows="5"></textarea>
                 </div>
-                <div style="margin-bottom:12px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                        <label style="font-weight:600;font-size:13px">Worker Prompt</label>
-                        <button class="btn" style="font-size:11px;padding:2px 8px" onclick="resetDefaultPrompt('worker')">Reset to Default</button>
+                <div class="prompt-field">
+                    <div class="prompt-field-header">
+                        <label class="prompt-field-label">Worker Prompt</label>
+                        <button class="btn prompt-field-reset" onclick="resetDefaultPrompt('worker')">Reset to Default</button>
                     </div>
-                    <textarea id="settings-prompt-worker" class="settings-input" rows="5" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+                    <textarea id="settings-prompt-worker" class="settings-input prompt-textarea" rows="5"></textarea>
                 </div>
-                <hr style="border:none;border-top:1px solid var(--border-color, #333);margin:16px 0">
-                <p style="color:var(--text-secondary);font-size:12px;margin:0 0 12px">
+                <hr class="prompts-divider">
+                <p class="prompts-description">
                     Team reminder text appended when using the +Team send button.
                 </p>
-                <div style="margin-bottom:16px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                        <label style="font-weight:600;font-size:13px">Team Reminder (Orchestrator)</label>
-                        <button class="btn" style="font-size:11px;padding:2px 8px" onclick="resetDefaultPrompt('team_orchestrator')">Reset to Default</button>
+                <div class="prompt-field">
+                    <div class="prompt-field-header">
+                        <label class="prompt-field-label">Team Reminder (Orchestrator)</label>
+                        <button class="btn prompt-field-reset" onclick="resetDefaultPrompt('team_orchestrator')">Reset to Default</button>
                     </div>
-                    <textarea id="settings-team-reminder-orchestrator" class="settings-input" rows="2" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+                    <textarea id="settings-team-reminder-orchestrator" class="settings-input prompt-textarea" rows="2"></textarea>
                 </div>
-                <div style="margin-bottom:12px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                        <label style="font-weight:600;font-size:13px">Team Reminder (Worker)</label>
-                        <button class="btn" style="font-size:11px;padding:2px 8px" onclick="resetDefaultPrompt('team_worker')">Reset to Default</button>
+                <div class="prompt-field">
+                    <div class="prompt-field-header">
+                        <label class="prompt-field-label">Team Reminder (Worker)</label>
+                        <button class="btn prompt-field-reset" onclick="resetDefaultPrompt('team_worker')">Reset to Default</button>
                     </div>
-                    <textarea id="settings-team-reminder-worker" class="settings-input" rows="2" style="resize:vertical;font-family:monospace;font-size:12px"></textarea>
+                    <textarea id="settings-team-reminder-worker" class="settings-input prompt-textarea" rows="2"></textarea>
                 </div>
             </div>
             <div class="modal-actions modal-footer">
@@ -705,10 +705,10 @@
     </div>
 
     <!-- Theme Configurator Modal (content rendered dynamically) -->
-    <div id="theme-configurator-modal" class="modal" style="display:none"></div>
+    <div id="theme-configurator-modal" class="modal" role="dialog" aria-modal="true" style="display:none"></div>
 
     <!-- Scheduled Job Modal -->
-    <div id="job-modal" class="modal" style="display:none">
+    <div id="job-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <div class="modal-header">
                 <h3 id="job-modal-title">New Scheduled Job</h3>
@@ -717,7 +717,7 @@
                 <label>Job Name:
                     <input type="text" id="job-modal-name" placeholder="e.g. Nightly Tests">
                 </label>
-                <label>Description <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <label>Description <span class="text-muted-sm">(optional)</span>:
                     <input type="text" id="job-modal-description" placeholder="e.g. Runs the full test suite">
                 </label>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -747,7 +747,7 @@
                 <label>Prompt:
                     <textarea id="job-modal-prompt" rows="4" placeholder="Run the full test suite and report failures..." style="width:100%;resize:vertical"></textarea>
                 </label>
-                <label>Flags <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <label>Flags <span class="text-muted-sm">(optional)</span>:
                     <input type="text" id="job-modal-flags" placeholder="e.g. --verbose">
                 </label>
                 <div class="flag-shortcuts">
@@ -772,8 +772,8 @@
     </div>
 
     <!-- Add Macro Modal -->
-    <div id="macro-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:400px">
+    <div id="macro-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-sm">
             <div class="modal-header">
                 <h3>Add Macro</h3>
             </div>
@@ -794,7 +794,7 @@
     </div>
 
     <!-- Webhooks Modal -->
-    <div id="webhook-modal" class="modal" style="display:none">
+    <div id="webhook-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <div class="modal-header">
                 <h3>Webhook Notifications</h3>
@@ -860,7 +860,7 @@
     </div>
 
     <!-- Quick Launch Team Modal -->
-    <div id="quick-launch-modal" class="modal" style="display:none">
+    <div id="quick-launch-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="quick-launch-title">Launch Coding Team</h3>
@@ -894,7 +894,7 @@
     </div>
 
     <!-- Add Agent to Board Modal -->
-    <div id="add-agent-board-modal" class="modal" style="display:none">
+    <div id="add-agent-board-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-wide">
             <div class="modal-header">
                 <h3>Add Agent to Board</h3>
@@ -913,7 +913,7 @@
     </div>
 
     <!-- Create/Edit Custom View Modal -->
-    <div id="custom-view-modal" class="modal" style="display:none">
+    <div id="custom-view-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-extra-wide">
             <div class="modal-header">
                 <h3 id="custom-view-modal-title">Create Custom View</h3>
@@ -947,19 +947,19 @@
     </div>
 
     <!-- Mobile Connect Modal -->
-    <div id="mobile-connect-modal" class="modal" style="display:none">
-        <div class="modal-content" style="width:400px;text-align:center">
+    <div id="mobile-connect-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-sm" style="text-align:center">
             <h3>Coral Mobile</h3>
-            <p style="color:var(--text-secondary);font-size:13px;margin:8px 0 16px">
+            <p class="text-secondary-sm" style="margin:8px 0 16px">
                 Open this URL on your phone's browser, then tap <strong>Add to Home Screen</strong> for an app-like experience.
             </p>
-            <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--font-mono);font-size:14px;display:flex;align-items:center;gap:8px;margin-bottom:16px">
-                <code id="mobile-connect-url" style="flex:1;user-select:all;word-break:break-all"></code>
+            <div class="mobile-connect-url-box">
+                <code id="mobile-connect-url" class="mobile-connect-url-code"></code>
                 <button class="btn btn-small" onclick="navigator.clipboard.writeText(document.getElementById('mobile-connect-url').textContent); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
             </div>
-            <div id="mobile-connect-qr" style="margin:0 auto 16px;display:flex;justify-content:center"></div>
-            <div id="mobile-connect-api-key" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;margin-bottom:12px;text-align:left"></div>
-            <p style="color:var(--text-muted);font-size:11px">Your phone must be on the same network as this computer.</p>
+            <div id="mobile-connect-qr" class="mobile-connect-qr"></div>
+            <div id="mobile-connect-api-key" class="mobile-connect-api-key"></div>
+            <p class="mobile-connect-hint">Your phone must be on the same network as this computer.</p>
             <div class="modal-actions" style="margin-top:12px">
                 <button class="btn btn-primary" onclick="document.getElementById('mobile-connect-modal').style.display='none'">Done</button>
             </div>

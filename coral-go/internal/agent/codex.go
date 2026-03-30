@@ -70,8 +70,10 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 	// from ~/.coral/board_state_{session}.json when CORAL_SUBSCRIBER_ID is unavailable).
 
 	// Permission flags from capabilities
+	bypassSandbox := false
 	if perms := TranslateToCodexPermissions(params.Capabilities); perms != nil {
 		if perms.BypassSandbox {
+			bypassSandbox = true
 			parts = append(parts, "--dangerously-bypass-approvals-and-sandbox")
 		} else if perms.FullAuto {
 			parts = append(parts, "--full-auto")
@@ -94,7 +96,11 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 	}
 	for _, flag := range params.Flags {
 		if flag == "--dangerously-skip-permissions" {
-			parts = append(parts, "--full-auto")
+			// Skip if --dangerously-bypass-approvals-and-sandbox was already added;
+			// Codex rejects both flags together.
+			if !bypassSandbox {
+				parts = append(parts, "--full-auto")
+			}
 			continue
 		}
 		if claudeOnlyFlags[flag] {

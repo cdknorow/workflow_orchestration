@@ -17,7 +17,9 @@ import (
 func newTestKeyStore(t *testing.T) *KeyStore {
 	t.Helper()
 	dir := t.TempDir()
-	return NewKeyStore(dir)
+	ks, err := NewKeyStore(dir)
+	require.NoError(t, err)
+	return ks
 }
 
 // ── KeyStore Tests ──────────────────────────────────────────
@@ -38,14 +40,16 @@ func TestKeyStore_LoadsExistingKey(t *testing.T) {
 	keyPath := filepath.Join(dir, "api_key")
 	os.WriteFile(keyPath, []byte("abcdef1234567890abcdef1234567890\n"), 0600)
 
-	ks := NewKeyStore(dir)
+	ks, err := NewKeyStore(dir)
+	require.NoError(t, err)
 	assert.Equal(t, "abcdef1234567890abcdef1234567890", ks.Key())
 }
 
 func TestKeyStore_RegenerateKey(t *testing.T) {
 	ks := newTestKeyStore(t)
 	oldKey := ks.Key()
-	newKey := ks.RegenerateKey()
+	newKey, err := ks.RegenerateKey()
+	require.NoError(t, err)
 	assert.NotEqual(t, oldKey, newKey)
 	assert.Len(t, newKey, keyLength)
 	assert.Equal(t, newKey, ks.Key())
@@ -61,7 +65,8 @@ func TestKeyStore_ValidateKey(t *testing.T) {
 func TestKeyStore_RegenerateInvalidatesOldKey(t *testing.T) {
 	ks := newTestKeyStore(t)
 	oldKey := ks.Key()
-	ks.RegenerateKey()
+	_, err := ks.RegenerateKey()
+	require.NoError(t, err)
 	assert.False(t, ks.ValidateKey(oldKey))
 }
 
@@ -69,7 +74,8 @@ func TestKeyStore_RegenerateInvalidatesOldKey(t *testing.T) {
 
 func TestKeyStore_CreateAndValidateSession(t *testing.T) {
 	ks := newTestKeyStore(t)
-	token := ks.CreateSession("192.168.1.5", "Mozilla/5.0")
+	token, err := ks.CreateSession("192.168.1.5", "Mozilla/5.0")
+	require.NoError(t, err)
 	assert.Len(t, token, sessionLength)
 	assert.True(t, ks.ValidateSession(token))
 }
@@ -82,7 +88,8 @@ func TestKeyStore_InvalidSession(t *testing.T) {
 
 func TestKeyStore_SessionExpiry(t *testing.T) {
 	ks := newTestKeyStore(t)
-	token := ks.CreateSession("192.168.1.5", "test")
+	token, err := ks.CreateSession("192.168.1.5", "test")
+	require.NoError(t, err)
 
 	// Manually expire the session
 	ks.mu.Lock()
@@ -96,7 +103,8 @@ func TestKeyStore_SessionLRUEviction(t *testing.T) {
 	ks := newTestKeyStore(t)
 	var firstToken string
 	for i := 0; i < maxSessions+5; i++ {
-		token := ks.CreateSession("192.168.1.5", "test")
+		token, err := ks.CreateSession("192.168.1.5", "test")
+		require.NoError(t, err)
 		if i == 0 {
 			firstToken = token
 		}
@@ -107,8 +115,10 @@ func TestKeyStore_SessionLRUEviction(t *testing.T) {
 
 func TestKeyStore_SessionsSurviveKeyRegeneration(t *testing.T) {
 	ks := newTestKeyStore(t)
-	token := ks.CreateSession("192.168.1.5", "test")
-	ks.RegenerateKey()
+	token, err := ks.CreateSession("192.168.1.5", "test")
+	require.NoError(t, err)
+	_, err = ks.RegenerateKey()
+	require.NoError(t, err)
 	// Existing sessions should still be valid after key regeneration
 	assert.True(t, ks.ValidateSession(token))
 }
@@ -257,7 +267,8 @@ func TestMiddleware_InvalidAPIKey(t *testing.T) {
 
 func TestMiddleware_ValidSessionCookie(t *testing.T) {
 	ks, handler := newMiddlewareTest(t)
-	token := ks.CreateSession("192.168.1.5", "test")
+	token, err := ks.CreateSession("192.168.1.5", "test")
+	require.NoError(t, err)
 	r := httptest.NewRequest("GET", "/api/sessions", nil)
 	r.RemoteAddr = "192.168.1.5:54321"
 	r.AddCookie(&http.Cookie{Name: cookieName, Value: token})
@@ -268,7 +279,8 @@ func TestMiddleware_ValidSessionCookie(t *testing.T) {
 
 func TestMiddleware_ExpiredSessionCookie(t *testing.T) {
 	ks, handler := newMiddlewareTest(t)
-	token := ks.CreateSession("192.168.1.5", "test")
+	token, err := ks.CreateSession("192.168.1.5", "test")
+	require.NoError(t, err)
 	// Expire the session
 	ks.mu.Lock()
 	ks.sessions[token].CreatedAt = time.Now().Add(-25 * time.Hour)

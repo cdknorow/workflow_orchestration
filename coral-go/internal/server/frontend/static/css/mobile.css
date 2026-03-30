@@ -377,14 +377,6 @@
         padding: 4px 8px;
     }
 
-    .board-chat-msg {
-        padding: 2px 0;
-    }
-
-    .board-chat-content {
-        -webkit-line-clamp: 3;
-    }
-
     /* Capture pane scroll speed fix — enable momentum scrolling */
     .output-scroll,
     .xterm-container {
@@ -756,12 +748,6 @@
         flex-direction: column !important;
     }
 
-    /* Welcome hero button: compact on mobile */
-    .welcome-hero-btn {
-        padding: 12px 24px;
-        font-size: 14px;
-    }
-
     .welcome-secondary {
         flex-wrap: wrap;
         gap: 8px;
@@ -1051,7 +1037,140 @@
     }
 }
 
-    /* Team modal: single column on mobile */
+/* ── Small Phone: ≤ 479px ────────────────────────────────── */
+
+@media (max-width: 479px) {
+    /* Top bar: tighter on small phones */
+    .top-bar {
+        padding: 6px 8px;
+        gap: 4px;
+    }
+
+    .top-bar-title {
+        font-size: 13px;
+    }
+
+    .top-bar-logo {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* Hide search on very small screens to save space */
+    .top-bar-search {
+        display: none !important;
+    }
+
+    /* Top nav tabs: smaller text */
+    .top-nav-tab {
+        font-size: 12px;
+        padding: 6px 8px;
+    }
+
+    /* Modal padding: tighter on small phones */
+    .modal-content {
+        padding: 16px !important;
+    }
+
+    .modal-header {
+        margin: -16px -16px 0 !important;
+        padding: 14px 16px 10px !important;
+    }
+
+    .modal-footer {
+        margin: 8px -16px -16px !important;
+        padding: 10px 16px 14px !important;
+    }
+
+    .modal-header h3 {
+        font-size: 15px;
+    }
+
+    /* Session header: extra compact */
+    .session-header h2 {
+        font-size: 13px !important;
+    }
+
+    /* Message board: compact post form */
+    .mb-post-input {
+        font-size: 14px;
+        padding: 8px 10px;
+    }
+
+    .mb-post-send-btn {
+        height: 38px;
+        padding: 0 14px;
+        font-size: 13px;
+    }
+
+    /* History tabs: smaller on small phones */
+    .history-tab-btn {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+}
+
+/* ── Landscape Mobile ────────────────────────────────────── */
+
+@media (max-height: 500px) and (orientation: landscape) {
+    /* Reduce top bar height in landscape */
+    .top-bar {
+        padding: 4px 12px;
+    }
+
+    .top-bar h1 {
+        font-size: 13px;
+    }
+
+    /* Layout: account for smaller top bar */
+    .layout {
+        height: calc(100vh - 40px);
+    }
+
+    /* Command pane: shorter in landscape to maximize output view */
+    .command-pane {
+        max-height: 120px !important;
+    }
+
+    .command-pane textarea {
+        max-height: 60px;
+    }
+
+    /* Modal: shorter max height in landscape */
+    .modal-content {
+        max-height: 85vh;
+    }
+
+    /* Waiting banner: compact */
+    .waiting-banner {
+        font-size: 11px !important;
+        padding: 4px 10px !important;
+    }
+
+    /* Hide mobile tab bar in landscape to maximize screen space */
+    .mobile-tab-bar {
+        display: none !important;
+    }
+}
+
+/* ── Medium screens: 768px–1023px refinements ─────────────── */
+
+@media (min-width: 768px) and (max-width: 1023px) {
+    /* Modal: better sizing for tablets */
+    .modal-content,
+    .modal-content-wide {
+        max-width: 85vw;
+    }
+
+    /* Top nav tabs: allow wrapping if needed */
+    .top-nav-tabs {
+        flex-wrap: wrap;
+        gap: 2px;
+    }
+
+    /* Message board: adjust subscribers panel for tablet */
+    .mb-subscribers-panel {
+        width: 180px;
+    }
 }
 
 /* ── Pull-to-Refresh Indicator ────────────────────────────── */
@@ -1097,12 +1216,7 @@
         padding: 6px 14px;
     }
 
-    /* Board chat send button: larger touch target */
-    .board-chat-send {
-        min-height: 36px;
-        min-width: 36px;
-        padding: 6px 12px;
-    }
+
 
     /* Task items: larger touch target */
     .task-item {

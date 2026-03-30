@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/cdknorow/coral/internal/config"
+	"github.com/cdknorow/coral/internal/httputil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -100,7 +101,12 @@ func (h *WebhooksHandler) TestWebhook(w http.ResponseWriter, r *http.Request) {
 	whID, _ := strconv.ParseInt(chi.URLParam(r, "webhookID"), 10, 64)
 	cfg, err := h.ws.GetWebhookConfig(r.Context(), whID)
 	if err != nil || cfg == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "Webhook not found"})
+		errNotFound(w, "Webhook not found")
+		return
+	}
+	// SSRF protection: validate webhook URL doesn't target internal networks
+	if _, err := httputil.ResolveAndValidateURL(cfg.URL); err != nil {
+		errBadRequest(w, fmt.Sprintf("webhook URL blocked: %v", err))
 		return
 	}
 	delivery, err := h.ws.CreateWebhookDelivery(

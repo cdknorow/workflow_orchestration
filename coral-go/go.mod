@@ -8,7 +8,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gen2brain/beeep v0.11.2
-	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
 	github.com/google/uuid v1.6.0
 	github.com/jmoiron/sqlx v1.4.0

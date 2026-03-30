@@ -106,7 +106,7 @@ func (h *BoardRemotesHandler) ProxyProjects(w http.ResponseWriter, r *http.Reque
 	server := parts[0]
 	result, code, err := h.proxyGet(r.Context(), server, "/projects")
 	if err != nil {
-		writeJSON(w, code, map[string]any{"error": err.Error()})
+		writeJSON(w, code, map[string]string{"error": err.Error()})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -125,7 +125,7 @@ func (h *BoardRemotesHandler) ProxyMessages(w http.ResponseWriter, r *http.Reque
 	path := fmt.Sprintf("/%s/messages/all?limit=%s", project, limit)
 	result, code, err := h.proxyGet(r.Context(), remoteServer, path)
 	if err != nil {
-		writeJSON(w, code, map[string]any{"error": err.Error()})
+		writeJSON(w, code, map[string]string{"error": err.Error()})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -140,7 +140,7 @@ func (h *BoardRemotesHandler) ProxySubscribers(w http.ResponseWriter, r *http.Re
 	path := fmt.Sprintf("/%s/subscribers", project)
 	result, code, err := h.proxyGet(r.Context(), remoteServer, path)
 	if err != nil {
-		writeJSON(w, code, map[string]any{"error": err.Error()})
+		writeJSON(w, code, map[string]string{"error": err.Error()})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -156,7 +156,7 @@ func (h *BoardRemotesHandler) ProxyCheckUnread(w http.ResponseWriter, r *http.Re
 	path := fmt.Sprintf("/%s/messages/check?session_id=%s", project, sessionID)
 	result, code, err := h.proxyGet(r.Context(), remoteServer, path)
 	if err != nil {
-		writeJSON(w, code, map[string]any{"error": err.Error()})
+		writeJSON(w, code, map[string]string{"error": err.Error()})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

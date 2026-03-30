@@ -33,7 +33,6 @@ export async function sendCommand() {
     if (textPart) parts.push(textPart);
 
     const command = parts.join(" ");
-    console.log("sendCommand: attachments =", pendingAttachments.length, "paths =", pendingAttachments.map(a => a.path), "command =", command);
     if (!command) return;
 
     // Try WebSocket path first (sends text, then Enter separately)
@@ -112,7 +111,7 @@ export async function sendCommandWithTeam() {
 
 const BOARD_PROTOCOL = `You have access to a shared message board for team communication. Use these commands:
 
-- coral-board post "<message>" — Post a message to the board (use --board <name> if needed)
+- coral-board post "<message>" [--to "agent1,agent2"] — Post a message (--to auto-prepends @mentions)
 - coral-board read — Read recent messages
 - coral-board read --all — Read all messages
 
@@ -686,14 +685,12 @@ export function initImageDrop() {
         if (e.target.isContentEditable) return;
 
         const items = [...(e.clipboardData?.items || [])];
-        console.log("paste event: items =", items.length, items.map(i => `${i.kind}:${i.type}`));
         const imageItems = items.filter(item => item.type.startsWith("image/"));
         if (imageItems.length === 0) return;
 
         // Extract all files synchronously before any async work,
         // because clipboardData items become invalid after the event.
         const files = imageItems.map(item => item.getAsFile()).filter(Boolean);
-        console.log("paste event: image files =", files.length);
         if (files.length === 0) return;
 
         e.preventDefault();

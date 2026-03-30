@@ -349,10 +349,6 @@
     font-size: 11px !important;
 }
 
-.sidebar-new-row {
-    padding: 8px 10px 4px;
-}
-
 .sidebar-new-btn-full {
     width: 100%;
     padding: 8px 0;
@@ -380,35 +376,6 @@
     padding: 4px 0;
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     z-index: 1000;
-}
-
-.sidebar-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.sidebar-settings-wrapper {
-    margin-left: 4px;
-}
-
-.sidebar-settings-btn {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 2px 4px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    opacity: 0.7;
-    transition: opacity 0.15s, color 0.15s;
-}
-
-.sidebar-settings-btn:hover {
-    opacity: 1;
-    color: var(--text-primary);
-    background: var(--bg-tertiary);
 }
 
 .sidebar-section h2 {
@@ -858,13 +825,6 @@
     margin-top: 2px;
 }
 
-.welcome-tip {
-    margin-top: 24px;
-    font-size: 13px;
-    color: var(--text-muted);
-    opacity: 0.7;
-}
-
 /* ── Resize Handle Grip Pattern ────────────────────────────── */
 
 .task-bar-resize-handle::after,
@@ -885,35 +845,7 @@
     opacity: 0.6;
 }
 
-/* Welcome screen hero button + secondary links */
-
-.welcome-hero-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 16px 36px;
-    font-size: 16px;
-    font-weight: 600;
-    font-family: inherit;
-    color: #fff;
-    background: var(--accent);
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    margin-bottom: 8px;
-}
-
-.welcome-hero-btn:hover {
-    background: var(--accent-hover, var(--accent));
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(88, 166, 255, 0.3);
-}
-
-.welcome-hero-btn svg {
-    flex-shrink: 0;
-}
+/* Welcome screen secondary links */
 
 .welcome-secondary {
     display: flex;

@@ -106,26 +106,26 @@ func (h *ScheduleHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields (matches Python behavior)
 	if body.Name == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "'name' is required"})
+		errBadRequest(w, "'name' is required")
 		return
 	}
 	if body.CronExpr == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "'cron_expr' is required"})
+		errBadRequest(w, "'cron_expr' is required")
 		return
 	}
 	if body.RepoPath == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "'repo_path' is required"})
+		errBadRequest(w, "'repo_path' is required")
 		return
 	}
 	if body.Prompt == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "'prompt' is required"})
+		errBadRequest(w, "'prompt' is required")
 		return
 	}
 
 	// Validate cron expression
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	if _, err := parser.Parse(body.CronExpr); err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Invalid cron expression: " + body.CronExpr})
+		errBadRequest(w, "Invalid cron expression: "+body.CronExpr)
 		return
 	}
 
@@ -177,7 +177,7 @@ func (h *ScheduleHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		if expr, ok := cronExpr.(string); ok {
 			parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 			if _, err := parser.Parse(expr); err != nil {
-				writeJSON(w, http.StatusOK, map[string]string{"error": "Invalid cron expression: " + expr})
+				errBadRequest(w, "Invalid cron expression: "+expr)
 				return
 			}
 		}
@@ -189,7 +189,7 @@ func (h *ScheduleHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if updated == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Job not found"})
+		errNotFound(w, "Job not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)

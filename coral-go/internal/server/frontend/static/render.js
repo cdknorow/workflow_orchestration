@@ -543,11 +543,8 @@ function _getCurrentGroupNames() {
 }
 
 export async function moveGroupUp(groupName) {
-    console.log('[coral] moveGroupUp:', groupName);
     const names = _getCurrentGroupNames();
-    console.log('[coral] group names:', names);
     const idx = names.indexOf(groupName);
-    console.log('[coral] idx:', idx);
     if (idx <= 0) return;
     [names[idx - 1], names[idx]] = [names[idx], names[idx - 1]];
     await _saveGroupOrder(names);
@@ -555,11 +552,8 @@ export async function moveGroupUp(groupName) {
 }
 
 export async function moveGroupDown(groupName) {
-    console.log('[coral] moveGroupDown:', groupName);
     const names = _getCurrentGroupNames();
-    console.log('[coral] group names:', names);
     const idx = names.indexOf(groupName);
-    console.log('[coral] idx:', idx);
     if (idx < 0 || idx >= names.length - 1) return;
     [names[idx], names[idx + 1]] = [names[idx + 1], names[idx]];
     await _saveGroupOrder(names);
@@ -577,18 +571,15 @@ export function moveSessionDown(sessionId) {
 }
 
 function _moveSession(sessionId, direction) {
-    console.log('[coral] _moveSession called:', sessionId, direction);
     const list = document.getElementById("live-sessions-list");
-    if (!list) { console.log('[coral] _moveSession: list not found'); return; }
+    if (!list) return;
     const items = [...list.querySelectorAll(".session-group-item")];
     const ids = items.map(el => el.dataset.sessionId);
-    console.log('[coral] _moveSession: found', ids.length, 'items, looking for', sessionId);
     const idx = ids.indexOf(sessionId);
-    if (idx < 0) { console.log('[coral] _moveSession: session not found in list'); return; }
+    if (idx < 0) return;
     const targetIdx = idx + direction;
-    if (targetIdx < 0 || targetIdx >= ids.length) { console.log('[coral] _moveSession: at boundary'); return; }
+    if (targetIdx < 0 || targetIdx >= ids.length) return;
     [ids[idx], ids[targetIdx]] = [ids[targetIdx], ids[idx]];
-    console.log('[coral] _moveSession: swapped, saving order');
     _saveSessionOrder(ids);
     renderLiveSessions(state.liveSessions);
 }

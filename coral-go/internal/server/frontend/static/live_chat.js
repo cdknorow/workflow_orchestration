@@ -197,6 +197,11 @@ export async function refreshLiveHistory() {
     const container = document.getElementById("live-history-messages");
     if (!container) return;
 
+    // Show loading indicator on first load
+    if (!initialLoadDone && !container.querySelector('.loading-indicator') && container.children.length === 0) {
+        container.innerHTML = '<div class="loading-indicator">Loading chat history</div>';
+    }
+
     const params = new URLSearchParams();
     params.set("session_id", session.session_id);
     if (session.working_directory) {

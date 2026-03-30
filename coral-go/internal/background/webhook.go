@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cdknorow/coral/internal/httputil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -71,10 +72,22 @@ func (d *WebhookDispatcher) deliverNow(ctx context.Context, delivery store.Webho
 		return false
 	}
 
+	// SSRF protection: validate webhook URL doesn't target internal networks
+	if _, err := httputil.ResolveAndValidateURL(cfg.URL); err != nil {
+		errMsg := fmt.Sprintf("webhook URL blocked (SSRF): %v", err)
+		d.store.MarkWebhookDelivery(ctx, delivery.ID, "failed", nil, &errMsg, nil, nil)
+		return false
+	}
+
 	payload := buildPayload(cfg.Platform, delivery)
 	attempt := delivery.AttemptCount + 1
 
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		errMsg := fmt.Sprintf("marshal webhook payload: %v", err)
+		d.store.MarkWebhookDelivery(ctx, delivery.ID, "failed", nil, &errMsg, nil, nil)
+		return false
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		errMsg := err.Error()

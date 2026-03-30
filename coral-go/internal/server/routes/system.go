@@ -110,13 +110,17 @@ func (h *SystemHandler) PutSettings(w http.ResponseWriter, r *http.Request) {
 
 // ── Default Prompt Constants ─────────────────────────────────────────
 
-const DefaultOrchestratorSystemPrompt = `Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments to the team.`
+const DefaultOrchestratorSystemPrompt = `Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments to the team.
+
+When posting messages to specific agents, you MUST @mention them by name (e.g. @Lead Developer) so they receive a notification. You can also use the --to flag: coral-board post --to "Agent1,Agent2" "message" which auto-prepends @mentions. Messages without @mentions will NOT notify agents.`
 
 const DefaultWorkerSystemPrompt = `Post a message with coral-board post "<your introduction>" that introduces yourself, then STOP and wait. Do NOT poll the message board in a loop. Coral will notify you when there are new messages.`
 
 const DefaultOrchestratorPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments.
 
-CRITICAL: Do NOT poll or loop on 'coral-board read'. After posting your introduction or any message, STOP. Coral will send you a notification (as a user message) when new messages arrive. Only run 'coral-board read' after receiving such a notification.`
+CRITICAL: Do NOT poll or loop on 'coral-board read'. After posting your introduction or any message, STOP. Coral will send you a notification (as a user message) when new messages arrive. Only run 'coral-board read' after receiving such a notification.
+
+When posting messages to specific agents, you MUST @mention them by name (e.g. @Lead Developer) so they receive a notification. You can also use the --to flag: coral-board post --to "Agent1,Agent2" "message" which auto-prepends @mentions. Messages without @mentions will NOT notify agents.`
 
 const DefaultWorkerPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then STOP.
 
@@ -261,7 +265,7 @@ func (h *SystemHandler) CLICheck(w http.ResponseWriter, r *http.Request) {
 // POST /api/indexer/refresh
 func (h *SystemHandler) RefreshIndexer(w http.ResponseWriter, r *http.Request) {
 	if h.indexer == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "Indexer not available"})
+		errInternalServer(w, "Indexer not available")
 		return
 	}
 	if err := h.indexer.RunOnce(r.Context()); err != nil {

@@ -518,10 +518,14 @@ func (h *SessionsHandler) trackStatusSummary(ctx interface{}, agentName, status,
 
 	prev := h.lastKnown[key]
 	if status != "" && status != prev.Status {
-		// TODO: store.InsertAgentEvent(agentName, "status", status, sessionID)
+		h.ts.InsertAgentEvent(context.Background(), &store.AgentEvent{
+			AgentName: agentName, SessionID: &sessionID, EventType: "status", Summary: status,
+		})
 	}
 	if summary != "" && summary != prev.Summary {
-		// TODO: store.InsertAgentEvent(agentName, "goal", summary, sessionID)
+		h.ts.InsertAgentEvent(context.Background(), &store.AgentEvent{
+			AgentName: agentName, SessionID: &sessionID, EventType: "goal", Summary: summary,
+		})
 	}
 	h.lastKnown[key] = lastKnownState{Status: status, Summary: summary}
 }
@@ -796,7 +800,7 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 
 	workdir := h.resolveGitRoot(r.Context(), name, "", body.SessionID)
 	if workdir == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "Could not determine working directory", "files": []any{}})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Could not determine working directory", "files": []any{}})
 		return
 	}
 
@@ -916,13 +920,13 @@ func (h *SessionsHandler) Diff(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 
 	if fp == "" || strings.HasPrefix(fp, "-") || strings.ContainsAny(fp, "\x00") {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "invalid filepath"})
+		errBadRequest(w, "invalid filepath")
 		return
 	}
 
 	workdir := h.resolveGitRoot(r.Context(), name, "", sessionID)
 	if workdir == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "Could not determine working directory"})
+		errBadRequest(w, "Could not determine working directory")
 		return
 	}
 
@@ -931,7 +935,7 @@ func (h *SessionsHandler) Diff(w http.ResponseWriter, r *http.Request) {
 	realWorkdir, _ := filepath.EvalSymlinks(workdir)
 	realPath, _ := filepath.EvalSymlinks(fullPath)
 	if realPath != "" && !strings.HasPrefix(realPath, realWorkdir+string(os.PathSeparator)) {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "path traversal not allowed"})
+		errForbidden(w, "path traversal not allowed")
 		return
 	}
 
@@ -2052,18 +2056,24 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 		h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
 			cfg.AgentType, boardName, displayName)
 
-		// Advance read cursor so the agent doesn't see stale messages from before reset
-		if h.bs != nil && displayName != "" {
-			if err := h.bs.AdvanceReadCursor(bgCtx, boardName, displayName); err != nil {
-				log.Printf("[reset-team] failed to advance read cursor for %s: %v", displayName, err)
-			}
-		}
-
 		launched = append(launched, map[string]any{
 			"name":         displayName,
 			"session_id":   result["session_id"],
 			"session_name": result["session_name"],
 		})
+	}
+
+	// Advance read cursors for ALL agents AFTER all launches complete.
+	// This ensures no agent has a stale cursor from messages posted by
+	// other agents during the sequential re-launch process.
+	if h.bs != nil {
+		for _, cfg := range configs {
+			if cfg.DisplayName != nil && *cfg.DisplayName != "" {
+				if err := h.bs.AdvanceReadCursor(bgCtx, boardName, *cfg.DisplayName); err != nil {
+					log.Printf("[reset-team] failed to advance read cursor for %s: %v", *cfg.DisplayName, err)
+				}
+			}
+		}
 	}
 
 	log.Printf("[reset-team] reset board %q: %d agents", boardName, len(launched))
@@ -2632,37 +2642,37 @@ func (h *SessionsHandler) GetFileContent(w http.ResponseWriter, r *http.Request)
 	sessionID := r.URL.Query().Get("session_id")
 
 	if fp == "" || strings.HasPrefix(fp, "-") || strings.ContainsAny(fp, "\x00") {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "filepath is required"})
+		errBadRequest(w, "filepath is required")
 		return
 	}
 
 	workdir := h.resolveGitRoot(r.Context(), name, "", sessionID)
 	if workdir == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Could not determine working directory"})
+		errBadRequest(w, "Could not determine working directory")
 		return
 	}
 
 	fullPath, err := filepath.Abs(filepath.Join(workdir, fp))
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "invalid path"})
+		errBadRequest(w, "invalid path")
 		return
 	}
 	realWorkdir, _ := filepath.EvalSymlinks(workdir)
 	realPath, _ := filepath.EvalSymlinks(fullPath)
 	if realPath != "" && !strings.HasPrefix(realPath, realWorkdir+string(os.PathSeparator)) {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Path traversal not allowed"})
+		errForbidden(w, "Path traversal not allowed")
 		return
 	}
 
 	info, err := os.Stat(fullPath)
 	if err != nil || info.IsDir() {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "File not found"})
+		errNotFound(w, "File not found")
 		return
 	}
 
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": err.Error()})
+		errInternalServer(w, err.Error())
 		return
 	}
 
@@ -2681,26 +2691,26 @@ func (h *SessionsHandler) GetFileOriginal(w http.ResponseWriter, r *http.Request
 	sessionID := r.URL.Query().Get("session_id")
 
 	if fp == "" || strings.HasPrefix(fp, "-") || strings.ContainsAny(fp, "\x00:") {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "filepath is required"})
+		errBadRequest(w, "filepath is required")
 		return
 	}
 
 	workdir := h.resolveGitRoot(r.Context(), name, "", sessionID)
 	if workdir == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Could not determine working directory"})
+		errBadRequest(w, "Could not determine working directory")
 		return
 	}
 
 	// Path traversal protection
 	fullPath, err := filepath.Abs(filepath.Join(workdir, fp))
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "invalid path"})
+		errBadRequest(w, "invalid path")
 		return
 	}
 	realWorkdir, _ := filepath.EvalSymlinks(workdir)
 	realPath, _ := filepath.EvalSymlinks(fullPath)
 	if realPath != "" && !strings.HasPrefix(realPath, realWorkdir+string(os.PathSeparator)) {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "path traversal not allowed"})
+		errForbidden(w, "path traversal not allowed")
 		return
 	}
 
@@ -2741,7 +2751,7 @@ func (h *SessionsHandler) SaveFileContent(w http.ResponseWriter, r *http.Request
 	sessionID := r.URL.Query().Get("session_id")
 
 	if fp == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "filepath is required"})
+		errBadRequest(w, "filepath is required")
 		return
 	}
 
@@ -2753,19 +2763,19 @@ func (h *SessionsHandler) SaveFileContent(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if body.Content == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "content is required"})
+		errBadRequest(w, "content is required")
 		return
 	}
 
 	workdir := h.resolveGitRoot(r.Context(), name, "", sessionID)
 	if workdir == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Could not determine working directory"})
+		errBadRequest(w, "Could not determine working directory")
 		return
 	}
 
 	fullPath, err := filepath.Abs(filepath.Join(workdir, fp))
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "invalid path"})
+		errBadRequest(w, "invalid path")
 		return
 	}
 	realWorkdir, _ := filepath.EvalSymlinks(workdir)
@@ -2781,30 +2791,30 @@ func (h *SessionsHandler) SaveFileContent(w http.ResponseWriter, r *http.Request
 			// Parent doesn't exist either — resolve via workdir prefix check on the absolute path
 			// This is safe because filepath.Abs already resolved ".." components
 			if !strings.HasPrefix(fullPath, realWorkdir+string(os.PathSeparator)) {
-				writeJSON(w, http.StatusOK, map[string]string{"error": "Path traversal not allowed"})
+				errForbidden(w, "Path traversal not allowed")
 				return
 			}
 		} else {
 			// Append separator to both sides to prevent prefix collisions
 			// (e.g. /home/user/project vs /home/user/project-evil)
 			if !strings.HasPrefix(realParent+string(os.PathSeparator), realWorkdir+string(os.PathSeparator)) {
-				writeJSON(w, http.StatusOK, map[string]string{"error": "Path traversal not allowed"})
+				errForbidden(w, "Path traversal not allowed")
 				return
 			}
 		}
 	} else if !strings.HasPrefix(realPath, realWorkdir+string(os.PathSeparator)) {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Path traversal not allowed"})
+		errForbidden(w, "Path traversal not allowed")
 		return
 	}
 
 	// Create parent directories for new files
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": err.Error()})
+		errInternalServer(w, err.Error())
 		return
 	}
 
 	if err := os.WriteFile(fullPath, []byte(*body.Content), 0644); err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": err.Error()})
+		errInternalServer(w, err.Error())
 		return
 	}
 
@@ -2823,7 +2833,7 @@ func (h *SessionsHandler) SetIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.SessionID == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "session_id is required"})
+		errBadRequest(w, "session_id is required")
 		return
 	}
 

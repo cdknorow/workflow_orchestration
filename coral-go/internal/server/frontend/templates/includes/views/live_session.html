@@ -7,8 +7,8 @@
                         <div id="session-summary" class="summary-line summary-inline" style="display:none">
                             <span class="goal-label">Goal</span>
                             <span class="summary-text"></span>
-                            <button class="goal-action-btn" onclick="refreshGoal()" title="Ask agent to update goal"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8a7 7 0 0 1 12.9-3.8"/><path d="M15 8a7 7 0 0 1-12.9 3.8"/><polyline points="13 1 14 4.2 10.5 4.2"/><polyline points="3 15 2 11.8 5.5 11.8"/></svg></button>
-                            <button class="goal-action-btn" onclick="editGoal()" title="Edit goal"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3z"/></svg></button>
+                            <button class="goal-action-btn" onclick="refreshGoal()" title="Ask agent to update goal" aria-label="Refresh goal"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8a7 7 0 0 1 12.9-3.8"/><path d="M15 8a7 7 0 0 1-12.9 3.8"/><polyline points="13 1 14 4.2 10.5 4.2"/><polyline points="3 15 2 11.8 5.5 11.8"/></svg></button>
+                            <button class="goal-action-btn" onclick="editGoal()" title="Edit goal" aria-label="Edit goal"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3z"/></svg></button>
                         </div>
                         <span id="session-branch" class="branch-chip" style="display:none">
                             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg>
@@ -27,13 +27,13 @@
                     </div>
                 </div>
 
-                <div id="waiting-banner" class="waiting-banner" style="display:none">
+                <div id="waiting-banner" class="waiting-banner" role="status" aria-live="assertive" style="display:none">
                     Agent is waiting for input
                 </div>
 
                 <div class="live-body">
                     <div class="live-left-column">
-                        <div id="capture-wrapper" style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column">
+                        <div id="capture-wrapper" class="capture-wrapper">
                             <div class="terminal-header">
                                 <div class="terminal-header-left">
                                     <span class="terminal-status-dot" id="terminal-status-dot"></span>
@@ -48,7 +48,7 @@
                             </div>
                             <div id="session-sleeping-overlay" class="session-sleeping-overlay" style="display:none">
                                 <div class="session-sleeping-content">
-                                    <span style="font-size:48px">🌙</span>
+                                    <span class="sleeping-emoji">🌙</span>
                                     <p>This agent is sleeping</p>
                                 </div>
                             </div>
@@ -65,8 +65,8 @@
                                     <p>Lost connection to server</p>
                                 </div>
                             </div>
-                            <div id="selection-pause-badge" class="selection-pause-badge" style="display:none">Updates paused — text selected</div>
-                            <div id="xterm-disconnected-badge" class="xterm-disconnected-badge">Disconnected — reconnecting...</div>
+                            <div id="selection-pause-badge" class="selection-pause-badge" role="status" aria-live="polite" style="display:none">Updates paused — text selected</div>
+                            <div id="xterm-disconnected-badge" class="xterm-disconnected-badge" role="status" aria-live="assertive">Disconnected — reconnecting...</div>
                         </div>
                         <div class="command-pane-resize-handle" id="command-pane-resize-handle"></div>
                         <div class="command-pane" id="command-pane">
@@ -76,7 +76,7 @@
                             <div class="command-pane-body">
                                 <div id="image-attachments" class="image-attachments"></div>
                                 <div class="command-editor">
-                                    <textarea id="command-input" placeholder="Type a command or paste an image..." rows="3" autocomplete="off"></textarea>
+                                    <textarea id="command-input" placeholder="Type a command or paste an image..." rows="3" autocomplete="off" aria-label="Enter command or paste image"></textarea>
                                 </div>
                                 <button class="mobile-send-btn" onclick="sendCommandWithTeam()" aria-label="Send with team reminder" title="+Team" style="margin-right:4px;opacity:0.7;font-size:11px">+T</button>
                                 <button class="mobile-send-btn" onclick="sendCommand()" aria-label="Send">
@@ -92,7 +92,7 @@
                         </button>
                         <!-- Top block: Files, Tasks, Stats, Chat, Notes -->
                         <div class="agentic-block" id="agentic-block-top">
-                            <div class="agentic-state-tabs">
+                            <div class="agentic-state-tabs" role="tablist" aria-label="Session panels">
                                 <button class="agentic-tab" onclick="switchAgenticTab('board', 'top')" id="agentic-tab-board" title="Board Chat" aria-label="Board Chat" style="display:none">
                                     <span class="material-icons">forum</span>
                                 </button>
@@ -123,10 +123,10 @@
                             <!-- Files tab -->
                             <div id="agentic-panel-files" class="agentic-panel active">
                                 <div class="changed-files-header" id="changed-files-header">
-                                    <div class="files-search-row" style="position:relative">
-                                        <input type="search" id="files-search-input" class="files-search-input" placeholder="Search files..." autocomplete="off">
-                                        <button class="refresh-files-btn" id="file-search-mode-btn" onclick="toggleFileSearchMode()" title="Toggle browse/search mode" style="font-size:14px">&#x1F4C1;</button>
-                                        <button class="refresh-files-btn" onclick="refreshChangedFiles()" title="Refresh git diff">&#x21bb;</button>
+                                    <div class="files-search-row files-search-row-wrapper">
+                                        <input type="search" id="files-search-input" class="files-search-input" placeholder="Search files..." autocomplete="off" aria-label="Search changed files">
+                                        <button class="refresh-files-btn" id="file-search-mode-btn" onclick="toggleFileSearchMode()" title="Toggle browse/search mode" aria-label="Toggle file search mode" style="font-size:14px">&#x1F4C1;</button>
+                                        <button class="refresh-files-btn" onclick="refreshChangedFiles()" title="Refresh git diff" aria-label="Refresh file changes">&#x21bb;</button>
                                         <div id="files-search-dropdown" class="file-mention-dropdown" style="display:none;bottom:auto;top:100%;margin-top:4px;margin-bottom:0;max-height:400px"></div>
                                     </div>
                                     <span class="changed-files-title" id="changed-files-title">0 files changed</span>

@@ -461,7 +461,7 @@ func (h *ThemesHandler) GenerateTheme(w http.ResponseWriter, r *http.Request) {
 	// Find an available LLM CLI — try requested type first, then fall back
 	cliPath, cliArgs := resolveThemeCLI(body.AgentType)
 	if cliPath == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "No LLM CLI found — install Claude Code (npm install -g @anthropic-ai/claude-code) or Gemini CLI"})
+		errInternalServer(w, "No LLM CLI found — install Claude Code (npm install -g @anthropic-ai/claude-code) or Gemini CLI")
 		return
 	}
 
@@ -483,7 +483,7 @@ func (h *ThemesHandler) GenerateTheme(w http.ResponseWriter, r *http.Request) {
 	cmd := executil.Command(r.Context(), cliPath, args...)
 	output, err := cmd.Output()
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"error": "Claude CLI failed: " + err.Error()})
+		errInternalServer(w, "Claude CLI failed: "+err.Error())
 		return
 	}
 
@@ -502,7 +502,7 @@ func (h *ThemesHandler) GenerateTheme(w http.ResponseWriter, r *http.Request) {
 
 	var result map[string]any
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": "Failed to parse LLM response as JSON", "raw": raw})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "Failed to parse LLM response as JSON", "raw": raw})
 		return
 	}
 

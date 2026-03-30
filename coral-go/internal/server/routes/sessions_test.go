@@ -432,7 +432,7 @@ func TestSessionsSetIcon(t *testing.T) {
 	ctx := context.Background()
 	ss.RegisterLiveSession(ctx, &store.LiveSession{AgentName: "claude-test-icon", AgentType: "claude", WorkingDir: "/tmp/test", SessionID: "test-icon-123"})
 
-	body := bytes.NewBufferString(`{"icon": "🚀"}`)
+	body := bytes.NewBufferString(`{"icon": "🚀", "session_id": "test-icon-123"}`)
 	resp, err := http.Post(server.URL+"/api/sessions/live/claude-test-icon/set-icon", "application/json", body)
 	require.NoError(t, err)
 	defer resp.Body.Close()

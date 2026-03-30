@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"log"
 	"net"
 	"net/http"
 
@@ -48,7 +49,12 @@ func (ar *Routes) ValidateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := ar.ks.CreateSession(ip, r.UserAgent())
+	token, err := ar.ks.CreateSession(ip, r.UserAgent())
+	if err != nil {
+		log.Printf("[auth] failed to create session: %v", err)
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create session"})
+		return
+	}
 	SetSessionCookie(w, r, token)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -70,7 +76,12 @@ func (ar *Routes) RegenerateKey(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "localhost only"})
 		return
 	}
-	newKey := ar.ks.RegenerateKey()
+	newKey, err := ar.ks.RegenerateKey()
+	if err != nil {
+		log.Printf("[auth] failed to regenerate key: %v", err)
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to regenerate key"})
+		return
+	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"key": newKey})
 }
 

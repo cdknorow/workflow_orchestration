@@ -218,7 +218,7 @@ func apiCall(method, path string, body any) (map[string]any, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot reach Coral server at %s: %v", serverURL, err)
+		return nil, fmt.Errorf("cannot reach Coral server at %s: %v", serverURL, err)
 	}
 	defer resp.Body.Close()
 
@@ -268,7 +268,7 @@ func printUsage() {
 
 Commands:
   join <project> --as <role>   Subscribe to a board
-  post "<message>"             Post a message
+  post "<message>" [--to "a,b"] Post a message (optionally @mention agents)
   read [--last N] [--id N]     Read new messages (or a specific message by ID)
   check [--quiet]              Check unread count
   projects                     List all boards
@@ -320,10 +320,37 @@ func cmdPost() {
 		os.Exit(1)
 	}
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: coral-board post \"<message>\"")
+		fmt.Fprintln(os.Stderr, "Usage: coral-board post \"<message>\" [--to \"agent1,agent2\"]")
 		os.Exit(1)
 	}
-	message := strings.Join(os.Args[2:], " ")
+
+	// Parse --to flag and collect remaining args as the message
+	var toNames string
+	var msgParts []string
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] == "--to" && i+1 < len(os.Args) {
+			toNames = os.Args[i+1]
+			i++ // skip the value
+		} else {
+			msgParts = append(msgParts, os.Args[i])
+		}
+	}
+	message := strings.Join(msgParts, " ")
+
+	// Prepend @mentions if --to was provided
+	if toNames != "" {
+		var mentions []string
+		for _, name := range strings.Split(toNames, ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				mentions = append(mentions, "@"+name)
+			}
+		}
+		if len(mentions) > 0 {
+			message = strings.Join(mentions, " ") + " " + message
+		}
+	}
+
 	subscriberID := resolveSubscriberID()
 
 	result, err := apiCall("POST", "/"+st.Project+"/messages", map[string]string{

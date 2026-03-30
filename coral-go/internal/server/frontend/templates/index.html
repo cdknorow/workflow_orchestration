@@ -44,33 +44,33 @@
 <body>
     <header class="top-bar">
         <div class="top-bar-brand">
-            <button class="tablet-sidebar-toggle" onclick="toggleTabletSidebar()" title="Toggle sidebar">
+            <button class="tablet-sidebar-toggle" onclick="toggleTabletSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
                 </svg>
             </button>
             <span class="top-bar-title"><img src="/static/favicon.png" alt="Coral" class="top-bar-logo"><h1>Coral</h1></span>
         </div>
-        <nav class="top-nav-tabs">
+        <nav class="top-nav-tabs" role="tablist" aria-label="Main navigation">
             <button class="top-nav-tab active" id="nav-tab-agents" onclick="switchNavTab('agents')">Agents</button>
             <button class="top-nav-tab" id="nav-tab-history" onclick="switchNavTab('history')">History</button>
             <button class="top-nav-tab" id="nav-tab-board" onclick="switchNavTab('board')" style="display:none">Board</button>
             <button class="top-nav-tab" id="nav-tab-jobs" onclick="switchNavTab('jobs')" style="display:none">Jobs</button>
         </nav>
-        <div id="startup-loading" class="startup-loading">
+        <div id="startup-loading" class="startup-loading" role="status" aria-live="polite">
             <span class="startup-spinner"></span>
             <span>Agents loading…</span>
         </div>
         <div class="top-bar-search" id="top-bar-search">
             <span class="material-icons top-bar-search-icon">search</span>
-            <input type="search" id="topbar-file-search" class="top-bar-search-input" placeholder="Search files..." autocomplete="off">
+            <input type="search" id="topbar-file-search" class="top-bar-search-input" placeholder="Search files..." autocomplete="off" aria-label="Search files">
             <div id="topbar-search-dropdown" class="topbar-search-dropdown" style="display:none"></div>
         </div>
         <div class="top-bar-actions">
-            <button class="top-bar-btn" onclick="window._goHome()" title="Home"><span class="material-icons" style="font-size:18px">home</span></button>
-            <button class="top-bar-btn" id="panel-toggle-btn" onclick="toggleAgenticPanel()" title="Toggle side panel"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="10" y1="2" x2="10" y2="14"/></svg></button>
+            <button class="top-bar-btn" onclick="window._goHome()" title="Home" aria-label="Home"><span class="material-icons top-bar-icon">home</span></button>
+            <button class="top-bar-btn" id="panel-toggle-btn" onclick="toggleAgenticPanel()" title="Toggle side panel" aria-label="Toggle side panel"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="10" y1="2" x2="10" y2="14"/></svg></button>
             <div class="top-bar-settings-wrapper">
-                <button class="top-bar-btn" onclick="toggleTopBarSettings()" title="Menu">
+                <button class="top-bar-btn" onclick="toggleTopBarSettings()" title="Menu" aria-label="Settings menu">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path
@@ -233,7 +233,7 @@
     {{ template "includes/modals.html" . }}
 
     <!-- Mobile Bottom Tab Bar (3 tabs: Agents, Chat, Board) -->
-    <nav class="mobile-tab-bar">
+    <nav class="mobile-tab-bar" role="tablist" aria-label="Mobile navigation">
         <button class="mobile-tab active" data-tab="agents" onclick="switchMobileTab('agents')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/>

@@ -78,6 +78,34 @@
     --color-tool-pulse:      #bc8cff;
     --color-tool-default:    var(--text-muted);
 
+    /* Design Tokens — Spacing Scale */
+    --space-xs:  4px;
+    --space-sm:  6px;
+    --space-md:  8px;
+    --space-lg:  12px;
+    --space-xl:  16px;
+    --space-2xl: 24px;
+
+    /* Design Tokens — Border Radius Scale */
+    --radius-xs:  2px;
+    --radius-sm:  4px;
+    --radius-md:  6px;
+    --radius-lg:  8px;
+    --radius-xl:  12px;
+    --radius-2xl: 16px;
+
+    /* Design Tokens — Font Size Scale */
+    --fs-xs:   10px;
+    --fs-sm:   11px;
+    --fs-base: 12px;
+    --fs-md:   13px;
+    --fs-lg:   14px;
+    --fs-xl:   16px;
+
+    /* Accent variants */
+    --accent-light: #79c0ff;
+    --text-on-accent: #fff;
+
     /* Modal backdrop */
     --modal-backdrop: rgba(0, 0, 0, 0.6);
 
@@ -201,6 +229,10 @@
     --color-tool-stop:       #cf222e;
     --color-tool-pulse:      #8250df;
     --color-tool-default:    #8b949e;
+
+    /* Accent variants */
+    --accent-light: #0550ae;
+    --text-on-accent: #fff;
 
     /* Modal backdrop */
     --modal-backdrop: rgba(31, 35, 40, 0.4);

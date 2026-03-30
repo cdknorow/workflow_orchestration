@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,44 +128,55 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Migrations for existing DBs
-	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN receive_mode TEXT NOT NULL DEFAULT 'mentions'")
-	s.db.ExecContext(ctx, "ALTER TABLE board_messages ADD COLUMN target_group_id TEXT")
-	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
-
-	// Stable board identity migration: add subscriber_id and session_name columns.
-	// subscriber_id is the stable identity (role name); session_name is the mutable tmux session.
-	// The legacy session_id column is kept and mirrored to subscriber_id for UNIQUE constraint compat.
-	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN can_peek INTEGER NOT NULL DEFAULT 0")
-	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN subscriber_id TEXT")
-	s.db.ExecContext(ctx, "ALTER TABLE board_subscribers ADD COLUMN session_name TEXT")
-	s.db.ExecContext(ctx, "ALTER TABLE board_messages ADD COLUMN subscriber_id TEXT")
-	s.db.ExecContext(ctx, "ALTER TABLE board_groups ADD COLUMN subscriber_id TEXT")
+	// Migrations for existing DBs — ALTER TABLE ADD COLUMN is idempotent
+	// (fails with "duplicate column" on re-run, which is expected and ignored).
+	alterColumns := []string{
+		"ALTER TABLE board_subscribers ADD COLUMN receive_mode TEXT NOT NULL DEFAULT 'mentions'",
+		"ALTER TABLE board_messages ADD COLUMN target_group_id TEXT",
+		"ALTER TABLE board_subscribers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
+		"ALTER TABLE board_subscribers ADD COLUMN can_peek INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE board_subscribers ADD COLUMN subscriber_id TEXT",
+		"ALTER TABLE board_subscribers ADD COLUMN session_name TEXT",
+		"ALTER TABLE board_messages ADD COLUMN subscriber_id TEXT",
+		"ALTER TABLE board_groups ADD COLUMN subscriber_id TEXT",
+	}
+	for _, ddl := range alterColumns {
+		if _, err := s.db.ExecContext(ctx, ddl); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				log.Printf("[board] migration warning: %v", err)
+			}
+		}
+	}
 
 	// Backfill: save old session_id as session_name, then set subscriber_id from job_title.
-	s.db.ExecContext(ctx, "UPDATE board_subscribers SET session_name = session_id WHERE session_name IS NULL")
-	s.db.ExecContext(ctx, "UPDATE board_subscribers SET subscriber_id = job_title WHERE subscriber_id IS NULL")
-	// Deduplicate: when multiple rows share (project, subscriber_id), keep the one with the highest
-	// id and remove others before we overwrite session_id.
-	s.db.ExecContext(ctx, `DELETE FROM board_subscribers WHERE id NOT IN (
-		SELECT MAX(id) FROM board_subscribers GROUP BY project, subscriber_id
-	) AND subscriber_id IS NOT NULL`)
-	// Mirror subscriber_id into session_id so UNIQUE(project, session_id) enforces uniqueness on subscriber_id.
-	s.db.ExecContext(ctx, "UPDATE board_subscribers SET session_id = subscriber_id WHERE subscriber_id IS NOT NULL AND session_id != subscriber_id")
-	// Backfill messages: look up subscriber_id from board_subscribers by session_name match.
-	s.db.ExecContext(ctx, `UPDATE board_messages SET subscriber_id = COALESCE(
-		(SELECT bs.subscriber_id FROM board_subscribers bs
-		 WHERE bs.session_name = board_messages.session_id AND bs.project = board_messages.project
-		 LIMIT 1),
-		board_messages.session_id
-	) WHERE subscriber_id IS NULL`)
-	// Backfill groups
-	s.db.ExecContext(ctx, `UPDATE board_groups SET subscriber_id = COALESCE(
-		(SELECT bs.subscriber_id FROM board_subscribers bs
-		 WHERE bs.session_name = board_groups.session_id AND bs.project = board_groups.project
-		 LIMIT 1),
-		board_groups.session_id
-	) WHERE subscriber_id IS NULL`)
+	backfills := []struct {
+		desc string
+		sql  string
+	}{
+		{"backfill session_name", "UPDATE board_subscribers SET session_name = session_id WHERE session_name IS NULL"},
+		{"backfill subscriber_id", "UPDATE board_subscribers SET subscriber_id = job_title WHERE subscriber_id IS NULL"},
+		{"deduplicate subscribers", `DELETE FROM board_subscribers WHERE id NOT IN (
+			SELECT MAX(id) FROM board_subscribers GROUP BY project, subscriber_id
+		) AND subscriber_id IS NOT NULL`},
+		{"mirror subscriber_id", "UPDATE board_subscribers SET session_id = subscriber_id WHERE subscriber_id IS NOT NULL AND session_id != subscriber_id"},
+		{"backfill message subscriber_id", `UPDATE board_messages SET subscriber_id = COALESCE(
+			(SELECT bs.subscriber_id FROM board_subscribers bs
+			 WHERE bs.session_name = board_messages.session_id AND bs.project = board_messages.project
+			 LIMIT 1),
+			board_messages.session_id
+		) WHERE subscriber_id IS NULL`},
+		{"backfill group subscriber_id", `UPDATE board_groups SET subscriber_id = COALESCE(
+			(SELECT bs.subscriber_id FROM board_subscribers bs
+			 WHERE bs.session_name = board_groups.session_id AND bs.project = board_groups.project
+			 LIMIT 1),
+			board_groups.session_id
+		) WHERE subscriber_id IS NULL`},
+	}
+	for _, bf := range backfills {
+		if _, err := s.db.ExecContext(ctx, bf.sql); err != nil {
+			log.Printf("[board] migration %s failed: %v", bf.desc, err)
+		}
+	}
 
 	return nil
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -190,7 +189,7 @@ func TestInit_CORAL_URL(t *testing.T) {
 	os.Setenv("CORAL_URL", "http://custom-host:9000/")
 	serverURL = "http://localhost:8420"
 	if v := os.Getenv("CORAL_URL"); v != "" {
-		serverURL = fmt.Sprintf("%s", v[:len(v)-1]) // trim trailing slash
+		serverURL = v[:len(v)-1] // trim trailing slash
 	}
 	if serverURL != "http://custom-host:9000" {
 		t.Errorf("serverURL = %q, want %q", serverURL, "http://custom-host:9000")

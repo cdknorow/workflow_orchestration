@@ -218,8 +218,6 @@ window._handleTeamFolderImport = async function(input) {
         }
     }
 
-    console.log('[coral] Import parsed:', { orchestrator, agents: agents.map(a => a.name), folderName });
-
     if (!orchestrator && agents.length === 0) {
         const { showToast } = await import('./utils.js');
         showToast('No valid .md files found (expected SKILL.md and/or agents/*.md)', true);

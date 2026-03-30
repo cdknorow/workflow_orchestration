@@ -193,7 +193,7 @@ func resolveCodexTranscript(sessionID string) string {
 	}
 
 	// Fallback: search all rollout files for a matching session ID
-	err = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}

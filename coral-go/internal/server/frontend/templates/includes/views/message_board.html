@@ -1,8 +1,8 @@
 {{ define "includes/views/message_board.html" }}
 <!-- Message Board View -->
 <div id="messageboard-view" class="session-view" style="display:none">
-    <div class="session-header" style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:12px">
+    <div class="session-header mb-view-header">
+        <div class="mb-view-header-left">
             <h2 id="messageboard-title">Message Board</h2>
             <span class="badge" id="messageboard-project-badge" style="display:none"></span>
         </div>
@@ -13,17 +13,17 @@
         </div>
     </div>
 
-    <div class="view-body" style="display:flex;gap:20px;overflow:hidden">
+    <div class="view-body mb-view-body">
         <!-- Project list (shown when no project selected) -->
-        <div id="mb-project-list" style="flex:1;overflow-y:auto">
+        <div id="mb-project-list" class="mb-project-list">
             <div class="empty-state" id="mb-projects-empty">No projects yet</div>
             <ul class="session-list" id="mb-projects-ul"></ul>
         </div>
 
         <!-- Board view (shown when project selected) -->
-        <div id="mb-board" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+        <div id="mb-board" class="mb-board" style="display:none">
             <!-- Messages -->
-            <div id="mb-messages" style="flex:1;overflow-y:auto;padding:8px 4px 12px">
+            <div id="mb-messages" class="mb-messages-scroll">
                 <div id="mb-sleep-banner" class="mb-sleep-banner" style="display:none">
                     <span>🌙 This team is sleeping. Messages are paused.</span>
                 </div>
@@ -31,19 +31,18 @@
             </div>
 
             <!-- Post form -->
-            <div style="border-top:1px solid var(--border);padding:12px 0 0;display:flex;gap:8px;align-items:flex-end">
-                <textarea id="mb-post-input" placeholder="Post a message as Developer..."
+            <div class="mb-post-form">
+                <textarea id="mb-post-input" class="mb-post-input" placeholder="Post a message as Developer..." aria-label="Post message to board"
                        rows="2"
-                       style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-primary);font-size:14px;resize:vertical;font-family:inherit;line-height:1.5;min-height:44px"
                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postBoardMessage()}"></textarea>
-                <button class="btn btn-primary" onclick="postBoardMessage()" style="height:44px;padding:0 20px">Send</button>
+                <button class="btn btn-primary mb-post-send-btn" onclick="postBoardMessage()">Send</button>
             </div>
         </div>
 
         <!-- Subscribers panel (shown alongside board) -->
-        <div id="mb-subscribers-panel" style="display:none;width:220px;border-left:1px solid var(--border);padding-left:16px;overflow-y:auto">
-            <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-muted)">Subscribers</h3>
-            <ul id="mb-subscribers-list" style="list-style:none;padding:0;margin:0"></ul>
+        <div id="mb-subscribers-panel" class="mb-subscribers-panel" style="display:none">
+            <h3 class="mb-subscribers-title">Subscribers</h3>
+            <ul id="mb-subscribers-list" class="mb-subscribers-list"></ul>
         </div>
     </div>
 </div>
