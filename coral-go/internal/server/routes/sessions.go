@@ -1470,6 +1470,10 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType, storedModel string
 	var storedCaps *agent.Capabilities
 	var storedCapsJSON *string
+	var storedTools []string
+	var storedToolsJSON *string
+	var storedMCPServers map[string]any
+	var storedMCPServersJSON *string
 	if body.SessionID != "" {
 		if ls, err := h.ss.GetLiveSession(ctx, body.SessionID); err == nil && ls != nil {
 			storedFlags = store.UnmarshalFlags(ls.Flags)
@@ -1480,6 +1484,10 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 			storedBoardType = derefStrPtr(ls.BoardType)
 			storedModel = derefStrPtr(ls.Model)
 			storedCapsJSON = ls.Capabilities
+			storedToolsJSON = ls.Tools
+			storedMCPServersJSON = ls.MCPServers
+			storedTools = store.UnmarshalFlags(ls.Tools)
+			storedMCPServers = store.UnmarshalMCPServers(ls.MCPServers)
 			if ls.Capabilities != nil && *ls.Capabilities != "" {
 				storedCaps = &agent.Capabilities{}
 				json.Unmarshal([]byte(*ls.Capabilities), storedCaps)
@@ -1559,6 +1567,8 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		PromptOverrides: promptOverrides(userSettings),
 		BoardType:       storedBoardType,
 		Capabilities:    storedCaps,
+		Tools:           storedTools,
+		MCPServers:      storedMCPServers,
 	}))
 	log.Printf("[launch] restart session=%s cmd=%s", target, cmd)
 	h.terminal.SendToTarget(ctx, target, cmd)
@@ -1588,6 +1598,8 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		BoardType:    strPtr(storedBoardType),
 		Capabilities: storedCapsJSON,
 		Model:        strPtr(storedModel),
+		Tools:        storedToolsJSON,
+		MCPServers:   storedMCPServersJSON,
 		PID:          restartPID,
 	})
 	h.ss.MigrateDisplayName(ctx, body.SessionID, newSessionID)
@@ -1656,6 +1668,8 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 
 	// Load stored fields from current session
 	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType string
+	var storedTools []string
+	var storedMCPServers map[string]any
 	if body.CurrentSessionID != "" {
 		if ls, err := h.ss.GetLiveSession(ctx, body.CurrentSessionID); err == nil && ls != nil {
 			storedPrompt = derefStrPtr(ls.Prompt)
@@ -1663,6 +1677,8 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 			storedBoardServer = derefStrPtr(ls.BoardServer)
 			storedDisplayName = derefStrPtr(ls.DisplayName)
 			storedBoardType = derefStrPtr(ls.BoardType)
+			storedTools = store.UnmarshalFlags(ls.Tools)
+			storedMCPServers = store.UnmarshalMCPServers(ls.MCPServers)
 		}
 	}
 
@@ -1691,6 +1707,8 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		Prompt:          storedPrompt,
 		PromptOverrides: promptOverrides(userSettings),
 		BoardType:       storedBoardType,
+		Tools:           storedTools,
+		MCPServers:      storedMCPServers,
 	}))
 	h.terminal.SendToTarget(ctx, target, cmd)
 
@@ -1789,6 +1807,8 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 		BoardType    string             `json:"board_type"`
 		Model        string             `json:"model"`
 		Capabilities *agent.Capabilities `json:"capabilities"`
+		Tools        []string           `json:"tools"`
+		MCPServers   map[string]any     `json:"mcpServers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		errBadRequest(w, "invalid JSON")
@@ -1816,7 +1836,8 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 		launchFlags = append(append([]string{}, body.Flags...), "--model", body.Model)
 	}
 	result, err := h.launchSession(r.Context(), body.WorkingDir, body.AgentType, body.DisplayName,
-		"", launchFlags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, body.Model, body.Capabilities)
+		"", launchFlags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, body.Model, body.Capabilities,
+		body.Tools, body.MCPServers)
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
@@ -1849,6 +1870,8 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 			Capabilities *agent.Capabilities `json:"capabilities"`
 			AgentType    string              `json:"agent_type"`
 			Model        string              `json:"model"`
+			Tools        []string            `json:"tools"`
+			MCPServers   map[string]any      `json:"mcpServers"`
 		} `json:"agents"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1905,7 +1928,8 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 		}
 
 		result, err := h.launchSession(ctx, body.WorkingDir, agentType, agentDef.Name,
-			"", agentFlags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, agentDef.Model, agentDef.Capabilities)
+			"", agentFlags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, agentDef.Model, agentDef.Capabilities,
+			agentDef.Tools, agentDef.MCPServers)
 		if err != nil {
 			log.Printf("[launch-team] failed to launch agent %s: %v", agentDef.Name, err)
 			launched = append(launched, map[string]any{"name": agentDef.Name, "error": err.Error()})
@@ -1963,6 +1987,8 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 		Icon         *string
 		Capabilities *string
 		Model        *string
+		Tools        *string
+		MCPServers   *string
 	}
 	configs := make([]agentConfig, 0, len(sessions))
 	for _, s := range sessions {
@@ -1984,6 +2010,8 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 			Icon:         s.Icon,
 			Capabilities: s.Capabilities,
 			Model:        s.Model,
+			Tools:        s.Tools,
+			MCPServers:   s.MCPServers,
 		})
 	}
 
@@ -2044,8 +2072,11 @@ func (h *SessionsHandler) ResetTeam(w http.ResponseWriter, r *http.Request) {
 		if modelStr != "" {
 			flags = append(flags, "--model", modelStr)
 		}
+		tools := store.UnmarshalFlags(cfg.Tools)
+		mcpServers := store.UnmarshalMCPServers(cfg.MCPServers)
 		result, err := h.launchSession(bgCtx, cfg.WorkingDir, cfg.AgentType, displayName,
-			"", flags, prompt, boardName, boardServer, "", boardType, modelStr, caps)
+			"", flags, prompt, boardName, boardServer, "", boardType, modelStr, caps,
+			tools, mcpServers)
 		if err != nil {
 			log.Printf("[reset-team] failed to re-launch %s: %v", displayName, err)
 			launched = append(launched, map[string]any{"name": displayName, "error": err.Error()})
@@ -2328,7 +2359,8 @@ func generateUUID() string {
 
 // launchSession creates a new agent session using the specified backend (tmux or pty).
 func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType, displayName, resumeSessionID string,
-	flags []string, prompt, boardName, boardServer, backend, boardType, model string, capabilities *agent.Capabilities) (map[string]any, error) {
+	flags []string, prompt, boardName, boardServer, backend, boardType, model string, capabilities *agent.Capabilities,
+	tools []string, mcpServers map[string]any) (map[string]any, error) {
 
 	absDir, err := filepath.Abs(workDir)
 	if err != nil || !isDir(absDir) {
@@ -2405,6 +2437,8 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		PromptOverrides: promptOverrides(userSettings),
 		BoardType:       boardType,
 		Capabilities:    capabilities,
+		Tools:           tools,
+		MCPServers:      mcpServers,
 		CLIPath:         cliPath,
 	}
 	if cliPath != "" {
@@ -2508,6 +2542,8 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		BoardType:    strPtr(boardType),
 		Capabilities: store.MarshalCapabilities(capabilities),
 		Model:        strPtr(model),
+		Tools:        store.MarshalCapabilities(tools),
+		MCPServers:   store.MarshalCapabilities(mcpServers),
 		PID:          shellPID,
 	})
 
@@ -3030,6 +3066,8 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 		PromptOverrides: promptOverrides(userSettings),
 		BoardType:       boardType,
 		Capabilities:    nil,
+		Tools:           store.UnmarshalFlags(ls.Tools),
+		MCPServers:      store.UnmarshalMCPServers(ls.MCPServers),
 		CLIPath:         cliPath,
 	}
 

@@ -471,6 +471,29 @@ export async function confirmRestart() {
             // Reload events for the new session_id
             loadAgentEvents(state.currentSession.name, state.currentSession.session_id);
             showToast(`Restarted: ${state.currentSession.name}`);
+
+            // Reconnect terminal WebSocket to the new session.
+            // Poll until the new session is live, then connect.
+            const newName = state.currentSession.name;
+            const newSessionId = state.currentSession.session_id;
+            const newAgentType = state.currentSession.agent_type;
+            let pollCount = 0;
+            const pollInterval = setInterval(async () => {
+                pollCount++;
+                try {
+                    const liveResp = await fetch(`/api/sessions/live/${encodeURIComponent(newName)}?session_id=${encodeURIComponent(newSessionId)}`);
+                    if (liveResp.ok) {
+                        clearInterval(pollInterval);
+                        xtermMod.connectTerminalWs(newName, newAgentType, newSessionId);
+                    }
+                } catch (_) { /* ignore fetch errors during poll */ }
+                if (pollCount >= 15) {
+                    // Timeout after ~30s — clear overlay and show error
+                    clearInterval(pollInterval);
+                    xtermMod.setRestarting(false);
+                    showToast("Restart timed out — session may not have started", true);
+                }
+            }, 2000);
         }
     } catch (e) {
         showToast("Failed to restart session", true);

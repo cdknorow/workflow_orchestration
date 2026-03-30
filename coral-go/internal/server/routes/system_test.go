@@ -264,10 +264,12 @@ func TestAddFolderTag_MissingTagID(t *testing.T) {
 
 func TestParseFrontmatterMD(t *testing.T) {
 	tests := []struct {
-		input       string
-		wantName    string
-		wantDesc    string
-		wantBody    string
+		input        string
+		wantName     string
+		wantDesc     string
+		wantBody     string
+		wantTools    []string
+		wantMCPCount int
 	}{
 		{
 			input:    "Just a body with no frontmatter",
@@ -285,21 +287,34 @@ func TestParseFrontmatterMD(t *testing.T) {
 			input:    "---\ndescription: Only description\n---\nBody text",
 			wantName: "", wantDesc: "Only description", wantBody: "Body text",
 		},
+		{
+			input: `---
+name: Tool Agent
+tools:
+  - TodoWrite
+  - Bash(npm test)
+mcp_servers:
+  github:
+    command: npx
+---
+Body text`,
+			wantName: "Tool Agent", wantBody: "Body text",
+			wantTools:    []string{"TodoWrite", "Bash(npm test)"},
+			wantMCPCount: 1,
+		},
 	}
 
 	for _, tt := range tests {
-		name, desc, body := parseFrontmatterMD(tt.input)
-		assert.Equal(t, tt.wantName, name, "name mismatch for input: %s", tt.input)
-		assert.Equal(t, tt.wantDesc, desc, "desc mismatch for input: %s", tt.input)
+		meta, body := parseFrontmatterMD(tt.input)
+		assert.Equal(t, tt.wantName, meta.Name, "name mismatch for input: %s", tt.input)
+		assert.Equal(t, tt.wantDesc, meta.Description, "desc mismatch for input: %s", tt.input)
 		assert.Equal(t, tt.wantBody, body, "body mismatch for input: %s", tt.input)
+		assert.Equal(t, tt.wantTools, meta.Tools, "tools mismatch for input: %s", tt.input)
+		assert.Len(t, meta.MCPServers, tt.wantMCPCount, "mcp mismatch for input: %s", tt.input)
 	}
 }
 
 func TestImportTeam(t *testing.T) {
-	server, _ := setupSystemTestServer(t)
-
-	// Register the import route
-	// (The test server doesn't have it, so we test the handler directly)
 	teamDir := t.TempDir()
 
 	// Create SKILL.md
@@ -324,15 +339,13 @@ name: Code Reviewer
 ---
 You review pull requests.`), 0644)
 
-	// Call the handler directly
-	_ = server // just to keep the test infrastructure
-	name, desc, body := parseFrontmatterMD(`---
+	meta, body := parseFrontmatterMD(`---
 name: Project Lead
 description: Coordinates the team
 ---
 You are the orchestrator. Plan and delegate.`)
-	assert.Equal(t, "Project Lead", name)
-	assert.Equal(t, "Coordinates the team", desc)
+	assert.Equal(t, "Project Lead", meta.Name)
+	assert.Equal(t, "Coordinates the team", meta.Description)
 	assert.Equal(t, "You are the orchestrator. Plan and delegate.", body)
 }
 

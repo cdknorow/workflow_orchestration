@@ -311,13 +311,23 @@ export function initTopBarSearch() {
                 _renderTopBarResults(null, 'Select an agent to search files');
                 return;
             }
-            const files = await fetchFileList();
-            if (!files || files.length === 0) {
-                _renderTopBarResults(null, 'No files found');
-                return;
+            const mode = (state.settings || {}).file_search_mode || 'directory';
+            if (mode === 'directory') {
+                const browse = await getDirBrowseResults(q);
+                if (!browse || browse.results.length === 0) {
+                    _renderTopBarResults(null, 'No files found');
+                    return;
+                }
+                _renderTopBarResults(browse.results.slice(0, 50));
+            } else {
+                const files = await fetchFileList();
+                if (!files || files.length === 0) {
+                    _renderTopBarResults(null, 'No files found');
+                    return;
+                }
+                const matches = fuzzyFilter(files, q);
+                _renderTopBarResults(matches);
             }
-            const matches = fuzzyFilter(files, q);
-            _renderTopBarResults(matches);
         }, 200);
     }
 
@@ -341,12 +351,21 @@ async function _showWorkingDir() {
         _renderTopBarResults(null, 'Select an agent to search files');
         return;
     }
-    // Show directory listing of working dir on focus
-    const browse = await getDirBrowseResults('');
-    if (browse && browse.results.length > 0) {
-        _renderTopBarResults(browse.results.slice(0, 20), null, dir);
+    const mode = (state.settings || {}).file_search_mode || 'directory';
+    if (mode === 'directory') {
+        const browse = await getDirBrowseResults('');
+        if (browse && browse.results.length > 0) {
+            _renderTopBarResults(browse.results.slice(0, 20), null, dir);
+        } else {
+            _renderTopBarResults(null, 'Type to search files...', dir);
+        }
     } else {
-        _renderTopBarResults(null, 'Type to search files...', dir);
+        const files = await fetchFileList();
+        if (files && files.length > 0) {
+            _renderTopBarResults(files.slice(0, 20), null, dir);
+        } else {
+            _renderTopBarResults(null, 'Type to search files...', dir);
+        }
     }
 }
 

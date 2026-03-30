@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	qrcode "github.com/skip2/go-qrcode"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/config"
@@ -152,6 +153,7 @@ func (h *SystemHandler) Status(w http.ResponseWriter, r *http.Request) {
 }
 
 var githubReleasesAPI = "https://api.github.com/repos/subgentic/coral-app/releases/latest"
+
 const githubReleasesURL = "https://github.com/subgentic/coral-app/releases"
 
 // FetchLatestVersion queries GitHub for the latest release version tag (without "v" prefix).
@@ -521,9 +523,9 @@ func (h *SystemHandler) NetworkInfo(w http.ResponseWriter, r *http.Request) {
 // The folder structure is:
 //
 //	my-team/
-//	  SKILL.md         → Orchestrator agent (frontmatter: name, description)
+//	  SKILL.md         → Orchestrator agent (frontmatter: name, description, tools, mcp_servers)
 //	  agents/
-//	    agent-name.md  → Worker agents (frontmatter: name, description)
+//	    agent-name.md  → Worker agents (frontmatter: name, description, tools, mcp_servers)
 //
 // Each .md file has YAML frontmatter (---\nkey: value\n---) followed by the prompt body.
 func (h *SystemHandler) ImportTeam(w http.ResponseWriter, r *http.Request) {
@@ -551,17 +553,23 @@ func (h *SystemHandler) ImportTeam(w http.ResponseWriter, r *http.Request) {
 	// Parse SKILL.md as orchestrator
 	skillPath := filepath.Join(body.Path, "SKILL.md")
 	if data, err := os.ReadFile(skillPath); err == nil {
-		name, description, prompt := parseFrontmatterMD(string(data))
-		if name == "" {
-			name = "Orchestrator"
+		meta, prompt := parseFrontmatterMD(string(data))
+		if meta.Name == "" {
+			meta.Name = "Orchestrator"
 		}
 		agentDef := map[string]any{
-			"name":   name,
+			"name":   meta.Name,
 			"role":   "orchestrator",
 			"prompt": prompt,
 		}
-		if description != "" {
-			agentDef["description"] = description
+		if meta.Description != "" {
+			agentDef["description"] = meta.Description
+		}
+		if len(meta.Tools) > 0 {
+			agentDef["tools"] = meta.Tools
+		}
+		if len(meta.MCPServers) > 0 {
+			agentDef["mcpServers"] = meta.MCPServers
 		}
 		agents = append(agents, agentDef)
 	}
@@ -577,16 +585,22 @@ func (h *SystemHandler) ImportTeam(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			name, description, prompt := parseFrontmatterMD(string(data))
-			if name == "" {
-				name = strings.TrimSuffix(entry.Name(), ".md")
+			meta, prompt := parseFrontmatterMD(string(data))
+			if meta.Name == "" {
+				meta.Name = strings.TrimSuffix(entry.Name(), ".md")
 			}
 			agentDef := map[string]any{
-				"name":   name,
+				"name":   meta.Name,
 				"prompt": prompt,
 			}
-			if description != "" {
-				agentDef["description"] = description
+			if meta.Description != "" {
+				agentDef["description"] = meta.Description
+			}
+			if len(meta.Tools) > 0 {
+				agentDef["tools"] = meta.Tools
+			}
+			if len(meta.MCPServers) > 0 {
+				agentDef["mcpServers"] = meta.MCPServers
 			}
 			agents = append(agents, agentDef)
 		}
@@ -794,6 +808,16 @@ func runTeamGeneration(ctx context.Context, claudePath, prompt, coralDir string)
 		if _, exists := ag["model"]; !exists {
 			ag["model"] = ""
 		}
+		if tools, ok := ag["tools"]; !ok || tools == nil {
+			ag["tools"] = []any{}
+		} else if _, ok := tools.([]any); !ok {
+			return nil, fmt.Sprintf("agent '%s' has invalid tools; expected array", name)
+		}
+		if servers, ok := ag["mcpServers"]; !ok || servers == nil {
+			ag["mcpServers"] = map[string]any{}
+		} else if _, ok := servers.(map[string]any); !ok {
+			return nil, fmt.Sprintf("agent '%s' has invalid mcpServers; expected object", name)
+		}
 
 		caps, _ := ag["capabilities"].(map[string]any)
 		if caps == nil {
@@ -837,6 +861,14 @@ The response must match this exact schema:
     {
       "name": "Agent Display Name",
       "prompt": "Detailed prompt for this agent",
+      "tools": ["TodoWrite", "Bash(npm *)"],
+      "mcpServers": {
+        "github": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-github"],
+          "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+        }
+      },
       "capabilities": {
         "allow": ["capability1", "capability2"],
         "deny": ["capability3"]
@@ -856,10 +888,11 @@ Hard platform rules:
 5. Every worker prompt must say they are automatically joined to the message board, must not run "coral-board join", must not poll or loop on "coral-board read", and must wait for instructions from the Orchestrator before starting work.
 6. The Orchestrator prompt must say it is automatically joined to the message board, must not run "coral-board join", must not poll or loop on "coral-board read", and should discuss its plan with the operator before posting assignments.
 7. Every agent object MUST include all of these keys: "name", "prompt", "capabilities", "agent_type", and "model".
-8. Every "capabilities" object MUST include both "allow" and "deny" arrays, even if "deny" is empty.
-9. Use "claude" for "agent_type" unless the user explicitly requests a different agent type.
-10. Use an empty string for "model" unless the user explicitly requests a specific model for that agent.
-11. Use an empty string for "flags" unless the user explicitly requests flags.
+8. If useful, agent objects MAY also include "tools" (array of strings) and "mcpServers" (object keyed by server name).
+9. Every "capabilities" object MUST include both "allow" and "deny" arrays, even if "deny" is empty.
+10. Use "claude" for "agent_type" unless the user explicitly requests a different agent type.
+11. Use an empty string for "model" unless the user explicitly requests a specific model for that agent.
+12. Use an empty string for "flags" unless the user explicitly requests flags.
 
 Capability policy:
 Use only these capabilities:
@@ -884,6 +917,7 @@ If <composition> is empty or vague, infer a reasonable team structure from <dire
 If the user's requests conflict with the hard platform rules, obey the hard platform rules.
 If the user asks for an overpowered agent, reduce permissions to the minimum needed.
 In prompts, make each role specific and concrete. Avoid generic filler.
+Only include "tools" and "mcpServers" when they materially help the role. Do not invent MCP servers unless the request implies a real integration.
 
 Few-shot example:
 {
@@ -892,8 +926,10 @@ Few-shot example:
     {
       "name": "Orchestrator",
       "prompt": "You are the orchestrator for a coding team. You are automatically joined to the message board. Do not run coral-board join. Do not poll or loop on coral-board read. Break the work into steps, discuss your plan with the operator before posting assignments, delegate implementation and verification to the team via the message board, and track progress. Do not do the implementation work yourself.",
+      "tools": [],
+      "mcpServers": {},
       "capabilities": {
-        "allow": ["file_read", "shell:coral-board *", "agent_spawn", "web_access"],
+        "allow": ["file_read", "file_write", "shell", "git_write", "agent_spawn", "web_access"],
         "deny": []
       },
       "agent_type": "claude",
@@ -902,8 +938,10 @@ Few-shot example:
     {
       "name": "Lead Developer",
       "prompt": "You are the lead developer. You are automatically joined to the message board. Do not run coral-board join. Do not poll or loop on coral-board read. Wait for instructions from the Orchestrator before starting. Implement features, modify code, run necessary development commands, and coordinate status updates through the message board.",
+      "tools": [],
+      "mcpServers": {},
       "capabilities": {
-        "allow": ["file_read", "file_write", "shell", "git_write", "agent_spawn"],
+        "allow": ["file_read", "file_write", "shell", "git_write", "agent_spawn", "web_access"],
         "deny": []
       },
       "agent_type": "claude",
@@ -912,9 +950,11 @@ Few-shot example:
     {
       "name": "QA Engineer",
       "prompt": "You are the QA engineer. You are automatically joined to the message board. Do not run coral-board join. Do not poll or loop on coral-board read. Wait for instructions from the Orchestrator before starting. Review changes, write or run tests when needed, verify behavior, and report risks and regressions through the message board.",
+      "tools": [],
+      "mcpServers": {},
       "capabilities": {
-        "allow": ["file_read"],
-        "deny": ["file_write", "shell", "git_write", "agent_spawn"]
+        "allow": ["file_read", "file_write", "shell", "git_write", "agent_spawn", "web_access"],
+        "deny": []
       },
       "agent_type": "claude",
       "model": ""
@@ -928,6 +968,7 @@ Final validation checklist:
 - Ensure the first agent is "Orchestrator".
 - Ensure there are 3-8 agents.
 - Ensure every agent has "name", "prompt", "capabilities", "agent_type", and "model".
+- If present, ensure "tools" is an array of strings and "mcpServers" is an object.
 - Ensure every capabilities object has both "allow" and "deny".
 - Ensure every capability string is from the supported list above.
 - Ensure prompts include the message board coordination rules.
@@ -940,40 +981,35 @@ You will receive:
 
 Generate the team configuration now.`
 
-// parseFrontmatterMD extracts YAML frontmatter (name, description) and body from markdown.
-// Returns (name, description, body). If no frontmatter, body is the full content.
-func parseFrontmatterMD(content string) (name, description, body string) {
+type agentFrontmatter struct {
+	Name        string         `yaml:"name"`
+	Description string         `yaml:"description"`
+	Tools       []string       `yaml:"tools"`
+	MCPServers  map[string]any `yaml:"mcp_servers"`
+}
+
+// parseFrontmatterMD extracts YAML frontmatter and body from markdown.
+// Returns (frontmatter, body). If no frontmatter, body is the full content.
+func parseFrontmatterMD(content string) (agentFrontmatter, string) {
 	content = strings.TrimSpace(content)
 	if !strings.HasPrefix(content, "---") {
-		return "", "", content
+		return agentFrontmatter{}, content
 	}
 
 	// Find closing ---
 	rest := content[3:]
 	idx := strings.Index(rest, "\n---")
 	if idx < 0 {
-		return "", "", content
+		return agentFrontmatter{}, content
 	}
 
 	frontmatter := rest[:idx]
-	body = strings.TrimSpace(rest[idx+4:])
+	body := strings.TrimSpace(rest[idx+4:])
 
-	// Simple YAML parsing for name and description fields
-	for _, line := range strings.Split(frontmatter, "\n") {
-		line = strings.TrimSpace(line)
-		if k, v, ok := strings.Cut(line, ":"); ok {
-			k = strings.TrimSpace(k)
-			v = strings.TrimSpace(v)
-			// Remove surrounding quotes if present
-			v = strings.Trim(v, `"'`)
-			switch k {
-			case "name":
-				name = v
-			case "description":
-				description = v
-			}
-		}
+	var meta agentFrontmatter
+	if err := yaml.Unmarshal([]byte(frontmatter), &meta); err != nil {
+		return agentFrontmatter{}, content
 	}
 
-	return name, description, body
+	return meta, body
 }

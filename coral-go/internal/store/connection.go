@@ -139,6 +139,8 @@ var columnMigrations = []columnMigration{
 	{"live_sessions", "capabilities", "TEXT"},
 	{"live_sessions", "model", "TEXT"},
 	{"live_sessions", "pid", "INTEGER NOT NULL DEFAULT 0"},
+	{"live_sessions", "tools", "TEXT"},
+	{"live_sessions", "mcp_servers", "TEXT"},
 }
 
 var additionalIndexes = []string{

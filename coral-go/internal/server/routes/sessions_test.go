@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -25,12 +27,14 @@ type mockSessionTerminal struct {
 	mu       sync.Mutex
 	sessions map[string]*ptymanager.PaneInfo
 	outputs  map[string]string
+	sent     map[string][]string
 }
 
 func newMockTerminal() *mockSessionTerminal {
 	return &mockSessionTerminal{
 		sessions: make(map[string]*ptymanager.PaneInfo),
 		outputs:  make(map[string]string),
+		sent:     make(map[string][]string),
 	}
 }
 
@@ -80,7 +84,12 @@ func (m *mockSessionTerminal) SendRawInput(_ context.Context, name string, _ []s
 	return nil
 }
 
-func (m *mockSessionTerminal) SendToTarget(_ context.Context, _, _ string) error { return nil }
+func (m *mockSessionTerminal) SendToTarget(_ context.Context, target, command string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent[target] = append(m.sent[target], command)
+	return nil
+}
 func (m *mockSessionTerminal) SendTerminalInput(_ context.Context, _, _ string) error {
 	return nil
 }
@@ -128,9 +137,9 @@ func (m *mockSessionTerminal) ResizeSession(_ context.Context, _ string, _ int, 
 	return nil
 }
 func (m *mockSessionTerminal) ResizeTarget(_ context.Context, _ string, _, _ int) error { return nil }
-func (m *mockSessionTerminal) StartLogging(_ context.Context, _, _ string) error   { return nil }
-func (m *mockSessionTerminal) StopLogging(_ context.Context, _ string) error        { return nil }
-func (m *mockSessionTerminal) ClearHistory(_ context.Context, _ string) error       { return nil }
+func (m *mockSessionTerminal) StartLogging(_ context.Context, _, _ string) error        { return nil }
+func (m *mockSessionTerminal) StopLogging(_ context.Context, _ string) error            { return nil }
+func (m *mockSessionTerminal) ClearHistory(_ context.Context, _ string) error           { return nil }
 
 func (m *mockSessionTerminal) HasSession(_ context.Context, name string) bool {
 	m.mu.Lock()
@@ -177,6 +186,16 @@ func (m *mockSessionTerminal) setOutput(name, output string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputs[name] = output
+}
+
+func (m *mockSessionTerminal) sentCommands() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var commands []string
+	for _, cmds := range m.sent {
+		commands = append(commands, cmds...)
+	}
+	return commands
 }
 
 // setupSessionsTestServer creates a test HTTP server with a SessionsHandler.
@@ -407,6 +426,77 @@ func TestSessionsLaunchTeam_MissingBoardName(t *testing.T) {
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 	assert.Contains(t, result, "error")
+}
+
+func TestSessionsLaunchTeam_PreservesToolsAndMCPServers(t *testing.T) {
+	cfg := &config.Config{LogDir: t.TempDir()}
+	dbPath := t.TempDir() + "/test.db"
+	db, err := store.Open(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+
+	boardDBPath := t.TempDir() + "/board.db"
+	bs, err := board.NewStore(boardDBPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { bs.Close() })
+
+	terminal := newMockTerminal()
+	handler := NewSessionsHandler(db, cfg, nil, terminal, bs)
+	ss := store.NewSessionStore(db)
+
+	workDir := t.TempDir()
+	body, _ := json.Marshal(map[string]any{
+		"board_name":  "tool-team",
+		"working_dir": workDir,
+		"agents": []map[string]any{
+			{
+				"name":   "Backend Dev",
+				"prompt": "Build APIs",
+				"tools":  []string{"TodoWrite", "Bash(npm test)"},
+				"mcpServers": map[string]any{
+					"github": map[string]any{
+						"command": "npx",
+						"args":    []any{"-y", "@modelcontextprotocol/server-github"},
+					},
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/launch-team", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.LaunchTeam(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&result))
+	agents := result["agents"].([]any)
+	sessionID := agents[0].(map[string]any)["session_id"].(string)
+
+	ls, err := ss.GetLiveSession(context.Background(), sessionID)
+	require.NoError(t, err)
+	require.NotNil(t, ls)
+	require.NotNil(t, ls.Tools)
+	require.NotNil(t, ls.MCPServers)
+	assert.JSONEq(t, `["TodoWrite","Bash(npm test)"]`, *ls.Tools)
+	assert.JSONEq(t, `{"github":{"args":["-y","@modelcontextprotocol/server-github"],"command":"npx"}}`, *ls.MCPServers)
+
+	commands := strings.Join(terminal.sentCommands(), "\n")
+	require.NotEmpty(t, commands)
+	parts := strings.Fields(commands)
+	settingsPath := ""
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "--settings" {
+			settingsPath = parts[i+1]
+			break
+		}
+	}
+	require.NotEmpty(t, settingsPath)
+	settingsJSON, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(settingsJSON), `"allowedTools"`)
+	assert.Contains(t, string(settingsJSON), `"mcpServers"`)
 }
 
 func TestSessionsSetDisplayName(t *testing.T) {

@@ -63,6 +63,16 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		merged["permissions"] = permMap
 	}
 
+	// Inject allowed tools
+	if len(params.Tools) > 0 {
+		merged["allowedTools"] = params.Tools
+	}
+
+	// Inject MCP server configs
+	if len(params.MCPServers) > 0 {
+		merged["mcpServers"] = params.MCPServers
+	}
+
 	// Set CORAL_SESSION_NAME and CORAL_SUBSCRIBER_ID in env so coral-board and hooks
 	// can identify this agent. CORAL_SUBSCRIBER_ID is the stable board identity (role name).
 	{

@@ -16,10 +16,10 @@ import (
 
 // SessionMeta holds notes and summary metadata for a session.
 type SessionMeta struct {
-	SessionID    string `db:"session_id" json:"session_id"`
-	NotesMD      string `db:"notes_md" json:"notes_md"`
-	AutoSummary  string `db:"auto_summary" json:"auto_summary"`
-	IsUserEdited bool   `db:"is_user_edited" json:"is_user_edited"`
+	SessionID    string  `db:"session_id" json:"session_id"`
+	NotesMD      string  `db:"notes_md" json:"notes_md"`
+	AutoSummary  string  `db:"auto_summary" json:"auto_summary"`
+	IsUserEdited bool    `db:"is_user_edited" json:"is_user_edited"`
 	DisplayName  *string `db:"display_name" json:"display_name,omitempty"`
 	UpdatedAt    *string `db:"updated_at" json:"updated_at,omitempty"`
 }
@@ -37,7 +37,7 @@ type SessionIndex struct {
 	SourceType     string  `db:"source_type" json:"source_type"`
 	SourceFile     string  `db:"source_file" json:"source_file"`
 	FirstTimestamp *string `db:"first_timestamp" json:"first_timestamp"`
-	LastTimestamp   *string `db:"last_timestamp" json:"last_timestamp"`
+	LastTimestamp  *string `db:"last_timestamp" json:"last_timestamp"`
 	MessageCount   int     `db:"message_count" json:"message_count"`
 	DisplaySummary string  `db:"display_summary" json:"summary"`
 	IndexedAt      string  `db:"indexed_at" json:"-"`
@@ -64,6 +64,8 @@ type LiveSession struct {
 	GitDiffMode  *string `db:"git_diff_mode" json:"git_diff_mode,omitempty"`
 	Capabilities *string `db:"capabilities" json:"capabilities,omitempty"`
 	Model        *string `db:"model" json:"model,omitempty"`
+	Tools        *string `db:"tools" json:"tools,omitempty"`
+	MCPServers   *string `db:"mcp_servers" json:"mcp_servers,omitempty"`
 	PID          int     `db:"pid" json:"pid,omitempty"`
 	CreatedAt    string  `db:"created_at" json:"created_at"`
 }
@@ -452,7 +454,7 @@ type SessionListItem struct {
 	SourceType     string  `json:"source_type"`
 	SourceFile     string  `json:"source_file"`
 	FirstTimestamp *string `json:"first_timestamp"`
-	LastTimestamp   *string `json:"last_timestamp"`
+	LastTimestamp  *string `json:"last_timestamp"`
 	MessageCount   int     `json:"message_count"`
 	Summary        string  `json:"summary"`
 	SummaryTitle   string  `json:"summary_title"`
@@ -563,7 +565,7 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 		SourceType     string  `db:"source_type"`
 		SourceFile     string  `db:"source_file"`
 		FirstTimestamp *string `db:"first_timestamp"`
-		LastTimestamp   *string `db:"last_timestamp"`
+		LastTimestamp  *string `db:"last_timestamp"`
 		MessageCount   int     `db:"message_count"`
 		DisplaySummary string  `db:"display_summary"`
 	}
@@ -674,7 +676,7 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 			SourceType:     r.SourceType,
 			SourceFile:     r.SourceFile,
 			FirstTimestamp: r.FirstTimestamp,
-			LastTimestamp:   r.LastTimestamp,
+			LastTimestamp:  r.LastTimestamp,
 			MessageCount:   r.MessageCount,
 			Summary:        r.DisplaySummary,
 			SummaryTitle:   meta.SummaryTitle,
@@ -733,12 +735,12 @@ func (s *SessionStore) RegisterLiveSession(ctx context.Context, ls *LiveSession)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, pid, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ls.SessionID, ls.AgentType, ls.AgentName, ls.WorkingDir,
 		ls.DisplayName, ls.ResumeFromID, ls.Flags, ls.IsJob,
 		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.Icon, ls.IsSleeping, ls.BoardType,
-		ls.Capabilities, ls.Model, ls.PID, ls.CreatedAt)
+		ls.Capabilities, ls.Model, ls.Tools, ls.MCPServers, ls.PID, ls.CreatedAt)
 	return err
 }
 
@@ -754,7 +756,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 	var sessions []LiveSession
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, capabilities, model, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, created_at
 		 FROM live_sessions ORDER BY created_at`)
 	return sessions, err
 }
@@ -764,7 +766,7 @@ func (s *SessionStore) GetBoardSessions(ctx context.Context, boardName string) (
 	var sessions []LiveSession
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, capabilities, model, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, created_at
 		 FROM live_sessions WHERE board_name = ? ORDER BY created_at`, boardName)
 	return sessions, err
 }
@@ -836,7 +838,7 @@ func (s *SessionStore) GetLiveSession(ctx context.Context, sessionID string) (*L
 	var ls LiveSession
 	err := s.db.GetContext(ctx, &ls,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, git_diff_mode, capabilities, model, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, icon, is_sleeping, board_type, git_diff_mode, capabilities, model, tools, mcp_servers, created_at
 		 FROM live_sessions WHERE session_id = ?`, sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1057,6 +1059,18 @@ func UnmarshalFlags(flags *string) []string {
 	}
 	var result []string
 	if err := json.Unmarshal([]byte(*flags), &result); err != nil {
+		return nil
+	}
+	return result
+}
+
+// UnmarshalMCPServers deserializes a JSON string to a map of MCP server configs.
+func UnmarshalMCPServers(s *string) map[string]any {
+	if s == nil || *s == "" {
+		return nil
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(*s), &result); err != nil {
 		return nil
 	}
 	return result
