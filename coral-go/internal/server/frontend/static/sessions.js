@@ -9,7 +9,7 @@ import { renderQuickActions, updateSidebarActive } from './controls.js';
 import { loadSessionNotes, switchHistoryTab } from './notes.js';
 import { loadSessionTags } from './tags.js';
 import { loadSessionCommits } from './commits.js';
-import { loadAgentTasks } from './tasks.js';
+import { loadAgentTasks, loadBoardTasks } from './tasks.js';
 import { loadChangedFiles, refreshChangedFiles } from './changed_files.js';
 import { loadAgentNotes } from './agent_notes.js';
 import { loadAgentEvents, switchAgenticTab } from './agentic_state.js';
@@ -177,6 +177,8 @@ export async function selectLiveSession(name, agentType, sessionId) {
 
     // Load secondary data in background (non-blocking, after terminal is connected)
     loadAgentTasks(name, sessionId);
+    const boardProject = agentData && agentData.board_project;
+    loadBoardTasks(boardProject || null);
     loadAgentNotes(name, sessionId);
     loadAgentEvents(name, sessionId);
     if (state.settings.refresh_files_on_switch) {

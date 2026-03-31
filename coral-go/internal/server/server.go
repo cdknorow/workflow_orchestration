@@ -452,6 +452,13 @@ func (s *Server) buildRouter() chi.Router {
 	r.Post("/api/board/{project}/groups/{groupID}/members", boardHandler.AddGroupMember)
 	r.Delete("/api/board/{project}/groups/{groupID}/members/{sessionID}", boardHandler.RemoveGroupMember)
 
+	// Board tasks
+	r.Post("/api/board/{project}/tasks", boardHandler.CreateTask)
+	r.Get("/api/board/{project}/tasks", boardHandler.ListTasks)
+	r.Post("/api/board/{project}/tasks/claim", boardHandler.ClaimTask)
+	r.Post("/api/board/{project}/tasks/{taskID}/complete", boardHandler.CompleteTaskByID)
+	r.Post("/api/board/{project}/tasks/{taskID}/cancel", boardHandler.CancelTaskByID)
+
 	// One-shot tasks
 	tasksHandler := routes.NewTasksHandler(s.db, s.cfg)
 	s.tasksHandler = tasksHandler

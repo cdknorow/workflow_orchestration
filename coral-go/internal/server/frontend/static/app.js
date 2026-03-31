@@ -18,7 +18,7 @@ import { loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesE
 import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag, loadAllTags } from './tags.js';
 import { loadSessionCommits } from './commits.js';
 import { showTemplateBrowser } from './template_browser.js';
-import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle } from './tasks.js';
+import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList } from './tasks.js';
 import { loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles, toggleGitDiffMode, toggleStarFile, searchRepoFiles, renderStarredFiles, initFileSearch, initTopBarSearch, showTopBarSearch, hideTopBarSearch, toggleFileSearchMode } from './changed_files.js';
 import { initFileMention } from './file_mention.js';
 import { initCommandMention } from './command_mention.js';
@@ -79,7 +79,7 @@ Object.assign(window, {
     loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles,
     toggleGitDiffMode, toggleStarFile, searchRepoFiles, renderStarredFiles, toggleFileSearchMode,
     // tasks
-    loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle,
+    loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList,
     // agent_notes
     loadAgentNotes,
     // agentic_state

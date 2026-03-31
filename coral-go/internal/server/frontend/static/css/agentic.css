@@ -871,6 +871,98 @@
     flex-shrink: 0;
 }
 
+/* ── Board Tasks ──────────────────────────────────────────── */
+
+.board-tasks-section {
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+}
+
+.board-tasks-header {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.board-task-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.board-task-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
+}
+
+.board-task-item:last-child {
+    border-bottom: none;
+}
+
+.board-task-item:hover {
+    background: var(--hover-bg, rgba(255,255,255,0.03));
+}
+
+.board-task-item.completed {
+    opacity: 0.55;
+}
+
+.board-task-item.in-progress .board-task-desc {
+    color: var(--accent, #58a6ff);
+}
+
+.board-task-status-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+}
+
+.board-task-status-icon.completed { color: var(--success, #3fb950); }
+.board-task-status-icon.pending { color: var(--text-muted); }
+.board-task-status-icon.skipped { color: var(--text-muted); opacity: 0.6; }
+
+.board-task-priority {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    min-width: 52px;
+    text-align: center;
+}
+
+.board-task-priority-critical { background: rgba(248,81,73,0.2); color: #f85149; }
+.board-task-priority-high { background: rgba(210,153,34,0.2); color: #d29922; }
+.board-task-priority-medium { background: rgba(136,136,136,0.15); color: var(--text-muted); }
+.board-task-priority-low { background: rgba(136,136,136,0.08); color: var(--text-muted); opacity: 0.7; }
+
+.board-task-assignee {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 80px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.board-task-desc {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* ── Changed Files Panel ───────────────────────────────────── */
 
 .changed-files-header {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -548,4 +549,170 @@ func (h *BoardHandler) RemoveGroupMember(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// ── Task endpoints ───────────────────────────────────────────────────
+
+// CreateTask creates a new task on a board.
+// POST /api/board/{project}/tasks
+func (h *BoardHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	var body struct {
+		Title        string `json:"title"`
+		Body         string `json:"body"`
+		Priority     string `json:"priority"`
+		CreatedBy    string `json:"created_by"`
+		SubscriberID string `json:"subscriber_id"`
+		AssignedTo   string `json:"assigned_to"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Title == "" {
+		errBadRequest(w, "title required")
+		return
+	}
+	createdBy := body.CreatedBy
+	if createdBy == "" {
+		createdBy = body.SubscriberID
+	}
+	if createdBy == "" {
+		errBadRequest(w, "created_by or subscriber_id required")
+		return
+	}
+	if body.Priority == "" {
+		body.Priority = "medium"
+	}
+	task, err := h.bs.CreateTask(r.Context(), project, body.Title, body.Body, body.Priority, createdBy, body.AssignedTo)
+	if err != nil {
+		errInternalServer(w, err.Error())
+		return
+	}
+	// Notify agents about the new task — @mention assignee if pre-assigned
+	go func() {
+		var notification string
+		if task.AssignedTo != nil && *task.AssignedTo != "" {
+			notification = fmt.Sprintf("@%s [New Task #%d (%s)] %s — run 'coral-board task claim' to pick it up", *task.AssignedTo, task.ID, task.Priority, task.Title)
+		} else {
+			notification = fmt.Sprintf("@notify-all [New Task #%d (%s)] %s — run 'coral-board task claim' to pick it up", task.ID, task.Priority, task.Title)
+		}
+		h.bs.PostMessage(context.Background(), project, "", notification, nil)
+	}()
+	writeJSON(w, http.StatusCreated, task)
+}
+
+// ListTasks returns all tasks for a board.
+// GET /api/board/{project}/tasks
+func (h *BoardHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	tasks, err := h.bs.ListTasks(r.Context(), project)
+	if err != nil {
+		errInternalServer(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tasks": emptyIfNil(tasks)})
+}
+
+// ClaimTask claims the next available task by priority.
+// POST /api/board/{project}/tasks/claim
+func (h *BoardHandler) ClaimTask(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	var body struct {
+		SubscriberID string `json:"subscriber_id"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+	if body.SubscriberID == "" {
+		errBadRequest(w, "subscriber_id required")
+		return
+	}
+	task, err := h.bs.ClaimTask(r.Context(), project, body.SubscriberID)
+	if err != nil {
+		errInternalServer(w, err.Error())
+		return
+	}
+	if task == nil {
+		errNotFound(w, "no available tasks")
+		return
+	}
+	// Post board notification asynchronously to avoid DB contention
+	go func() {
+		notification := fmt.Sprintf("[Task #%d claimed by %s] %s", task.ID, body.SubscriberID, task.Title)
+		h.bs.PostMessage(context.Background(), project, "", notification, nil)
+	}()
+	writeJSON(w, http.StatusOK, task)
+}
+
+// CompleteTaskByID marks a task as completed.
+// POST /api/board/{project}/tasks/{taskID}/complete
+func (h *BoardHandler) CompleteTaskByID(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	taskID, err := strconv.ParseInt(chi.URLParam(r, "taskID"), 10, 64)
+	if err != nil {
+		errBadRequest(w, "invalid task ID")
+		return
+	}
+	var body struct {
+		SubscriberID string  `json:"subscriber_id"`
+		Message      *string `json:"message"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+	if body.SubscriberID == "" {
+		errBadRequest(w, "subscriber_id required")
+		return
+	}
+	task, err := h.bs.CompleteTask(r.Context(), project, taskID, body.SubscriberID, body.Message)
+	if err != nil {
+		errInternalServer(w, err.Error())
+		return
+	}
+	// Post board notification asynchronously to avoid DB contention
+	go func() {
+		msg := task.Title
+		if body.Message != nil && *body.Message != "" {
+			msg = *body.Message
+		}
+		notification := fmt.Sprintf("[Task #%d completed by %s] %s", task.ID, body.SubscriberID, msg)
+		h.bs.PostMessage(context.Background(), project, "", notification, nil)
+	}()
+	writeJSON(w, http.StatusOK, task)
+}
+
+// CancelTaskByID marks a task as skipped/cancelled.
+// POST /api/board/{project}/tasks/{taskID}/cancel
+func (h *BoardHandler) CancelTaskByID(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	taskID, err := strconv.ParseInt(chi.URLParam(r, "taskID"), 10, 64)
+	if err != nil {
+		errBadRequest(w, "invalid task ID")
+		return
+	}
+	var body struct {
+		SubscriberID string  `json:"subscriber_id"`
+		Message      *string `json:"message"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+	if body.SubscriberID == "" {
+		errBadRequest(w, "subscriber_id required")
+		return
+	}
+	task, err := h.bs.CancelTask(r.Context(), project, taskID, body.SubscriberID, body.Message)
+	if err != nil {
+		errInternalServer(w, err.Error())
+		return
+	}
+	go func() {
+		notification := fmt.Sprintf("[Task #%d cancelled by %s] %s", task.ID, body.SubscriberID, task.Title)
+		h.bs.PostMessage(context.Background(), project, "", notification, nil)
+	}()
+	writeJSON(w, http.StatusOK, task)
 }

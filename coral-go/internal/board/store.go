@@ -42,6 +42,24 @@ type GroupInfo struct {
 	MemberCount int   `db:"member_count" json:"member_count"`
 }
 
+// Task represents a board task.
+type Task struct {
+	ID                int64   `db:"id" json:"id"`
+	BoardID           string  `db:"board_id" json:"board_id"`
+	Title             string  `db:"title" json:"title"`
+	Body              *string `db:"body" json:"body,omitempty"`
+	Status            string  `db:"status" json:"status"`
+	Priority          string  `db:"priority" json:"priority"`
+	CreatedBy         string  `db:"created_by" json:"created_by"`
+	AssignedTo        *string `db:"assigned_to" json:"assigned_to"`
+	CompletedBy       *string `db:"completed_by" json:"completed_by"`
+	CompletionMessage *string `db:"completion_message" json:"completion_message,omitempty"`
+	CreatedAt         string  `db:"created_at" json:"created_at"`
+	ClaimedAt         *string `db:"claimed_at" json:"claimed_at,omitempty"`
+	CompletedAt       *string `db:"completed_at" json:"completed_at,omitempty"`
+}
+
+
 // Message represents a board message.
 // SubscriberID is the stable poster identity (role name).
 type Message struct {
@@ -128,6 +146,32 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Task tables
+	_, err = s.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS board_tasks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			board_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT,
+			status TEXT NOT NULL DEFAULT 'pending'
+				CHECK (status IN ('pending', 'in_progress', 'completed', 'skipped')),
+			priority TEXT NOT NULL DEFAULT 'medium'
+				CHECK (priority IN ('critical', 'high', 'medium', 'low')),
+			created_by TEXT NOT NULL,
+			assigned_to TEXT,
+			completed_by TEXT,
+			completion_message TEXT,
+			created_at TEXT NOT NULL,
+			claimed_at TEXT,
+			completed_at TEXT
+		);
+		CREATE INDEX IF NOT EXISTS idx_board_tasks_board_status ON board_tasks(board_id, status);
+		CREATE INDEX IF NOT EXISTS idx_board_tasks_assigned ON board_tasks(board_id, assigned_to);
+	`)
+	if err != nil {
+		return err
+	}
+
 	// Migrations for existing DBs — ALTER TABLE ADD COLUMN is idempotent
 	// (fails with "duplicate column" on re-run, which is expected and ignored).
 	alterColumns := []string{
@@ -139,6 +183,8 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 		"ALTER TABLE board_subscribers ADD COLUMN session_name TEXT",
 		"ALTER TABLE board_messages ADD COLUMN subscriber_id TEXT",
 		"ALTER TABLE board_groups ADD COLUMN subscriber_id TEXT",
+
+
 	}
 	for _, ddl := range alterColumns {
 		if _, err := s.db.ExecContext(ctx, ddl); err != nil {
@@ -171,6 +217,8 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 			 LIMIT 1),
 			board_groups.session_id
 		) WHERE subscriber_id IS NULL`},
+
+
 	}
 	for _, bf := range backfills {
 		if _, err := s.db.ExecContext(ctx, bf.sql); err != nil {
@@ -828,3 +876,147 @@ func (s *Store) DeleteProject(ctx context.Context, project string) error {
 	tx.ExecContext(ctx, "DELETE FROM board_groups WHERE project = ?", project)
 	return tx.Commit()
 }
+
+// ── Tasks ───────────────────────────────────────────────────────────
+
+// getTaskByID fetches a task by ID and board_id.
+func (s *Store) getTaskByID(ctx context.Context, project string, taskID int64) (*Task, error) {
+	var t Task
+	err := s.db.GetContext(ctx, &t,
+		"SELECT id, board_id, title, body, status, priority, created_by, assigned_to, completed_by, completion_message, created_at, claimed_at, completed_at FROM board_tasks WHERE id = ? AND board_id = ?", taskID, project)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// CreateTask inserts a task and returns it.
+func (s *Store) CreateTask(ctx context.Context, project, title, body, priority, createdBy string, assignedTo ...string) (*Task, error) {
+	if priority == "" {
+		priority = "medium"
+	}
+	now := nowUTC()
+
+	var bodyPtr *string
+	if body != "" {
+		bodyPtr = &body
+	}
+	var assignPtr *string
+	if len(assignedTo) > 0 && assignedTo[0] != "" {
+		assignPtr = &assignedTo[0]
+	}
+
+	result, err := s.db.ExecContext(ctx,
+		`INSERT INTO board_tasks (board_id, title, body, status, priority, created_by, assigned_to, created_at)
+		 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)`,
+		project, title, bodyPtr, priority, createdBy, assignPtr, now)
+	if err != nil {
+		return nil, err
+	}
+	taskID, _ := result.LastInsertId()
+
+	return s.getTaskByID(ctx, project, taskID)
+}
+
+// ListTasks returns all tasks for a project, ordered by priority then ID.
+func (s *Store) ListTasks(ctx context.Context, project string) ([]Task, error) {
+	var tasks []Task
+	err := s.db.SelectContext(ctx, &tasks,
+		`SELECT id, board_id, title, body, status, priority, created_by, assigned_to, completed_by, completion_message, created_at, claimed_at, completed_at FROM board_tasks WHERE board_id = ?
+		 ORDER BY CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, id ASC`,
+		project)
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+// ClaimTask finds and atomically claims the best pending task for the subscriber.
+// It first looks for tasks assigned to the subscriber, then unassigned tasks.
+// Tasks are ordered by priority (critical > high > medium > low), then by ID.
+// Returns nil if no tasks are available.
+func (s *Store) ClaimTask(ctx context.Context, project, subscriberID string) (*Task, error) {
+	now := nowUTC()
+	priorityOrder := `CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, id ASC`
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// First try: tasks assigned to this subscriber
+	var taskID int64
+	err = tx.GetContext(ctx, &taskID,
+		`SELECT id FROM board_tasks WHERE board_id = ? AND status = 'pending' AND assigned_to = ?
+		 ORDER BY `+priorityOrder+` LIMIT 1`,
+		project, subscriberID)
+	if err != nil {
+		// No assigned tasks — try unassigned
+		err = tx.GetContext(ctx, &taskID,
+			`SELECT id FROM board_tasks WHERE board_id = ? AND status = 'pending' AND assigned_to IS NULL
+			 ORDER BY `+priorityOrder+` LIMIT 1`,
+			project, subscriberID)
+		if err != nil {
+			return nil, nil // no available tasks
+		}
+	}
+
+	// Atomically claim it
+	result, err := tx.ExecContext(ctx,
+		`UPDATE board_tasks SET status = 'in_progress', assigned_to = ?, claimed_at = ?
+		 WHERE id = ? AND board_id = ? AND status = 'pending'`,
+		subscriberID, now, taskID, project)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, nil // lost race
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return s.getTaskByID(ctx, project, taskID)
+}
+
+// CompleteTask marks a task as completed.
+func (s *Store) CompleteTask(ctx context.Context, project string, taskID int64, subscriberID string, message *string) (*Task, error) {
+	now := nowUTC()
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE board_tasks
+		 SET status = 'completed', completed_by = ?, completion_message = ?, completed_at = ?
+		 WHERE id = ? AND board_id = ? AND status = 'in_progress'`,
+		subscriberID, message, now, taskID, project)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, fmt.Errorf("task #%d cannot be completed (not in progress or not found)", taskID)
+	}
+
+	return s.getTaskByID(ctx, project, taskID)
+}
+
+// CancelTask marks a task as skipped. Can cancel pending or in_progress tasks.
+func (s *Store) CancelTask(ctx context.Context, project string, taskID int64, subscriberID string, message *string) (*Task, error) {
+	now := nowUTC()
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE board_tasks
+		 SET status = 'skipped', completed_by = ?, completion_message = ?, completed_at = ?
+		 WHERE id = ? AND board_id = ? AND status IN ('pending', 'in_progress')`,
+		subscriberID, message, now, taskID, project)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, fmt.Errorf("task #%d cannot be cancelled (already completed or not found)", taskID)
+	}
+
+	return s.getTaskByID(ctx, project, taskID)
+}
+

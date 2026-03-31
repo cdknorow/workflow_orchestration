@@ -230,6 +230,169 @@ func TestGetSubscription_MultipleBoards(t *testing.T) {
 	assert.Nil(t, resultNone)
 }
 
+// ── Task Tests ──────────────────────────────────────────────────────
+
+func TestCreateTask(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// Basic task creation
+	task, err := s.CreateTask(ctx, "proj", "Implement feature X", "", "high", "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "Implement feature X", task.Title)
+	assert.Equal(t, "high", task.Priority)
+	assert.Equal(t, "pending", task.Status)
+	assert.Equal(t, "alice", task.CreatedBy)
+	assert.Nil(t, task.AssignedTo)
+
+	// Task with body
+	task2, err := s.CreateTask(ctx, "proj", "With body", "Detailed instructions here", "medium", "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "With body", task2.Title)
+	require.NotNil(t, task2.Body)
+	assert.Equal(t, "Detailed instructions here", *task2.Body)
+
+	// Task with empty body
+	task3, err := s.CreateTask(ctx, "proj", "No body", "", "medium", "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "No body", task3.Title)
+
+	// Default priority
+	task4, err := s.CreateTask(ctx, "proj", "Default prio", "", "", "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "medium", task4.Priority)
+}
+
+func TestListTasks(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTask(ctx, "proj", "Low task", "", "low", "alice")
+	s.CreateTask(ctx, "proj", "Critical task", "", "critical", "alice")
+	s.CreateTask(ctx, "proj", "High task", "", "high", "alice")
+
+	// All tasks returned, sorted by priority
+	tasks, err := s.ListTasks(ctx, "proj")
+	require.NoError(t, err)
+	assert.Len(t, tasks, 3)
+	assert.Equal(t, "critical", tasks[0].Priority)
+	assert.Equal(t, "high", tasks[1].Priority)
+	assert.Equal(t, "low", tasks[2].Priority)
+
+	// Different project returns nothing
+	tasks, err = s.ListTasks(ctx, "other")
+	require.NoError(t, err)
+	assert.Empty(t, tasks)
+}
+
+func TestClaimTask(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTask(ctx, "proj", "Do work", "", "medium", "alice")
+
+	// Claim succeeds — picks the only pending task
+	claimed, err := s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	assert.Equal(t, "in_progress", claimed.Status)
+	require.NotNil(t, claimed.AssignedTo)
+	assert.Equal(t, "bob", *claimed.AssignedTo)
+	assert.NotNil(t, claimed.ClaimedAt)
+
+	// No more tasks to claim
+	task, err := s.ClaimTask(ctx, "proj", "charlie")
+	require.NoError(t, err)
+	assert.Nil(t, task)
+
+	// Empty project returns nil
+	task, err = s.ClaimTask(ctx, "empty", "bob")
+	require.NoError(t, err)
+	assert.Nil(t, task)
+}
+
+func TestClaimTask_PriorityOrder(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTask(ctx, "proj", "Low task", "", "low", "alice")
+	s.CreateTask(ctx, "proj", "Critical task", "", "critical", "alice")
+	s.CreateTask(ctx, "proj", "High task", "", "high", "alice")
+
+	// Should claim critical first
+	claimed, err := s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, "Critical task", claimed.Title)
+
+	// Then high
+	claimed, err = s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, "High task", claimed.Title)
+
+	// Then low
+	claimed, err = s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, "Low task", claimed.Title)
+}
+
+func TestCompleteTask(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTask(ctx, "proj", "Do work", "", "medium", "alice")
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+
+	msg := "All done"
+	completed, err := s.CompleteTask(ctx, "proj", claimed.ID, "bob", &msg)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", completed.Status)
+	require.NotNil(t, completed.CompletedBy)
+	assert.Equal(t, "bob", *completed.CompletedBy)
+	require.NotNil(t, completed.CompletionMessage)
+	assert.Equal(t, "All done", *completed.CompletionMessage)
+	assert.NotNil(t, completed.CompletedAt)
+
+	// Can't complete a task that's not in progress
+	_, err = s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be completed")
+}
+
+func TestTaskLifecycle_EndToEnd(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// Create tasks with different priorities
+	s.CreateTask(ctx, "proj", "Critical work", "", "critical", "alice")
+	s.CreateTask(ctx, "proj", "Medium work", "", "medium", "alice")
+	s.CreateTask(ctx, "proj", "Low work", "", "low", "alice")
+
+	// All 3 present
+	tasks, _ := s.ListTasks(ctx, "proj")
+	assert.Len(t, tasks, 3)
+
+	// Claim and complete all via ClaimTask (auto-selects by priority)
+	for i := 0; i < 3; i++ {
+		claimed, err := s.ClaimTask(ctx, "proj", "bob")
+		require.NoError(t, err)
+		require.NotNil(t, claimed)
+		_, err = s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+		require.NoError(t, err)
+	}
+
+	// Verify all completed
+	tasks, _ = s.ListTasks(ctx, "proj")
+	assert.Len(t, tasks, 3)
+	for _, task := range tasks {
+		assert.Equal(t, "completed", task.Status)
+	}
+
+	// No more to claim
+	task, err := s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	assert.Nil(t, task)
+}
+
 func TestDeleteProject(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

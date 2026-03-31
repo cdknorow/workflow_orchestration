@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"flag"
 	"net/url"
 	"os"
 	"os/exec"
@@ -256,6 +257,8 @@ func main() {
 		cmdExport()
 	case "peek":
 		cmdPeek()
+	case "task":
+		cmdTask()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		printUsage()
@@ -278,6 +281,10 @@ Commands:
   delete                       Delete board and messages
   export [--output FILE] [--format json|markdown|html] [--merge FILE]
                                Export chat (auto-detects format from extension)
+  task add "title" [--body "details"] [--priority P]  Create a task
+  task list                      List all tasks
+  task claim                     Claim next available task
+  task complete <id> [--message "note"]  Complete a task
 
 Environment:
   CORAL_URL   Server URL (default http://localhost:8420)
@@ -1025,6 +1032,261 @@ func renderHTML(buf *bytes.Buffer, d *exportData) {
 		buf.WriteString("</div>\n")
 	}
 	buf.WriteString("</div>\n</div>\n</body>\n</html>\n")
+}
+
+// apiCallRaw performs an HTTP request and returns the response body, status code, and error.
+// Unlike apiCall, it preserves the status code for conflict/not-found handling.
+func apiCallRaw(method, path string, body any) ([]byte, int, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		data, _ := json.Marshal(body)
+		bodyReader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequest(method, serverURL+"/api/board"+path, bodyReader)
+	if err != nil {
+		return nil, 0, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("cannot reach Coral server at %s: %v", serverURL, err)
+	}
+	defer resp.Body.Close()
+
+	respData, _ := io.ReadAll(resp.Body)
+	return respData, resp.StatusCode, nil
+}
+
+func cmdTask() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, `Usage: coral-board task <subcommand> [args]
+
+Subcommands:
+  add "title" [--body "details"] [--priority P]
+  list
+  claim
+  complete <id> [--message "note"]`)
+		os.Exit(1)
+	}
+
+	st := loadState()
+	if st == nil {
+		fmt.Fprintln(os.Stderr, "Not subscribed to any board. Run: coral-board join <project> --as <role>")
+		os.Exit(1)
+	}
+
+	sub := os.Args[2]
+	taskArgs := os.Args[3:]
+
+	switch sub {
+	case "add":
+		cmdTaskAdd(st, taskArgs)
+	case "list":
+		cmdTaskList(st)
+	case "claim":
+		cmdTaskClaim(st)
+	case "complete":
+		cmdTaskComplete(st, taskArgs)
+	case "cancel":
+		cmdTaskCancel(st, taskArgs)
+	case "--help", "-h", "help":
+		fmt.Fprintln(os.Stderr, `Usage: coral-board task <subcommand> [args]
+
+Subcommands:
+  add "title" [--body "details"] [--priority P]
+  list
+  claim
+  complete <id> [--message "note"]`)
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown task subcommand: %s\n", sub)
+		os.Exit(1)
+	}
+}
+
+func cmdTaskAdd(st *boardState, args []string) {
+	fs := flag.NewFlagSet("task-add", flag.ExitOnError)
+	priority := fs.String("priority", "medium", "Task priority (critical, high, medium, low)")
+	taskBody := fs.String("body", "", "Detailed description/instructions")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, `Usage: coral-board task add "title" [--body "details"] [--priority P]`)
+		os.Exit(1)
+	}
+	title := fs.Arg(0)
+	subscriberID := resolveSubscriberID()
+
+	reqBody := map[string]any{
+		"title":         title,
+		"priority":      *priority,
+		"subscriber_id": subscriberID,
+	}
+	if *taskBody != "" {
+		reqBody["body"] = *taskBody
+	}
+
+	data, status, err := apiCallRaw("POST", "/"+st.Project+"/tasks", reqBody)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if status != http.StatusCreated && status != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error creating task: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	var task map[string]any
+	json.Unmarshal(data, &task)
+	id := task["id"]
+	fmt.Printf("Created Task #%.0f: %s\n", id, title)
+}
+
+func cmdTaskList(st *boardState) {
+	data, statusCode, err := apiCallRaw("GET", "/"+st.Project+"/tasks", nil)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if statusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error listing tasks: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	var result map[string]any
+	json.Unmarshal(data, &result)
+	tasks, _ := result["tasks"].([]any)
+
+	if len(tasks) == 0 {
+		fmt.Println("No tasks found.")
+		return
+	}
+
+	fmt.Printf("%-4s %-12s %-9s %-15s %s\n", "ID", "Status", "Priority", "Assignee", "Title")
+	for _, t := range tasks {
+		task, _ := t.(map[string]any)
+		id, _ := task["id"].(float64)
+		tStatus, _ := task["status"].(string)
+		tPriority, _ := task["priority"].(string)
+		tAssignee := "—"
+		if a, ok := task["assigned_to"].(string); ok && a != "" {
+			tAssignee = a
+		}
+		tTitle, _ := task["title"].(string)
+
+		fmt.Printf("#%-3.0f %-12s %-9s %-15s %s\n", id, tStatus, tPriority, tAssignee, tTitle)
+	}
+}
+
+func cmdTaskClaim(st *boardState) {
+	subscriberID := resolveSubscriberID()
+	body := map[string]string{"subscriber_id": subscriberID}
+
+	data, status, err := apiCallRaw("POST", "/"+st.Project+"/tasks/claim", body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if status == http.StatusNotFound {
+		fmt.Println("No available tasks")
+		return
+	}
+	if status != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error claiming task: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	var task map[string]any
+	json.Unmarshal(data, &task)
+	id, _ := task["id"].(float64)
+	title, _ := task["title"].(string)
+	fmt.Printf("Claimed Task #%.0f: %s\n", id, title)
+}
+
+func cmdTaskComplete(st *boardState, args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: coral-board task complete <id> [--message \"note\"]")
+		os.Exit(1)
+	}
+
+	taskID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid task ID: %s\n", args[0])
+		os.Exit(1)
+	}
+
+	fs := flag.NewFlagSet("task-complete", flag.ExitOnError)
+	message := fs.String("message", "", "Completion message")
+	fs.Parse(args[1:])
+
+	subscriberID := resolveSubscriberID()
+	body := map[string]any{
+		"subscriber_id": subscriberID,
+	}
+	if *message != "" {
+		body["message"] = *message
+	}
+
+	data, status, err := apiCallRaw("POST", fmt.Sprintf("/%s/tasks/%d/complete", st.Project, taskID), body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if status != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error completing task: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	var task map[string]any
+	json.Unmarshal(data, &task)
+	title, _ := task["title"].(string)
+	fmt.Printf("Completed Task #%d: %s\n", taskID, title)
+}
+
+func cmdTaskCancel(st *boardState, args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: coral-board task cancel <id> [--message \"reason\"]")
+		os.Exit(1)
+	}
+
+	taskID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid task ID: %s\n", args[0])
+		os.Exit(1)
+	}
+
+	fs := flag.NewFlagSet("task-cancel", flag.ExitOnError)
+	message := fs.String("message", "", "Cancellation reason")
+	fs.Parse(args[1:])
+
+	subscriberID := resolveSubscriberID()
+	body := map[string]any{
+		"subscriber_id": subscriberID,
+	}
+	if *message != "" {
+		body["message"] = *message
+	}
+
+	data, status, err := apiCallRaw("POST", fmt.Sprintf("/%s/tasks/%d/cancel", st.Project, taskID), body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if status != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Error cancelling task: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	var task map[string]any
+	json.Unmarshal(data, &task)
+	title, _ := task["title"].(string)
+	fmt.Printf("Cancelled Task #%d: %s\n", taskID, title)
 }
 
 // sortEntries sorts by timestamp string (ISO format sorts lexicographically).

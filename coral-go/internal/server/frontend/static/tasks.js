@@ -1,7 +1,7 @@
 /* Agent task bar — CRUD, rendering, drag reorder */
 
 import { state } from './state.js';
-import { escapeHtml, showToast } from './utils.js';
+import { escapeHtml, escapeAttr, showToast } from './utils.js';
 
 export async function loadAgentTasks(agentName, sessionId) {
     if (!agentName) return;
@@ -179,6 +179,63 @@ function initTaskDragReorder() {
             }
         });
     });
+}
+
+/* ── Board Tasks ────────────────────────────────────────── */
+
+export async function loadBoardTasks(boardName) {
+    if (!boardName) {
+        state.currentBoardTasks = [];
+        renderBoardTaskList();
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(boardName)}/tasks`);
+        if (!resp.ok) throw new Error(`board tasks fetch failed: ${resp.status}`);
+        const data = await resp.json();
+        state.currentBoardTasks = data.tasks || [];
+    } catch (e) {
+        state.currentBoardTasks = [];
+    }
+    renderBoardTaskList();
+}
+
+export function renderBoardTaskList() {
+    const container = document.getElementById('board-task-list');
+    if (!container) return;
+
+    const tasks = state.currentBoardTasks || [];
+    const section = document.getElementById('board-tasks-section');
+
+    if (tasks.length === 0) {
+        if (section) section.style.display = 'none';
+        return;
+    }
+    if (section) section.style.display = '';
+
+    container.innerHTML = tasks.map(t => {
+        const statusClass = t.status === 'completed' ? 'completed'
+            : t.status === 'in_progress' ? 'in-progress'
+            : t.status === 'skipped' ? 'completed' : '';
+        const priorityClass = 'board-task-priority-' + (t.priority || 'medium');
+        const assignee = t.assigned_to || '\u2014';
+        const title = escapeHtml(t.title || t.description || '');
+        const tooltip = t.body ? ` title="${escapeAttr(t.body)}"` : '';
+        const statusIcon = t.status === 'completed'
+            ? '<span class="material-icons board-task-status-icon completed">check_circle</span>'
+            : t.status === 'in_progress'
+            ? '<span class="task-spinner" title="In progress"></span>'
+            : t.status === 'skipped'
+            ? '<span class="material-icons board-task-status-icon skipped">block</span>'
+            : '<span class="material-icons board-task-status-icon pending">radio_button_unchecked</span>';
+        return `
+        <div class="board-task-item ${statusClass}">
+            ${statusIcon}
+            <span class="board-task-priority ${priorityClass}">${escapeHtml(t.priority || 'medium')}</span>
+            <span class="board-task-assignee">${escapeHtml(assignee)}</span>
+            <span class="board-task-desc"${tooltip}>${title}</span>
+        </div>`;
+    }).join('');
 }
 
 async function saveTaskOrder() {
