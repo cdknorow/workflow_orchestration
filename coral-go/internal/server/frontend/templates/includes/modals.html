@@ -714,46 +714,81 @@
                 <h3 id="job-modal-title">New Scheduled Job</h3>
             </div>
             <div class="modal-body">
+                <!-- Job type toggle -->
+                <div class="job-type-toggle" id="job-type-toggle">
+                    <button class="job-type-btn active" data-type="workflow" onclick="switchJobType('workflow')">
+                        <span class="material-icons" style="font-size:16px">account_tree</span> Workflow
+                    </button>
+                    <button class="job-type-btn" data-type="prompt" onclick="switchJobType('prompt')">
+                        <span class="material-icons" style="font-size:16px">smart_toy</span> Agent Prompt
+                    </button>
+                </div>
+
                 <label>Job Name:
                     <input type="text" id="job-modal-name" placeholder="e.g. Nightly Tests">
                 </label>
                 <label>Description <span class="text-muted-sm">(optional)</span>:
                     <input type="text" id="job-modal-description" placeholder="e.g. Runs the full test suite">
                 </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <label>Cron Expression:
-                        <input type="text" id="job-modal-cron" placeholder="0 2 * * *" value="0 2 * * *" oninput="validateCronPreview()">
-                    </label>
-                    <label>Timezone:
-                        <input type="text" id="job-modal-timezone" placeholder="UTC" value="UTC" oninput="validateCronPreview()">
-                    </label>
+                <!-- Schedule picker -->
+                <label>Schedule:</label>
+                <div class="sched-picker" id="sched-picker">
+                    <div class="sched-presets">
+                        <button type="button" class="sched-preset active" data-cron="0 * * * *" onclick="pickSchedulePreset(this)">Every hour</button>
+                        <button type="button" class="sched-preset" data-cron="0 */6 * * *" onclick="pickSchedulePreset(this)">Every 6 hours</button>
+                        <button type="button" class="sched-preset" data-cron="0 2 * * *" onclick="pickSchedulePreset(this)">Daily at 2am</button>
+                        <button type="button" class="sched-preset" data-cron="0 9 * * 1" onclick="pickSchedulePreset(this)">Weekly Mon 9am</button>
+                        <button type="button" class="sched-preset" data-cron="" onclick="pickSchedulePreset(this)">Custom</button>
+                    </div>
+                    <div class="sched-custom-row" id="sched-custom-row" style="display:none">
+                        <input type="text" id="job-modal-cron" class="sched-cron-input" placeholder="0 2 * * *" value="0 * * * *" oninput="validateCronPreview()">
+                    </div>
+                    <div class="sched-picker-meta">
+                        <div id="cron-preview" class="sched-preview"></div>
+                        <label class="sched-tz-label">Timezone:
+                            <input type="text" id="job-modal-timezone" class="sched-tz-input" placeholder="UTC" value="UTC" oninput="validateCronPreview()">
+                        </label>
+                    </div>
                 </div>
-                <div id="cron-preview" style="font-size:12px;margin:-4px 0 8px;min-height:18px"></div>
-                <label>Repository Path:
-                    <input type="text" id="job-modal-repo" placeholder="/path/to/repo" data-coral-root="{{ .CoralRoot }}" value="{{ .CoralRoot }}">
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <label>Base Branch:
-                        <input type="text" id="job-modal-branch" placeholder="main" value="main">
-                    </label>
-                    <label>Agent Type:
-                        <select id="job-modal-agent" onchange="window._updatePermFlagButtons && window._updatePermFlagButtons(this)">
-                            <option value="claude">Claude</option>
-                            <option value="gemini">Gemini</option>
-                            <option value="codex">Codex</option>
+
+                <!-- Workflow selector (shown when job_type=workflow) -->
+                <div id="job-modal-workflow-fields">
+                    <label>Workflow:
+                        <select id="job-modal-workflow">
+                            <option value="">Select a workflow...</option>
                         </select>
                     </label>
                 </div>
-                <label>Prompt:
-                    <textarea id="job-modal-prompt" rows="4" placeholder="Run the full test suite and report failures..." style="width:100%;resize:vertical"></textarea>
-                </label>
-                <label>Flags <span class="text-muted-sm">(optional)</span>:
-                    <input type="text" id="job-modal-flags" placeholder="e.g. --verbose">
-                </label>
-                <div class="flag-shortcuts">
-                    <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('job-modal-flags','--chrome')">--chrome</button>
-                    <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('job-modal-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+
+                <!-- Agent prompt fields (shown when job_type=prompt) -->
+                <div id="job-modal-prompt-fields" style="display:none">
+                    <label>Repository Path:
+                        <input type="text" id="job-modal-repo" placeholder="/path/to/repo" data-coral-root="{{ .CoralRoot }}" value="{{ .CoralRoot }}">
+                    </label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                        <label>Base Branch:
+                            <input type="text" id="job-modal-branch" placeholder="main" value="main">
+                        </label>
+                        <label>Agent Type:
+                            <select id="job-modal-agent" onchange="window._updatePermFlagButtons && window._updatePermFlagButtons(this)">
+                                <option value="claude">Claude</option>
+                                <option value="gemini">Gemini</option>
+                                <option value="codex">Codex</option>
+                            </select>
+                        </label>
+                    </div>
+                    <label>Prompt:
+                        <textarea id="job-modal-prompt" rows="4" placeholder="Run the full test suite and report failures..." style="width:100%;resize:vertical"></textarea>
+                    </label>
+                    <label>Flags <span class="text-muted-sm">(optional)</span>:
+                        <input type="text" id="job-modal-flags" placeholder="e.g. --verbose">
+                    </label>
+                    <div class="flag-shortcuts">
+                        <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('job-modal-flags','--chrome')">--chrome</button>
+                        <button class="btn btn-small flag-shortcut-btn" onclick="toggleFlag('job-modal-flags','--dangerously-skip-permissions')">--dangerously-skip-permissions</button>
+                    </div>
                 </div>
+
                 <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
                     <label>Max Duration (seconds):
                         <input type="number" id="job-modal-timeout" value="3600" min="60">

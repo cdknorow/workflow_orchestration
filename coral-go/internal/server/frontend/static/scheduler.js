@@ -6,6 +6,7 @@ import { showToast, showView } from './utils.js';
 let scheduledJobs = [];
 let selectedJobId = null;
 let editingJobId = null;  // non-null when editing an existing job
+let currentJobType = 'workflow'; // 'workflow' or 'prompt'
 
 // ── API helpers ──────────────────────────────────────────────────────────
 
@@ -48,8 +49,13 @@ function renderJobsSidebar() {
             : lastStatus === 'running' ? '🔵'
             : lastStatus === 'failed' || lastStatus === 'killed' ? '🔴'
             : '⚪';
+        const isWorkflow = !!job.workflow_id;
+        const typeIcon = isWorkflow
+            ? '<span class="material-icons sched-type-icon" style="font-size:13px;color:#d2a8ff" title="Workflow">account_tree</span>'
+            : '';
         return `<li class="session-list-item ${active}" onclick="selectScheduledJob(${job.id})">
             <span class="sched-dot">${dot}</span>
+            ${typeIcon}
             <span class="session-name">${escapeHtml(job.name)}${status}</span>
             <span class="sched-cron" style="font-size:10px;color:var(--text-muted);margin-left:auto">${escapeHtml(job.cron_expr)}</span>
         </li>`;
@@ -91,6 +97,30 @@ function renderJobDetail(job, runs) {
     const enabledLabel = job.enabled ? 'Enabled' : 'Paused';
     const toggleLabel = job.enabled ? 'Pause' : 'Enable';
     const nextFire = job.next_fire_at ? new Date(job.next_fire_at).toLocaleString() : 'N/A';
+    const isWorkflow = !!job.workflow_id;
+
+    // Workflow-specific info or agent info
+    let jobTypeHtml = '';
+    if (isWorkflow) {
+        const wfName = job.workflow_name || `Workflow #${job.workflow_id}`;
+        jobTypeHtml = `
+            <dt>Type</dt><dd><span class="material-icons" style="font-size:14px;vertical-align:-2px;color:#d2a8ff">account_tree</span> Workflow</dd>
+            <dt>Workflow</dt><dd><a href="javascript:void(0)" onclick="selectWorkflow(${job.workflow_id})" style="color:var(--accent)">${escapeHtml(wfName)}</a></dd>`;
+    } else {
+        jobTypeHtml = `
+            <dt>Type</dt><dd>Agent Job</dd>
+            <dt>Agent</dt><dd>${escapeHtml(job.agent_type)}</dd>`;
+    }
+
+    // Run history: for workflow jobs, show workflow runs; for agent jobs, show scheduled runs
+    let runsHtml = '';
+    if (isWorkflow && job.workflow_runs && job.workflow_runs.length) {
+        runsHtml = renderWorkflowRunsTable(job.workflow_runs);
+    } else if (runs.length) {
+        runsHtml = renderRunsTable(runs);
+    } else {
+        runsHtml = '<p class="empty-state">No runs yet</p>';
+    }
 
     container.innerHTML = `
         <div class="sched-header">
@@ -106,22 +136,46 @@ function renderJobDetail(job, runs) {
             <dt>Schedule</dt><dd><code>${escapeHtml(job.cron_expr)}</code> (${escapeHtml(job.timezone)})</dd>
             <dt>Status</dt><dd>${enabledLabel}</dd>
             <dt>Next Run</dt><dd>${nextFire}</dd>
-            <dt>Agent</dt><dd>${escapeHtml(job.agent_type)}</dd>
+            ${jobTypeHtml}
             <dt>Repo</dt><dd style="word-break:break-all">${escapeHtml(job.repo_path)}</dd>
             <dt>Branch</dt><dd>${escapeHtml(job.base_branch || 'main')}</dd>
             <dt>Timeout</dt><dd>${job.max_duration_s}s</dd>
             <dt>Cleanup Worktree</dt><dd>${job.cleanup_worktree ? 'Yes' : 'No'}</dd>
             ${job.flags ? `<dt>Flags</dt><dd><code>${escapeHtml(job.flags)}</code></dd>` : ''}
         </dl>
-        <div class="sched-prompt-section">
+        ${!isWorkflow && job.prompt ? `<div class="sched-prompt-section">
             <h3>Prompt</h3>
             <pre class="sched-prompt">${escapeHtml(job.prompt)}</pre>
-        </div>
+        </div>` : ''}
         <div class="sched-runs-section">
             <h3>Run History</h3>
-            ${runs.length ? renderRunsTable(runs) : '<p class="empty-state">No runs yet</p>'}
+            ${runsHtml}
         </div>
     `;
+}
+
+function renderWorkflowRunsTable(runs) {
+    return `<table class="sched-runs-table">
+        <thead><tr><th>Run</th><th>Status</th><th>Steps</th><th>Started</th><th>Duration</th></tr></thead>
+        <tbody>${runs.map(r => {
+            const statusClass = r.status === 'completed' ? 'status-ok'
+                : r.status === 'failed' || r.status === 'killed' ? 'status-err'
+                : r.status === 'running' ? 'status-running'
+                : '';
+            const started = r.started_at ? new Date(r.started_at).toLocaleString() : '-';
+            const duration = r.started_at && r.finished_at
+                ? formatDuration(new Date(r.finished_at) - new Date(r.started_at))
+                : r.started_at ? 'running...' : '-';
+            const stepsInfo = r.current_step != null ? `${r.current_step + 1}` : '-';
+            return `<tr onclick="selectWorkflowRun(${r.id})" style="cursor:pointer">
+                <td>#${r.id}</td>
+                <td><span class="sched-status ${statusClass}">${r.status}</span></td>
+                <td>${stepsInfo}</td>
+                <td>${started}</td>
+                <td>${duration}</td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table>`;
 }
 
 function renderRunsTable(runs) {
@@ -187,6 +241,48 @@ export function deleteScheduledJob(jobId) {
 
 // ── Job create/edit modal ────────────────────────────────────────────────
 
+export function pickSchedulePreset(btn) {
+    document.querySelectorAll('.sched-preset').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const cron = btn.dataset.cron;
+    const cronInput = document.getElementById('job-modal-cron');
+    const customRow = document.getElementById('sched-custom-row');
+    if (cron === '') {
+        // Custom — show cron input
+        if (customRow) customRow.style.display = '';
+        if (cronInput) cronInput.focus();
+    } else {
+        if (customRow) customRow.style.display = 'none';
+        if (cronInput) cronInput.value = cron;
+    }
+    validateCronPreview();
+}
+
+export function switchJobType(type) {
+    currentJobType = type;
+    document.querySelectorAll('.job-type-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === type);
+    });
+    const wfFields = document.getElementById('job-modal-workflow-fields');
+    const promptFields = document.getElementById('job-modal-prompt-fields');
+    if (wfFields) wfFields.style.display = type === 'workflow' ? '' : 'none';
+    if (promptFields) promptFields.style.display = type === 'prompt' ? '' : 'none';
+}
+
+async function _loadWorkflowOptions() {
+    const select = document.getElementById('job-modal-workflow');
+    if (!select) return;
+    try {
+        const resp = await fetch('/api/workflows');
+        const data = await resp.json();
+        const workflows = data.workflows || [];
+        select.innerHTML = '<option value="">Select a workflow...</option>' +
+            workflows.map(w => `<option value="${w.id}">${escapeHtml(w.name)}${w.description ? ' — ' + escapeHtml(w.description) : ''}</option>`).join('');
+    } catch (e) {
+        select.innerHTML = '<option value="">Failed to load workflows</option>';
+    }
+}
+
 export function showJobModal() {
     editingJobId = null;
     document.getElementById('job-modal-title').textContent = 'New Scheduled Job';
@@ -194,14 +290,20 @@ export function showJobModal() {
     document.getElementById('job-modal').style.display = 'flex';
     document.getElementById('job-modal-name').value = '';
     document.getElementById('job-modal-description').value = '';
-    document.getElementById('job-modal-cron').value = '0 2 * * *';
+    document.getElementById('job-modal-cron').value = '0 * * * *';
     document.getElementById('job-modal-timezone').value = 'UTC';
+    // Reset schedule picker to first preset
+    document.querySelectorAll('.sched-preset').forEach((b, i) => b.classList.toggle('active', i === 0));
+    const customRow = document.getElementById('sched-custom-row');
+    if (customRow) customRow.style.display = 'none';
     document.getElementById('job-modal-repo').value = document.getElementById('job-modal-repo').dataset.coralRoot || '';
     document.getElementById('job-modal-branch').value = 'main';
     document.getElementById('job-modal-agent').value = 'claude';
     document.getElementById('job-modal-prompt').value = '';
     document.getElementById('job-modal-timeout').value = '3600';
     document.getElementById('job-modal-cleanup').checked = true;
+    switchJobType('workflow');
+    _loadWorkflowOptions();
     document.getElementById('job-modal-flags').value = '';
     document.getElementById('cron-preview').innerHTML = '';
     validateCronPreview();
@@ -261,23 +363,41 @@ export async function validateCronPreview() {
 }
 
 export async function saveScheduledJob() {
+    const name = document.getElementById('job-modal-name').value.trim();
+    const cron = document.getElementById('job-modal-cron').value.trim();
+
+    if (!name || !cron) {
+        showToast('Name and cron expression are required', true);
+        return;
+    }
+
     const body = {
-        name: document.getElementById('job-modal-name').value.trim(),
+        name: name,
         description: document.getElementById('job-modal-description').value.trim(),
-        cron_expr: document.getElementById('job-modal-cron').value.trim(),
+        cron_expr: cron,
         timezone: document.getElementById('job-modal-timezone').value.trim() || 'UTC',
-        repo_path: document.getElementById('job-modal-repo').value.trim(),
-        base_branch: document.getElementById('job-modal-branch').value.trim() || 'main',
-        agent_type: document.getElementById('job-modal-agent').value,
-        prompt: document.getElementById('job-modal-prompt').value.trim(),
         max_duration_s: parseInt(document.getElementById('job-modal-timeout').value) || 3600,
         cleanup_worktree: document.getElementById('job-modal-cleanup').checked,
-        flags: document.getElementById('job-modal-flags').value.trim(),
+        job_type: currentJobType,
     };
 
-    if (!body.name || !body.cron_expr || !body.repo_path || !body.prompt) {
-        showToast('Name, cron, repo path, and prompt are required', true);
-        return;
+    if (currentJobType === 'workflow') {
+        const wfId = document.getElementById('job-modal-workflow').value;
+        if (!wfId) {
+            showToast('Please select a workflow', true);
+            return;
+        }
+        body.workflow_id = parseInt(wfId);
+    } else {
+        body.repo_path = document.getElementById('job-modal-repo').value.trim();
+        body.base_branch = document.getElementById('job-modal-branch').value.trim() || 'main';
+        body.agent_type = document.getElementById('job-modal-agent').value;
+        body.prompt = document.getElementById('job-modal-prompt').value.trim();
+        body.flags = document.getElementById('job-modal-flags').value.trim();
+        if (!body.repo_path || !body.prompt) {
+            showToast('Repo path and prompt are required for agent jobs', true);
+            return;
+        }
     }
 
     try {

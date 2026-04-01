@@ -1122,17 +1122,32 @@ Subcommands:
 }
 
 func cmdTaskAdd(st *boardState, args []string) {
+	// Reorder args: pull the title (first non-flag arg) out so flags can appear after it.
+	// Go's flag package stops at the first non-flag arg, so we move flags before the title.
+	var reordered []string
+	var title string
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-") {
+			reordered = append(reordered, args[i])
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				reordered = append(reordered, args[i+1])
+				i++ // skip flag value
+			}
+		} else if title == "" {
+			title = args[i]
+		}
+	}
+
 	fs := flag.NewFlagSet("task-add", flag.ExitOnError)
 	priority := fs.String("priority", "medium", "Task priority (critical, high, medium, low)")
 	taskBody := fs.String("body", "", "Detailed description/instructions")
 	assignee := fs.String("assignee", "", "Assign task to a specific agent")
-	fs.Parse(args)
+	fs.Parse(reordered)
 
-	if fs.NArg() < 1 {
+	if title == "" {
 		fmt.Fprintln(os.Stderr, `Usage: coral-board task add "title" [--body "details"] [--priority P] [--assignee "Agent Name"]`)
 		os.Exit(1)
 	}
-	title := fs.Arg(0)
 	subscriberID := resolveSubscriberID()
 
 	reqBody := map[string]any{

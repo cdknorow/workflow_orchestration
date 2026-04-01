@@ -398,7 +398,7 @@ func (s *Store) ReadMessages(ctx context.Context, project, subscriberID string, 
 	var messages []Message
 	err = s.db.SelectContext(ctx, &messages,
 		`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
-		        COALESCE(s.job_title, 'Unknown') as job_title
+		        COALESCE(s.job_title, m.subscriber_id, 'Unknown') as job_title
 		 FROM board_messages m
 		 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
 		 WHERE m.project = ? AND m.id > ? AND m.subscriber_id != ?
@@ -443,7 +443,7 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 	if beforeID > 0 {
 		err = s.db.SelectContext(ctx, &messages,
 			`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
-			        COALESCE(s.job_title, 'Unknown') as job_title,
+			        COALESCE(s.job_title, m.subscriber_id, 'Unknown') as job_title,
 			        m.target_group_id
 			 FROM board_messages m
 			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
@@ -454,7 +454,7 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 		// Paginated load: use ASC order with offset for consistent pagination
 		err = s.db.SelectContext(ctx, &messages,
 			`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
-			        COALESCE(s.job_title, 'Unknown') as job_title,
+			        COALESCE(s.job_title, m.subscriber_id, 'Unknown') as job_title,
 			        m.target_group_id
 			 FROM board_messages m
 			 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
@@ -466,7 +466,7 @@ func (s *Store) ListMessages(ctx context.Context, project string, limit, offset 
 		err = s.db.SelectContext(ctx, &messages,
 			`SELECT * FROM (
 			    SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
-			           COALESCE(s.job_title, 'Unknown') as job_title,
+			           COALESCE(s.job_title, m.subscriber_id, 'Unknown') as job_title,
 			           m.target_group_id
 			    FROM board_messages m
 			    LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id
@@ -483,7 +483,7 @@ func (s *Store) GetMessageByID(ctx context.Context, id int64) (*Message, error) 
 	var msg Message
 	err := s.db.GetContext(ctx, &msg,
 		`SELECT m.id, m.project, m.subscriber_id, m.session_id, m.content, m.created_at,
-		        COALESCE(s.job_title, 'Unknown') as job_title,
+		        COALESCE(s.job_title, m.subscriber_id, 'Unknown') as job_title,
 		        m.target_group_id
 		 FROM board_messages m
 		 LEFT JOIN board_subscribers s ON m.project = s.project AND m.subscriber_id = s.subscriber_id

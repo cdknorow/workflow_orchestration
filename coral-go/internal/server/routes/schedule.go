@@ -98,13 +98,15 @@ func (h *ScheduleHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		MaxDurationS    *int   `json:"max_duration_s"`
 		CleanupWorktree *int   `json:"cleanup_worktree"`
 		Flags           string `json:"flags"`
+		JobType         string `json:"job_type"`
+		WorkflowID      *int64 `json:"workflow_id"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		errBadRequest(w, "invalid JSON")
 		return
 	}
 
-	// Validate required fields (matches Python behavior)
+	// Validate required fields
 	if body.Name == "" {
 		errBadRequest(w, "'name' is required")
 		return
@@ -113,13 +115,26 @@ func (h *ScheduleHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		errBadRequest(w, "'cron_expr' is required")
 		return
 	}
-	if body.RepoPath == "" {
-		errBadRequest(w, "'repo_path' is required")
-		return
+
+	// Validate job_type-specific requirements
+	jobType := body.JobType
+	if jobType == "" {
+		jobType = "prompt"
 	}
-	if body.Prompt == "" {
-		errBadRequest(w, "'prompt' is required")
-		return
+	if jobType == "workflow" {
+		if body.WorkflowID == nil {
+			errBadRequest(w, "'workflow_id' is required for workflow jobs")
+			return
+		}
+	} else {
+		if body.RepoPath == "" {
+			errBadRequest(w, "'repo_path' is required")
+			return
+		}
+		if body.Prompt == "" {
+			errBadRequest(w, "'prompt' is required")
+			return
+		}
 	}
 
 	// Validate cron expression
@@ -129,7 +144,7 @@ func (h *ScheduleHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build ScheduledJob with defaults matching Python
+	// Build ScheduledJob with defaults
 	job := store.ScheduledJob{
 		Name:        body.Name,
 		Description: body.Description,
@@ -140,6 +155,8 @@ func (h *ScheduleHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		BaseBranch:  body.BaseBranch,
 		Prompt:      body.Prompt,
 		Flags:       body.Flags,
+		JobType:     jobType,
+		WorkflowID:  body.WorkflowID,
 		Enabled:     intPtrOr(body.Enabled, 1),
 		MaxDurationS:    intPtrOr(body.MaxDurationS, 3600),
 		CleanupWorktree: intPtrOr(body.CleanupWorktree, 1),

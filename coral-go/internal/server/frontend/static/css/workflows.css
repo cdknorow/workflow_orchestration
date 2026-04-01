@@ -577,6 +577,12 @@
     color: var(--text-muted);
 }
 
+/* ── Sidebar workflow group ────────────────────────────────── */
+
+.session-wf-card {
+    border-left-color: #d2a8ff !important;
+}
+
 /* ── Create modal ─────────────────────────────────────────── */
 
 .wf-modal-body {

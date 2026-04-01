@@ -597,7 +597,7 @@ func (h *BoardHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		} else {
 			notification = fmt.Sprintf("@notify-all [New Task #%d (%s)] %s — run 'coral-board task claim' to pick it up", task.ID, task.Priority, task.Title)
 		}
-		h.bs.PostMessage(context.Background(), project, "Task Queue", notification, nil)
+		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusCreated, task)
 }
@@ -641,7 +641,7 @@ func (h *BoardHandler) ClaimTask(w http.ResponseWriter, r *http.Request) {
 	// Post board notification asynchronously to avoid DB contention
 	go func() {
 		notification := fmt.Sprintf("[Task #%d claimed by %s] %s", task.ID, body.SubscriberID, task.Title)
-		h.bs.PostMessage(context.Background(), project, "Task Queue", notification, nil)
+		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusOK, task)
 }
@@ -679,7 +679,7 @@ func (h *BoardHandler) CompleteTaskByID(w http.ResponseWriter, r *http.Request) 
 			msg = *body.Message
 		}
 		notification := fmt.Sprintf("[Task #%d completed by %s] %s", task.ID, body.SubscriberID, msg)
-		h.bs.PostMessage(context.Background(), project, "Task Queue", notification, nil)
+		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusOK, task)
 }
@@ -712,7 +712,7 @@ func (h *BoardHandler) CancelTaskByID(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() {
 		notification := fmt.Sprintf("[Task #%d cancelled by %s] %s", task.ID, body.SubscriberID, task.Title)
-		h.bs.PostMessage(context.Background(), project, "Task Queue", notification, nil)
+		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusOK, task)
 }
@@ -746,7 +746,7 @@ func (h *BoardHandler) ReassignTask(w http.ResponseWriter, r *http.Request) {
 		} else {
 			notification = fmt.Sprintf("@notify-all [Task #%d reassigned — now unassigned] %s — run 'coral-board task claim' to pick it up", task.ID, task.Title)
 		}
-		h.bs.PostMessage(context.Background(), project, "Task Queue", notification, nil)
+		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusOK, task)
 }

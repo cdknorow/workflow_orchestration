@@ -55,7 +55,7 @@
             <button class="top-nav-tab active" id="nav-tab-agents" onclick="switchNavTab('agents')">Agents</button>
             <button class="top-nav-tab" id="nav-tab-history" onclick="switchNavTab('history')">History</button>
             <button class="top-nav-tab" id="nav-tab-board" onclick="switchNavTab('board')" style="display:none">Board</button>
-            <button class="top-nav-tab" id="nav-tab-jobs" onclick="switchNavTab('jobs')" style="display:none">Jobs</button>
+            <button class="top-nav-tab" id="nav-tab-jobs" onclick="switchNavTab('jobs')">Jobs</button>
             <button class="top-nav-tab" id="nav-tab-workflows" onclick="switchNavTab('workflows')">Workflows</button>
         </nav>
         <div id="startup-loading" class="startup-loading" role="status" aria-live="polite">
@@ -64,7 +64,7 @@
         </div>
         <div class="top-bar-search" id="top-bar-search">
             <span class="material-icons top-bar-search-icon">search</span>
-            <input type="search" id="topbar-file-search" class="top-bar-search-input" placeholder="Search files..." autocomplete="off" aria-label="Search files">
+            <input type="text" id="topbar-file-search" class="top-bar-search-input" placeholder="Search files..." autocomplete="nope" name="coral-file-search-nonce" aria-label="Search files">
             <div id="topbar-search-dropdown" class="topbar-search-dropdown" style="display:none"></div>
         </div>
         <div class="top-bar-actions">
@@ -228,6 +228,12 @@
 
             <!-- Scheduler Job Detail View -->
             <div id="scheduler-view" style="display:none" class="scheduler-view">
+                <div class="sched-view-header" id="sched-view-header">
+                    <h2>Jobs</h2>
+                    <button class="btn btn-sm btn-primary" onclick="showJobModal()">
+                        <span class="material-icons" style="font-size:16px">add</span> New Job
+                    </button>
+                </div>
                 <div id="scheduler-detail"></div>
             </div>
 

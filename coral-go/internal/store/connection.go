@@ -141,6 +141,8 @@ var columnMigrations = []columnMigration{
 	{"live_sessions", "pid", "INTEGER NOT NULL DEFAULT 0"},
 	{"live_sessions", "tools", "TEXT"},
 	{"live_sessions", "mcp_servers", "TEXT"},
+	{"scheduled_jobs", "job_type", "TEXT DEFAULT 'prompt'"},
+	{"scheduled_jobs", "workflow_id", "INTEGER"},
 }
 
 var additionalIndexes = []string{

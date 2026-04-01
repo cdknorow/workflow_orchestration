@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/oauth"
 	"github.com/cdknorow/coral/internal/store"
 )
@@ -32,6 +33,8 @@ type StepDef struct {
 	ContinueOnFailure bool             `json:"continue_on_failure,omitempty"`
 	Agent             *AgentStepConfig `json:"agent,omitempty"`
 	Connections       []string         `json:"connections,omitempty"`
+	Interactive       bool             `json:"interactive,omitempty"`
+	OutputArtifact    string           `json:"output_artifact,omitempty"`
 }
 
 // AgentStepConfig holds the agent configuration for an agent step.
@@ -255,7 +258,7 @@ func (wr *WorkflowRunner) executeRun(runID int64, workflow *store.Workflow) {
 		os.MkdirAll(filepath.Join(stepDir, "artifacts"), 0755)
 
 		// Build environment variables
-		env := wr.buildStepEnv(workflow, runID, runDir, i, stepDir, len(steps))
+		env := wr.buildStepEnv(workflow, runID, runDir, i, stepDir, len(steps), steps)
 
 		// Inject Connected Apps tokens for steps with connections
 		if len(step.Connections) > 0 {
@@ -386,13 +389,23 @@ func (wr *WorkflowRunner) executeShellStep(ctx context.Context, runID int64, ste
 	// Capture output tail for the result
 	result.OutputTail = readTail(filepath.Join(stepDir, "stdout.txt"), 100)
 
+	// If output_artifact is set, copy stdout to the specified artifact path
+	if step.OutputArtifact != "" {
+		artifactPath := filepath.Join(stepDir, filepath.Clean(step.OutputArtifact))
+		os.MkdirAll(filepath.Dir(artifactPath), 0755)
+		if data, err := os.ReadFile(filepath.Join(stepDir, "stdout.txt")); err == nil {
+			os.WriteFile(artifactPath, data, 0644)
+		}
+	}
+
 	if exitCode != 0 {
 		return fmt.Errorf("exit code %d", exitCode)
 	}
 	return nil
 }
 
-// executeAgentStep launches an agent with a prompt and waits for it to finish.
+// executeAgentStep runs an agent step. By default uses --print mode (non-interactive,
+// no tmux session). When interactive: true, launches via tmux with workflow tagging.
 func (wr *WorkflowRunner) executeAgentStep(ctx context.Context, runID int64, step StepDef, stepDir, repoPath string, env []string, defaultAgent *AgentStepConfig, result *StepResult) error {
 	timeout := step.TimeoutS
 	if timeout <= 0 {
@@ -410,17 +423,157 @@ func (wr *WorkflowRunner) executeAgentStep(ctx context.Context, runID int64, ste
 	// Expand template variables in prompt (safe — not shell-interpreted)
 	prompt := expandTemplates(step.Prompt, env)
 
-	// Build flags
+	if step.Interactive {
+		return wr.executeAgentInteractive(stepCtx, runID, step, stepDir, repoPath, env, agentCfg, prompt, result)
+	}
+	return wr.executeAgentPrint(stepCtx, runID, step, stepDir, repoPath, env, agentCfg, prompt, result)
+}
+
+// executeAgentPrint runs an agent in non-interactive --print mode.
+// When the agent config includes tools/capabilities, those are passed via a settings
+// file (same as BuildLaunchCommand) so the agent has tool access in headless mode.
+// Captures stdout/stderr to step files. No tmux session.
+func (wr *WorkflowRunner) executeAgentPrint(ctx context.Context, runID int64, step StepDef, stepDir, repoPath string, env []string, agentCfg *AgentStepConfig, prompt string, result *StepResult) error {
+	binPath, err := exec.LookPath(agentCfg.AgentType)
+	if err != nil {
+		return fmt.Errorf("agent binary %q not found: %w", agentCfg.AgentType, err)
+	}
+
+	// Build the full launch command via the agent package when tools/capabilities
+	// are present, so settings (permissions, tools, MCP) are properly translated.
+	hasCfg := len(agentCfg.Tools) > 0 || agentCfg.Capabilities != nil || agentCfg.MCPServers != nil
+	var args []string
+
+	if hasCfg && agentCfg.AgentType == "claude" {
+		// Use BuildLaunchCommand for full settings support, then inject --print
+		ag := agent.GetAgent(agentCfg.AgentType)
+		params := agent.LaunchParams{
+			WorkingDir: repoPath,
+			Flags:      agentCfg.Flags,
+			Prompt:     prompt,
+		}
+		if agentCfg.Capabilities != nil {
+			var caps agent.Capabilities
+			json.Unmarshal(agentCfg.Capabilities, &caps)
+			params.Capabilities = &caps
+		}
+		if len(agentCfg.Tools) > 0 {
+			params.Tools = agentCfg.Tools
+		}
+		if agentCfg.MCPServers != nil {
+			var servers map[string]any
+			json.Unmarshal(agentCfg.MCPServers, &servers)
+			params.MCPServers = servers
+		}
+		// BuildLaunchCommand returns a full command string; parse it to extract args
+		fullCmd := ag.BuildLaunchCommand(params)
+		parts := strings.Fields(fullCmd)
+		if len(parts) > 1 {
+			// Filter out --session-id and its value (not valid for --print mode)
+			var filtered []string
+			for i := 1; i < len(parts); i++ {
+				if parts[i] == "--session-id" || parts[i] == "-s" {
+					i++ // skip the value too
+					continue
+				}
+				if strings.HasPrefix(parts[i], "--session-id=") {
+					continue
+				}
+				filtered = append(filtered, parts[i])
+			}
+			args = filtered
+		}
+		// Insert --print --no-session-persistence at the beginning
+		args = append([]string{"--print", "--no-session-persistence"}, args...)
+		if agentCfg.Model != "" {
+			args = append([]string{"--model", agentCfg.Model}, args...)
+		}
+	} else {
+		// Simple --print mode (no tools needed)
+		args = []string{"--print", "--no-session-persistence"}
+		if agentCfg.Model != "" {
+			args = append(args, "--model", agentCfg.Model)
+		}
+		args = append(args, agentCfg.Flags...)
+		args = append(args, prompt)
+	}
+
+	cmd := exec.CommandContext(ctx, binPath, args...)
+	cmd.Dir = repoPath
+	cmd.Env = append(os.Environ(), env...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// Capture stdout and stderr to files
+	stdoutFile, err := os.Create(filepath.Join(stepDir, "stdout.txt"))
+	if err != nil {
+		return fmt.Errorf("create stdout file: %w", err)
+	}
+	defer stdoutFile.Close()
+
+	stderrFile, err := os.Create(filepath.Join(stepDir, "stderr.txt"))
+	if err != nil {
+		return fmt.Errorf("create stderr file: %w", err)
+	}
+	defer stderrFile.Close()
+
+	cmd.Stdout = stdoutFile
+	cmd.Stderr = stderrFile
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start agent: %w", err)
+	}
+
+	// Track active child for kill
+	wr.mu.Lock()
+	wr.activeChildren[runID] = &activeChild{stepType: "shell", cmd: cmd}
+	wr.mu.Unlock()
+
+	err = cmd.Wait()
+
+	wr.mu.Lock()
+	delete(wr.activeChildren, runID)
+	wr.mu.Unlock()
+
+	// Write exit code
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+	result.ExitCode = &exitCode
+	os.WriteFile(filepath.Join(stepDir, "exit_code"), []byte(strconv.Itoa(exitCode)), 0644)
+	result.OutputTail = readTail(filepath.Join(stepDir, "stdout.txt"), 100)
+
+	// If output_artifact is set, copy stdout to the specified artifact path
+	if step.OutputArtifact != "" {
+		artifactPath := filepath.Join(stepDir, filepath.Clean(step.OutputArtifact))
+		os.MkdirAll(filepath.Dir(artifactPath), 0755)
+		if data, err := os.ReadFile(filepath.Join(stepDir, "stdout.txt")); err == nil {
+			os.WriteFile(artifactPath, data, 0644)
+		}
+	}
+
+	if exitCode != 0 {
+		return fmt.Errorf("agent exit code %d", exitCode)
+	}
+	return nil
+}
+
+// executeAgentInteractive launches an agent in a tmux session (interactive mode).
+// The session is tagged with workflow metadata for frontend grouping.
+func (wr *WorkflowRunner) executeAgentInteractive(ctx context.Context, runID int64, step StepDef, stepDir, repoPath string, env []string, agentCfg *AgentStepConfig, prompt string, result *StepResult) error {
 	var flags []string
 	if agentCfg.Model != "" {
 		flags = append(flags, "--model", agentCfg.Model)
 	}
 	flags = append(flags, agentCfg.Flags...)
 
-	// Launch agent
 	displayName := fmt.Sprintf("workflow-run-%d-step-%s", runID, step.Name)
 	launchResult, err := wr.launcher.LaunchAgent(
-		stepCtx, repoPath, agentCfg.AgentType, displayName,
+		ctx, repoPath, agentCfg.AgentType, displayName,
 		"", flags, true, prompt, "", "",
 	)
 	if err != nil {
@@ -435,13 +588,13 @@ func (wr *WorkflowRunner) executeAgentStep(ctx context.Context, runID int64, ste
 	wr.activeChildren[runID] = &activeChild{stepType: "agent", sessionName: launchResult.SessionName}
 	wr.mu.Unlock()
 
-	// Send prompt after initialization delay (uses stepCtx so it cancels with the step)
+	// Send prompt after initialization delay
 	go func() {
-		wr.launcher.SendPrompt(stepCtx, launchResult.SessionID, launchResult.SessionName, agentCfg.AgentType, prompt)
+		wr.launcher.SendPrompt(ctx, launchResult.SessionID, launchResult.SessionName, agentCfg.AgentType, prompt)
 	}()
 
 	// Poll for session completion — 5s interval for workflow steps
-	err = wr.watchSessionFast(stepCtx, launchResult.SessionName)
+	err = wr.watchSessionFast(ctx, launchResult.SessionName)
 
 	wr.mu.Lock()
 	delete(wr.activeChildren, runID)
@@ -516,7 +669,7 @@ func (wr *WorkflowRunner) persistResults(ctx context.Context, runID int64, curre
 }
 
 // buildStepEnv constructs environment variables for a workflow step.
-func (wr *WorkflowRunner) buildStepEnv(workflow *store.Workflow, runID int64, runDir string, stepIndex int, stepDir string, totalSteps int) []string {
+func (wr *WorkflowRunner) buildStepEnv(workflow *store.Workflow, runID int64, runDir string, stepIndex int, stepDir string, totalSteps int, steps []StepDef) []string {
 	runIDStr := strconv.FormatInt(runID, 10)
 	env := []string{
 		"CORAL_WORKFLOW_RUN_DIR=" + runDir,
@@ -535,6 +688,14 @@ func (wr *WorkflowRunner) buildStepEnv(workflow *store.Workflow, runID int64, ru
 			"CORAL_PREV_STDOUT="+filepath.Join(prevDir, "stdout.txt"),
 			"CORAL_PREV_STDERR="+filepath.Join(prevDir, "stderr.txt"),
 		)
+		// If previous step has an output_artifact, set path and read content
+		if stepIndex-1 < len(steps) && steps[stepIndex-1].OutputArtifact != "" {
+			artifactPath := filepath.Join(prevDir, steps[stepIndex-1].OutputArtifact)
+			env = append(env, "CORAL_PREV_ARTIFACT="+artifactPath)
+			if data, err := os.ReadFile(artifactPath); err == nil {
+				env = append(env, "CORAL_PREV_ARTIFACT_CONTENT="+string(data))
+			}
+		}
 	}
 
 	// All previous step directories as CORAL_STEP_N_DIR / CORAL_STEP_N_STDOUT
@@ -558,8 +719,10 @@ var envKeyForTemplate = map[string]string{
 	"run_id":      "CORAL_WORKFLOW_RUN_ID",
 	"step_dir":    "CORAL_WORKFLOW_STEP_DIR",
 	"prev_dir":    "CORAL_PREV_DIR",
-	"prev_stdout": "CORAL_PREV_STDOUT",
-	"prev_stderr": "CORAL_PREV_STDERR",
+	"prev_stdout":           "CORAL_PREV_STDOUT",
+	"prev_stderr":           "CORAL_PREV_STDERR",
+	"prev_artifact":         "CORAL_PREV_ARTIFACT",
+	"prev_artifact_content": "CORAL_PREV_ARTIFACT_CONTENT",
 }
 
 // stepNPattern matches {{step_N_dir}} and {{step_N_stdout}} patterns.
@@ -596,6 +759,31 @@ func expandTemplates(text string, env []string) string {
 			envKey := fmt.Sprintf("CORAL_STEP_%s_%s", m[1], suffix)
 			if val, found := envMap[envKey]; found {
 				return val
+			}
+			return match
+		}
+
+		// Check _content suffix — reads file content instead of returning path
+		// e.g., {{prev_stdout_content}} reads the file at CORAL_PREV_STDOUT
+		// e.g., {{step_0_stdout_content}} reads the file at CORAL_STEP_0_STDOUT
+		if strings.HasSuffix(varName, "_content") {
+			baseVar := varName[:len(varName)-len("_content")]
+			var envKey string
+			if ek, ok := envKeyForTemplate[baseVar]; ok {
+				envKey = ek
+			} else if m := stepNPattern.FindStringSubmatch(baseVar); m != nil {
+				suffix := "DIR"
+				if m[2] == "stdout" {
+					suffix = "STDOUT"
+				}
+				envKey = fmt.Sprintf("CORAL_STEP_%s_%s", m[1], suffix)
+			}
+			if envKey != "" {
+				if filePath, found := envMap[envKey]; found {
+					if data, err := os.ReadFile(filePath); err == nil {
+						return string(data)
+					}
+				}
 			}
 			return match
 		}

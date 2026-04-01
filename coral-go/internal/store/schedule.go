@@ -22,6 +22,8 @@ type ScheduledJob struct {
 	MaxDurationS    int    `db:"max_duration_s" json:"max_duration_s"`
 	CleanupWorktree int    `db:"cleanup_worktree" json:"cleanup_worktree"`
 	Flags           string `db:"flags" json:"flags"`
+	JobType         string `db:"job_type" json:"job_type"`
+	WorkflowID      *int64 `db:"workflow_id" json:"workflow_id,omitempty"`
 	CreatedAt       string `db:"created_at" json:"created_at"`
 	UpdatedAt       string `db:"updated_at" json:"updated_at"`
 }
@@ -96,16 +98,19 @@ func (s *ScheduleStore) CreateScheduledJob(ctx context.Context, job *ScheduledJo
 	if job.MaxDurationS == 0 {
 		job.MaxDurationS = 3600
 	}
+	if job.JobType == "" {
+		job.JobType = "prompt"
+	}
 
 	result, err := s.db.ExecContext(ctx,
 		`INSERT INTO scheduled_jobs
 		 (name, description, cron_expr, timezone, agent_type, repo_path,
 		  base_branch, prompt, enabled, max_duration_s, cleanup_worktree,
-		  flags, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  flags, job_type, workflow_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.Name, job.Description, job.CronExpr, job.Timezone, job.AgentType,
 		job.RepoPath, job.BaseBranch, job.Prompt, job.Enabled, job.MaxDurationS,
-		job.CleanupWorktree, job.Flags, now, now)
+		job.CleanupWorktree, job.Flags, job.JobType, job.WorkflowID, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +124,7 @@ func (s *ScheduleStore) UpdateScheduledJob(ctx context.Context, jobID int64, fie
 		"name": true, "description": true, "cron_expr": true, "timezone": true,
 		"agent_type": true, "repo_path": true, "base_branch": true, "prompt": true,
 		"enabled": true, "max_duration_s": true, "cleanup_worktree": true, "flags": true,
+		"job_type": true, "workflow_id": true,
 	}, map[string]bool{
 		"enabled": true, "cleanup_worktree": true,
 	}, true)

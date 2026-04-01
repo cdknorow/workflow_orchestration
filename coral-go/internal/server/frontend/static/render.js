@@ -1211,13 +1211,18 @@ export function renderLiveSessions(sessions) {
     if (groupByTeam) {
     // ── Team-first mode: teams at top level, standalone by folder below ──
 
-    // Step 1: Separate into team (has board_project) vs standalone
+    // Step 1: Separate into team (has board_project) vs workflow vs standalone
     const teamGroups = {};
+    const workflowGroups = {};
     const standaloneByFolder = {};
     for (const s of sessions) {
         if (s.board_project) {
             if (!teamGroups[s.board_project]) teamGroups[s.board_project] = [];
             teamGroups[s.board_project].push(s);
+        } else if (s.workflow_name) {
+            const wfKey = s.workflow_name;
+            if (!workflowGroups[wfKey]) workflowGroups[wfKey] = [];
+            workflowGroups[wfKey].push(s);
         } else {
             const key = s.name || "unknown";
             if (!standaloneByFolder[key]) standaloneByFolder[key] = [];
@@ -1311,6 +1316,38 @@ export function renderLiveSessions(sessions) {
             return 0;
         });
         html += _renderAgentListWithSubgroups(orderedBoard, boardWorkDir, true, boardName);
+        html += `</ul></li>`;
+    }
+
+    // Step 2b: Render workflow agent groups
+    for (const [wfName, wfSessions] of Object.entries(workflowGroups)) {
+        const wfCollapsed = _isGroupCollapsed('wf:' + wfName);
+        const wfChevron = wfCollapsed ? '&#x25B8;' : '&#x25BE;';
+        const wfRunId = wfSessions[0]?.workflow_run_id || '';
+        const wfSubline = `<div class="board-card-subline"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg> Workflow · ${wfSessions.length} agent${wfSessions.length !== 1 ? 's' : ''}${wfRunId ? ' · Run #' + wfRunId : ''}</div>`;
+        const wfKebab = `<div class="sidebar-kebab-wrapper group-kebab">
+            <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Workflow actions">&#x22EE;</button>
+            <div class="sidebar-kebab-menu" style="display:none">
+                ${wfRunId ? `<button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); selectWorkflowRun(${wfRunId})">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 8h12M10 4l4 4-4 4"/></svg>
+                    View Run
+                </button>` : ''}
+                <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killGroup('wf:${escapeAttr(wfName)}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+                    Kill All
+                </button>
+            </div>
+        </div>`;
+
+        html += `<li class="session-board-card session-board-card-toplevel session-wf-card" style="border-left-color: #d2a8ff">
+            <div class="session-group-header board-card-header" data-group-name="wf:${escapeAttr(wfName)}" onclick="toggleGroupCollapse('wf:${escapeAttr(wfName)}')">
+                <span class="group-chevron">${wfChevron}</span><div class="group-header-text"><div class="group-name-line"><span class="material-icons" style="font-size:14px;vertical-align:-2px;margin-right:3px;color:#d2a8ff">account_tree</span>${escapeHtml(wfName)}</div>${wfSubline}</div><span class="session-name-spacer"></span>${wfKebab}
+            </div>
+            <ul class="board-card-agents${wfCollapsed ? ' board-card-collapsed' : ''}">`;
+
+        for (const s of wfSessions) {
+            html += _renderSessionItem(s, 'wf:' + wfName, true, wfCollapsed, '');
+        }
         html += `</ul></li>`;
     }
 

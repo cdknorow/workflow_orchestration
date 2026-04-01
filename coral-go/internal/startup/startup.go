@@ -340,6 +340,7 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	flowManager := oauth.NewFlowManager(oauthRegistry)
 	wfRunner := background.NewWorkflowRunner(wfStore, launcher, agentRT, connAppStore, flowManager)
 	srv.SetWorkflowRunner(wfRunner)
+	scheduler.SetWorkflowRunner(wfRunner, wfStore)
 
 	log.Printf("Started 9 background services + workflow runner (git poller, indexer, idle detector, webhook dispatcher, scheduler, board notifier, remote board poller, batch summarizer, session reconciler)")
 }

@@ -28,7 +28,7 @@ import { initRouter, pushView } from './router.js';
 import { switchAgenticTab, restoreAgenticTabs, loadAgentEvents, toggleEventFilter, toggleAllEventFilters, toggleFilterDropdown, showFilterPopup, hideFilterPopup } from './agentic_state.js';
 import { toggleHistoryEventFilter, toggleAllHistoryEventFilters } from './history_tabs.js';
 import { copyBranchName, escapeHtml, showView } from './utils.js';
-import { initScheduler, selectScheduledJob, toggleScheduledJob, deleteScheduledJob, editScheduledJob, showJobModal, hideJobModal, validateCronPreview, saveScheduledJob } from './scheduler.js';
+import { initScheduler, selectScheduledJob, toggleScheduledJob, deleteScheduledJob, editScheduledJob, showJobModal, hideJobModal, validateCronPreview, saveScheduledJob, switchJobType, pickSchedulePreset } from './scheduler.js';
 import {
     showWebhookModal, hideWebhookModal, showWebhookCreate,
     showWebhookList, showWebhookEdit, saveWebhook, deleteWebhook,
@@ -91,7 +91,7 @@ Object.assign(window, {
     toggleHistoryEventFilter, toggleAllHistoryEventFilters,
     // scheduler
     selectScheduledJob, toggleScheduledJob, deleteScheduledJob, editScheduledJob,
-    showJobModal, hideJobModal, validateCronPreview, saveScheduledJob,
+    showJobModal, hideJobModal, validateCronPreview, saveScheduledJob, switchJobType, pickSchedulePreset,
     // webhooks
     showWebhookModal, hideWebhookModal, showWebhookCreate, showWebhookList,
     showWebhookEdit, saveWebhook, deleteWebhook, testWebhook, showWebhookHistory,
