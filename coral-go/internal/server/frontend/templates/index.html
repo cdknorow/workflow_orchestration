@@ -100,7 +100,7 @@
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 1.5v13M1.5 8h13"/><path d="M3 3l10 10M13 3L3 13"/></svg>
                         Themes
                     </button>
-                    <button class="overflow-menu-item" onclick="closeTopBarSettings(); showConnectedApps()">
+                    <button id="connected-apps-menu-btn" class="overflow-menu-item" onclick="closeTopBarSettings(); showConnectedApps()">
                         <span class="material-icons" style="font-size:14px">link</span>
                         Connected Apps
                     </button>
@@ -189,6 +189,24 @@
                         <strong>Dungeon Master</strong>
                         <span class="welcome-team-desc">Fantasy RPG with 4 heroes and 2 villains</span>
                         <span class="welcome-team-count">7 agents</span>
+                    </button>
+                </div>
+                <div class="welcome-section-label">Automations</div>
+                <div class="welcome-team-presets">
+                    <button class="welcome-team-card" onclick="window.showJobModal()">
+                        <span class="material-icons welcome-team-icon">schedule</span>
+                        <strong>Scheduled Jobs</strong>
+                        <span class="welcome-team-desc">Run agents on a cron schedule — daily reports, monitoring, recurring tasks</span>
+                    </button>
+                    <button class="welcome-team-card" onclick="window.showWorkflowCreateModal()">
+                        <span class="material-icons welcome-team-icon">account_tree</span>
+                        <strong>Workflows</strong>
+                        <span class="welcome-team-desc">Multi-step automations with shell commands and AI agents chained together</span>
+                    </button>
+                    <button class="welcome-team-card" onclick="window.showWorkflowsTab()">
+                        <span class="material-icons welcome-team-icon">history</span>
+                        <strong>Workflow Runs</strong>
+                        <span class="welcome-team-desc">View and manage your workflow execution history and active runs</span>
                     </button>
                 </div>
                 <div class="welcome-actions">

@@ -229,13 +229,130 @@ export function renderBoardTaskList() {
             ? '<span class="material-icons board-task-status-icon skipped">block</span>'
             : '<span class="material-icons board-task-status-icon pending">radio_button_unchecked</span>';
         return `
-        <div class="board-task-item ${statusClass}">
+        <div class="board-task-item ${statusClass}" onclick="showTaskDetailModal(${t.id})" style="cursor:pointer">
             ${statusIcon}
             <span class="board-task-priority ${priorityClass}">${escapeHtml(t.priority || 'medium')}</span>
             <span class="board-task-assignee">${escapeHtml(assignee)}</span>
             <span class="board-task-desc"${tooltip}>${title}</span>
         </div>`;
     }).join('');
+}
+
+/* ── Task Detail Modal ─────────────────────────────────── */
+
+export function showTaskDetailModal(taskId) {
+    const tasks = state.currentBoardTasks || [];
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const modal = document.getElementById('task-detail-modal');
+    const titleEl = document.getElementById('task-detail-modal-title');
+    const content = document.getElementById('task-detail-content');
+    if (!modal || !content) return;
+
+    titleEl.textContent = `Task #${task.id}`;
+
+    const statusLabel = task.status === 'completed' ? 'Completed'
+        : task.status === 'in_progress' ? 'In Progress'
+        : task.status === 'skipped' ? 'Cancelled'
+        : 'Pending';
+    const statusClass = task.status === 'completed' ? 'task-detail-status-completed'
+        : task.status === 'in_progress' ? 'task-detail-status-inprogress'
+        : task.status === 'skipped' ? 'task-detail-status-cancelled'
+        : 'task-detail-status-pending';
+    const priorityClass = 'board-task-priority-' + (task.priority || 'medium');
+
+    const assignee = task.assigned_to || '\u2014';
+    const createdBy = task.created_by || '\u2014';
+    const createdAt = task.created_at ? formatTaskDate(task.created_at) : '\u2014';
+    const claimedAt = task.claimed_at ? formatTaskDate(task.claimed_at) : null;
+    const completedAt = task.completed_at ? formatTaskDate(task.completed_at) : null;
+    const completedBy = task.completed_by || null;
+
+    let html = `
+        <div class="task-detail-title">${escapeHtml(task.title)}</div>
+        <div class="task-detail-meta">
+            <span class="task-detail-status ${statusClass}">${statusLabel}</span>
+            <span class="board-task-priority ${priorityClass}">${escapeHtml(task.priority || 'medium')}</span>
+        </div>`;
+
+    if (task.body) {
+        html += `<div class="task-detail-section">
+            <div class="task-detail-label">Description</div>
+            <div class="task-detail-body">${escapeHtml(task.body)}</div>
+        </div>`;
+    }
+
+    html += `<div class="task-detail-fields">
+        <div class="task-detail-field">
+            <span class="task-detail-label">Assigned To</span>
+            <span class="task-detail-value">${escapeHtml(assignee)}</span>
+        </div>
+        <div class="task-detail-field">
+            <span class="task-detail-label">Created By</span>
+            <span class="task-detail-value">${escapeHtml(createdBy)}</span>
+        </div>
+        <div class="task-detail-field">
+            <span class="task-detail-label">Created</span>
+            <span class="task-detail-value">${createdAt}</span>
+        </div>`;
+
+    if (claimedAt) {
+        html += `<div class="task-detail-field">
+            <span class="task-detail-label">Claimed</span>
+            <span class="task-detail-value">${claimedAt}</span>
+        </div>`;
+    }
+    if (completedAt) {
+        html += `<div class="task-detail-field">
+            <span class="task-detail-label">${task.status === 'skipped' ? 'Cancelled' : 'Completed'}</span>
+            <span class="task-detail-value">${completedAt}</span>
+        </div>`;
+    }
+    if (completedBy) {
+        html += `<div class="task-detail-field">
+            <span class="task-detail-label">${task.status === 'skipped' ? 'Cancelled By' : 'Completed By'}</span>
+            <span class="task-detail-value">${escapeHtml(completedBy)}</span>
+        </div>`;
+    }
+    if (task.completion_message) {
+        html += `<div class="task-detail-field task-detail-field-wide">
+            <span class="task-detail-label">Message</span>
+            <span class="task-detail-value">${escapeHtml(task.completion_message)}</span>
+        </div>`;
+    }
+
+    html += `</div>`;
+    content.innerHTML = html;
+    modal.style.display = '';
+
+    // Close on backdrop click
+    modal.onclick = (e) => { if (e.target === modal) hideTaskDetailModal(); };
+    // Close on Escape
+    modal._escHandler = (e) => { if (e.key === 'Escape') hideTaskDetailModal(); };
+    document.addEventListener('keydown', modal._escHandler);
+}
+
+export function hideTaskDetailModal() {
+    const modal = document.getElementById('task-detail-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    if (modal._escHandler) {
+        document.removeEventListener('keydown', modal._escHandler);
+        modal._escHandler = null;
+    }
+}
+
+function formatTaskDate(isoStr) {
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleString(undefined, {
+            month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+    } catch {
+        return isoStr;
+    }
 }
 
 async function saveTaskOrder() {

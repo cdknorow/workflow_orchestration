@@ -963,6 +963,80 @@
     white-space: nowrap;
 }
 
+/* ── Task Detail Modal ─────────────────────────────────────── */
+
+.task-detail-title {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 12px;
+}
+
+.task-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.task-detail-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.task-detail-status-pending { background: rgba(136,136,136,0.15); color: var(--text-muted); }
+.task-detail-status-inprogress { background: rgba(88,166,255,0.15); color: var(--accent, #58a6ff); }
+.task-detail-status-completed { background: rgba(63,185,80,0.15); color: var(--success, #3fb950); }
+.task-detail-status-cancelled { background: rgba(248,81,73,0.12); color: #f85149; }
+
+.task-detail-section {
+    margin-bottom: 16px;
+}
+
+.task-detail-body {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    background: var(--bg-primary, rgba(0,0,0,0.15));
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 4px;
+}
+
+.task-detail-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+}
+
+.task-detail-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.task-detail-field-wide {
+    grid-column: 1 / -1;
+}
+
+.task-detail-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+}
+
+.task-detail-value {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
 /* ── Changed Files Panel ───────────────────────────────────── */
 
 .changed-files-header {

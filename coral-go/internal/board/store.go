@@ -39,7 +39,7 @@ type Subscriber struct {
 // GroupInfo holds group summary info.
 type GroupInfo struct {
 	GroupID     string `db:"group_id" json:"group_id"`
-	MemberCount int   `db:"member_count" json:"member_count"`
+	MemberCount int    `db:"member_count" json:"member_count"`
 }
 
 // Task represents a board task.
@@ -58,7 +58,6 @@ type Task struct {
 	ClaimedAt         *string `db:"claimed_at" json:"claimed_at,omitempty"`
 	CompletedAt       *string `db:"completed_at" json:"completed_at,omitempty"`
 }
-
 
 // Message represents a board message.
 // SubscriberID is the stable poster identity (role name).
@@ -183,8 +182,6 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 		"ALTER TABLE board_subscribers ADD COLUMN session_name TEXT",
 		"ALTER TABLE board_messages ADD COLUMN subscriber_id TEXT",
 		"ALTER TABLE board_groups ADD COLUMN subscriber_id TEXT",
-
-
 	}
 	for _, ddl := range alterColumns {
 		if _, err := s.db.ExecContext(ctx, ddl); err != nil {
@@ -217,8 +214,6 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 			 LIMIT 1),
 			board_groups.session_id
 		) WHERE subscriber_id IS NULL`},
-
-
 	}
 	for _, bf := range backfills {
 		if _, err := s.db.ExecContext(ctx, bf.sql); err != nil {
@@ -931,6 +926,25 @@ func (s *Store) ListTasks(ctx context.Context, project string) ([]Task, error) {
 	return tasks, nil
 }
 
+// HasActiveTaskForAssignee returns true when the assignee already has another
+// in-progress task on the same board. excludeTaskID can be used to ignore the
+// task currently being created or reassigned.
+func (s *Store) HasActiveTaskForAssignee(ctx context.Context, project, assignee string, excludeTaskID int64) (bool, error) {
+	if assignee == "" {
+		return false, nil
+	}
+
+	var count int
+	err := s.db.GetContext(ctx, &count,
+		`SELECT COUNT(1) FROM board_tasks
+		 WHERE board_id = ? AND assigned_to = ? AND status = 'in_progress' AND id != ?`,
+		project, assignee, excludeTaskID)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // ClaimTask finds and atomically claims the best pending task for the subscriber.
 // It first looks for tasks assigned to the subscriber, then unassigned tasks.
 // Tasks are ordered by priority (critical > high > medium > low), then by ID.
@@ -1042,4 +1056,3 @@ func (s *Store) CancelTask(ctx context.Context, project string, taskID int64, su
 
 	return s.getTaskByID(ctx, project, taskID)
 }
-

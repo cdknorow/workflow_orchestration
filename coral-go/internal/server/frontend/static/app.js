@@ -18,7 +18,7 @@ import { loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesE
 import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag, loadAllTags } from './tags.js';
 import { loadSessionCommits } from './commits.js';
 import { showTemplateBrowser } from './template_browser.js';
-import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList } from './tasks.js';
+import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList, showTaskDetailModal, hideTaskDetailModal } from './tasks.js';
 import { loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles, toggleGitDiffMode, toggleStarFile, searchRepoFiles, renderStarredFiles, initFileSearch, initTopBarSearch, showTopBarSearch, hideTopBarSearch, toggleFileSearchMode } from './changed_files.js';
 import { initFileMention } from './file_mention.js';
 import { initCommandMention } from './command_mention.js';
@@ -82,6 +82,7 @@ Object.assign(window, {
     toggleGitDiffMode, toggleStarFile, searchRepoFiles, renderStarredFiles, toggleFileSearchMode,
     // tasks
     loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList,
+    showTaskDetailModal, hideTaskDetailModal,
     // agent_notes
     loadAgentNotes,
     // agentic_state
@@ -111,6 +112,7 @@ Object.assign(window, {
     toggleBoardPause, toggleBoardSleep, deleteBoardMessage,
     showExportBoardModal, doExportBoard,
     // workflows
+    showWorkflowsTab,
     selectWorkflow, selectWorkflowRun, triggerWorkflow, killWorkflowRun, deleteWorkflow,
     showWorkflowCreateModal, hideWorkflowCreateModal, editWorkflow,
     workflowAddStep, workflowStepTypeChanged, saveWorkflow, workflowsBackToList,
@@ -634,6 +636,14 @@ document.addEventListener("DOMContentLoaded", () => {
     initLiveJobs();
     initMessageBoard();
     initMobile();
+
+    // Hide connected apps in prod builds (feature is dev/beta only)
+    fetch('/api/system/status').then(r => r.json()).then(data => {
+        if (data.tier_name === 'prod' || data.tier_name === 'staging') {
+            const btn = document.getElementById('connected-apps-menu-btn');
+            if (btn) btn.style.display = 'none';
+        }
+    }).catch(() => {});
 
     // ── Filter event wiring ─────────────────────────────────────────────
 

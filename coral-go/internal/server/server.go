@@ -526,6 +526,17 @@ func (s *Server) buildRouter() chi.Router {
 		http.ServeFileFS(w, r, staticFS, "frontend/static/api-spec.json")
 	})
 
+	// Agent docs — embedded API reference documentation
+	agentDocsSub, err := fs.Sub(staticFS, "frontend/static/agent_docs")
+	if err != nil {
+		log.Printf("Warning: failed to load agent_docs: %v", err)
+	} else {
+		docsHandler := routes.NewAgentDocsHandler(agentDocsSub)
+		r.Get("/api/agent-docs", docsHandler.List)
+		r.Get("/api/agent-docs/all", docsHandler.GetAll)
+		r.Get("/api/agent-docs/{name}", docsHandler.Get)
+	}
+
 	// PWA manifest (also accessible at /static/manifest.json)
 	r.Get("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/manifest+json")

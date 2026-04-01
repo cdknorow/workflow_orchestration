@@ -1001,4 +1001,20 @@
         </div>
     </div>
 
+    <!-- Task Detail Modal -->
+    <div id="task-detail-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h3 id="task-detail-modal-title">Task Details</h3>
+                <button class="modal-close-btn" onclick="window.hideTaskDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="task-detail-content"></div>
+            </div>
+            <div class="modal-actions modal-footer">
+                <button class="btn" onclick="window.hideTaskDetailModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
 {{ end }}

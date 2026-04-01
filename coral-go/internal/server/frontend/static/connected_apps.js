@@ -32,6 +32,12 @@ async function fetchConnections() {
 // ── Initialization ─────────────────────────────────────────────────────
 
 export async function showConnectedApps() {
+    // Block access in prod/staging builds (defense-in-depth — button is already hidden)
+    try {
+        const status = await apiFetch('/api/system/status');
+        if (status.tier_name === 'prod' || status.tier_name === 'staging') return;
+    } catch { /* allow if status fetch fails */ }
+
     showView('connected-apps-view');
     await Promise.all([fetchProviders(), fetchConnections()]);
     renderProviders();

@@ -335,6 +335,31 @@ func TestClaimTask_PriorityOrder(t *testing.T) {
 	assert.Equal(t, "Low task", claimed.Title)
 }
 
+func TestHasActiveTaskForAssignee(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task1, err := s.CreateTask(ctx, "proj", "Task 1", "", "medium", "alice", "bob")
+	require.NoError(t, err)
+	_, err = s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+
+	task2, err := s.CreateTask(ctx, "proj", "Task 2", "", "medium", "alice", "bob")
+	require.NoError(t, err)
+
+	hasActive, err := s.HasActiveTaskForAssignee(ctx, "proj", "bob", task2.ID)
+	require.NoError(t, err)
+	assert.True(t, hasActive)
+
+	hasActive, err = s.HasActiveTaskForAssignee(ctx, "proj", "proj-other", task2.ID)
+	require.NoError(t, err)
+	assert.False(t, hasActive)
+
+	hasActive, err = s.HasActiveTaskForAssignee(ctx, "proj", "bob", task1.ID)
+	require.NoError(t, err)
+	assert.False(t, hasActive)
+}
+
 func TestCompleteTask(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

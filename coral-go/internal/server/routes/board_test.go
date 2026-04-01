@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,10 @@ func setupBoardTestServer(t *testing.T) (*httptest.Server, *BoardHandler) {
 	r.Get("/api/board/{project}/messages/all", handler.ListAllMessages)
 	r.Delete("/api/board/{project}/messages/{messageID}", handler.DeleteMessage)
 	r.Get("/api/board/{project}/subscribers", handler.ListSubscribers)
+	r.Post("/api/board/{project}/tasks", handler.CreateTask)
+	r.Get("/api/board/{project}/tasks", handler.ListTasks)
+	r.Post("/api/board/{project}/tasks/claim", handler.ClaimTask)
+	r.Post("/api/board/{project}/tasks/{taskID}/reassign", handler.ReassignTask)
 	r.Post("/api/board/{project}/pause", handler.PauseBoard)
 	r.Post("/api/board/{project}/resume", handler.ResumeBoard)
 	r.Get("/api/board/{project}/paused", handler.GetPaused)
@@ -282,4 +287,108 @@ func TestBoardListProjects(t *testing.T) {
 	var projects []map[string]any
 	json.NewDecoder(resp3.Body).Decode(&projects)
 	assert.Len(t, projects, 2)
+}
+
+func TestBoardCreateTask_DefersAssigneeNotificationWhenBusy(t *testing.T) {
+	server, _ := setupBoardTestServer(t)
+	base := server.URL + "/api/board/myproject"
+
+	resp := postJSON(t, base+"/subscribe", map[string]string{
+		"subscriber_id": "Backend Dev",
+		"job_title":     "Backend Dev",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks", map[string]string{
+		"title":       "Existing task",
+		"created_by":  "Orchestrator",
+		"assigned_to": "Backend Dev",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks/claim", map[string]string{
+		"subscriber_id": "Backend Dev",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks", map[string]string{
+		"title":       "Follow-up task",
+		"created_by":  "Orchestrator",
+		"assigned_to": "Backend Dev",
+		"priority":    "high",
+	})
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	require.Eventually(t, func() bool {
+		msgResp, err := http.Get(base + "/messages/all?format=dashboard")
+		require.NoError(t, err)
+		defer msgResp.Body.Close()
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(msgResp.Body).Decode(&body))
+		messages, ok := body["messages"].([]any)
+		if !ok || len(messages) == 0 {
+			return false
+		}
+		last, ok := messages[len(messages)-1].(map[string]any)
+		if !ok {
+			return false
+		}
+		content, _ := last["content"].(string)
+		return content == "[Task #2 (high) assigned to Backend Dev — notification deferred while they have an active task] Follow-up task"
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
+func TestBoardReassignTask_DefersAssigneeNotificationWhenBusy(t *testing.T) {
+	server, _ := setupBoardTestServer(t)
+	base := server.URL + "/api/board/myproject"
+
+	resp := postJSON(t, base+"/subscribe", map[string]string{
+		"subscriber_id": "Backend Dev",
+		"job_title":     "Backend Dev",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks", map[string]string{
+		"title":       "Existing task",
+		"created_by":  "Orchestrator",
+		"assigned_to": "Backend Dev",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks/claim", map[string]string{
+		"subscriber_id": "Backend Dev",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks", map[string]string{
+		"title":      "Unassigned task",
+		"created_by": "Orchestrator",
+	})
+	resp.Body.Close()
+
+	resp = postJSON(t, base+"/tasks/2/reassign", map[string]string{
+		"subscriber_id": "Orchestrator",
+		"assignee":      "Backend Dev",
+	})
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.Eventually(t, func() bool {
+		msgResp, err := http.Get(base + "/messages/all?format=dashboard")
+		require.NoError(t, err)
+		defer msgResp.Body.Close()
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(msgResp.Body).Decode(&body))
+		messages, ok := body["messages"].([]any)
+		if !ok || len(messages) == 0 {
+			return false
+		}
+		last, ok := messages[len(messages)-1].(map[string]any)
+		if !ok {
+			return false
+		}
+		content, _ := last["content"].(string)
+		return content == "[Task #2 reassigned to Backend Dev — notification deferred while they have an active task] Unassigned task"
+	}, 2*time.Second, 50*time.Millisecond)
 }

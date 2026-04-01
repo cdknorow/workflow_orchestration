@@ -7,6 +7,7 @@ build/
 *.egg
 site/
 .venv/*
+*gocache*
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
 coral-go/coral

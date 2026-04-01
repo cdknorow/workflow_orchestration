@@ -65,6 +65,31 @@ func (h *BoardHandler) SetNotifyFn(fn func()) {
 	h.notifyFn = fn
 }
 
+func (h *BoardHandler) buildAssignmentNotification(ctx context.Context, project string, task *board.Task, assignee string, reassigned bool) string {
+	if assignee == "" {
+		if reassigned {
+			return fmt.Sprintf("@notify-all [Task #%d reassigned — now unassigned] %s — run 'coral-board task claim' to pick it up", task.ID, task.Title)
+		}
+		return fmt.Sprintf("@notify-all [New Task #%d (%s)] %s — run 'coral-board task claim' to pick it up", task.ID, task.Priority, task.Title)
+	}
+
+	hasActiveTask, err := h.bs.HasActiveTaskForAssignee(ctx, project, assignee, task.ID)
+	if err != nil {
+		slog.Warn("check active assignee task failed", "project", project, "assignee", assignee, "task_id", task.ID, "error", err)
+	}
+	if hasActiveTask {
+		if reassigned {
+			return fmt.Sprintf("[Task #%d reassigned to %s — notification deferred while they have an active task] %s", task.ID, assignee, task.Title)
+		}
+		return fmt.Sprintf("[Task #%d (%s) assigned to %s — notification deferred while they have an active task] %s", task.ID, task.Priority, assignee, task.Title)
+	}
+
+	if reassigned {
+		return fmt.Sprintf("@%s [Task #%d reassigned to you] %s — run 'coral-board task claim' to start", assignee, task.ID, task.Title)
+	}
+	return fmt.Sprintf("@%s [Task #%d (%s)] %s — assigned to you, run 'coral-board task claim' to start", assignee, task.ID, task.Priority, task.Title)
+}
+
 // ListProjects returns all boards with subscriber and message counts.
 // GET /api/board/projects
 func (h *BoardHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -591,12 +616,11 @@ func (h *BoardHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	// Notify agents about the new task — @mention assignee if pre-assigned
 	go func() {
-		var notification string
-		if task.AssignedTo != nil && *task.AssignedTo != "" {
-			notification = fmt.Sprintf("@%s [Task #%d (%s)] %s — assigned to you, run 'coral-board task claim' to start", *task.AssignedTo, task.ID, task.Priority, task.Title)
-		} else {
-			notification = fmt.Sprintf("@notify-all [New Task #%d (%s)] %s — run 'coral-board task claim' to pick it up", task.ID, task.Priority, task.Title)
+		assignee := ""
+		if task.AssignedTo != nil {
+			assignee = *task.AssignedTo
 		}
+		notification := h.buildAssignmentNotification(context.Background(), project, task, assignee, false)
 		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusCreated, task)
@@ -740,12 +764,7 @@ func (h *BoardHandler) ReassignTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() {
-		var notification string
-		if body.Assignee != "" {
-			notification = fmt.Sprintf("@%s [Task #%d reassigned to you] %s — run 'coral-board task claim' to start", body.Assignee, task.ID, task.Title)
-		} else {
-			notification = fmt.Sprintf("@notify-all [Task #%d reassigned — now unassigned] %s — run 'coral-board task claim' to pick it up", task.ID, task.Title)
-		}
+		notification := h.buildAssignmentNotification(context.Background(), project, task, body.Assignee, true)
 		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
 	}()
 	writeJSON(w, http.StatusOK, task)
