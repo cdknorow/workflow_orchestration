@@ -338,7 +338,7 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	connAppStore := store.NewConnectedAppStore(db)
 	oauthRegistry := oauth.NewRegistry()
 	flowManager := oauth.NewFlowManager(oauthRegistry)
-	wfRunner := background.NewWorkflowRunner(wfStore, launcher, agentRT, connAppStore, flowManager, cfg.CoralDir(), cfg.Port)
+	wfRunner := background.NewWorkflowRunner(wfStore, launcher, agentRT, connAppStore, flowManager, cfg.CoralDir(), cfg.Host, cfg.Port)
 	srv.SetWorkflowRunner(wfRunner)
 	scheduler.SetWorkflowRunner(wfRunner, wfStore)
 

@@ -77,6 +77,7 @@ type WorkflowRunner struct {
 	runtime  AgentRuntime
 	logger   *slog.Logger
 	dataDir  string // Coral data directory (~/.coral) for workflow run artifacts
+	host     string // Server host for CORAL_HOST env var
 	port     int    // Server port for CORAL_PORT env var
 
 	// Connected Apps token injection
@@ -90,7 +91,7 @@ type WorkflowRunner struct {
 }
 
 // NewWorkflowRunner creates a new WorkflowRunner.
-func NewWorkflowRunner(wfStore *store.WorkflowStore, launcher *AgentLauncher, runtime AgentRuntime, connApps *store.ConnectedAppStore, flow *oauth.FlowManager, dataDir string, port int) *WorkflowRunner {
+func NewWorkflowRunner(wfStore *store.WorkflowStore, launcher *AgentLauncher, runtime AgentRuntime, connApps *store.ConnectedAppStore, flow *oauth.FlowManager, dataDir, host string, port int) *WorkflowRunner {
 	return &WorkflowRunner{
 		store:          wfStore,
 		launcher:       launcher,
@@ -98,6 +99,7 @@ func NewWorkflowRunner(wfStore *store.WorkflowStore, launcher *AgentLauncher, ru
 		connApps:       connApps,
 		flow:           flow,
 		dataDir:        dataDir,
+		host:           host,
 		port:           port,
 		logger:         slog.Default().With("service", "workflow_runner"),
 		activeChildren: make(map[int64]*activeChild),
@@ -700,8 +702,16 @@ func (wr *WorkflowRunner) persistResults(ctx context.Context, runID int64, curre
 // buildStepEnv constructs environment variables for a workflow step.
 func (wr *WorkflowRunner) buildStepEnv(workflow *store.Workflow, runID int64, runDir string, stepIndex int, stepDir string, totalSteps int, steps []StepDef) []string {
 	runIDStr := strconv.FormatInt(runID, 10)
+	portStr := strconv.Itoa(wr.port)
+	coralURL := fmt.Sprintf("http://%s:%s", wr.host, portStr)
 	env := []string{
-		"CORAL_PORT=" + strconv.Itoa(wr.port),
+		// Server-level Coral variables
+		"CORAL_PORT=" + portStr,
+		"CORAL_HOST=" + wr.host,
+		"CORAL_URL=" + coralURL,
+		"CORAL_DIR=" + wr.dataDir,
+		"CORAL_DATA_DIR=" + wr.dataDir,
+		// Workflow-specific variables
 		"CORAL_WORKFLOW_RUN_DIR=" + runDir,
 		"CORAL_WORKFLOW_STEP=" + strconv.Itoa(stepIndex),
 		"CORAL_WORKFLOW_STEP_DIR=" + stepDir,

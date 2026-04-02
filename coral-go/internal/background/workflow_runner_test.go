@@ -111,7 +111,7 @@ func TestFireHooks_ExecutesCommand(t *testing.T) {
 
 	db := setupTestDB(t)
 	wfStore := store.NewWorkflowStore(db)
-	runner := NewWorkflowRunner(wfStore, nil, nil, nil, nil, tmpDir, 8420)
+	runner := NewWorkflowRunner(wfStore, nil, nil, nil, nil, tmpDir, "localhost", 8420)
 
 	runner.fireHooks(context.Background(), hooks, "StepComplete", nil)
 
@@ -140,7 +140,7 @@ func TestFireHooks_SkipsUnmatchedEvent(t *testing.T) {
 
 	db := setupTestDB(t)
 	wfStore := store.NewWorkflowStore(db)
-	runner := NewWorkflowRunner(wfStore, nil, nil, nil, nil, tmpDir, 8420)
+	runner := NewWorkflowRunner(wfStore, nil, nil, nil, nil, tmpDir, "localhost", 8420)
 
 	// Fire a different event — should not execute the StepComplete hook
 	runner.fireHooks(context.Background(), hooks, "StepFailed", nil)
@@ -169,7 +169,7 @@ func TestFireHooks_PassesEnvVars(t *testing.T) {
 
 	db := setupTestDB(t)
 	wfStore := store.NewWorkflowStore(db)
-	runner := NewWorkflowRunner(wfStore, nil, nil, nil, nil, tmpDir, 8420)
+	runner := NewWorkflowRunner(wfStore, nil, nil, nil, nil, tmpDir, "localhost", 8420)
 
 	env := []string{"CORAL_STEP_NAME=test-step"}
 	runner.fireHooks(context.Background(), hooks, "StepComplete", env)
@@ -438,7 +438,7 @@ func TestShellStepExecution(t *testing.T) {
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
 	dataDir := t.TempDir()
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
@@ -501,7 +501,7 @@ func TestShellStepFailure(t *testing.T) {
 	wfStore := store.NewWorkflowStore(db)
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, t.TempDir(), 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, t.TempDir(), "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
@@ -541,7 +541,7 @@ func TestShellStepContinueOnFailure(t *testing.T) {
 	wfStore := store.NewWorkflowStore(db)
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, t.TempDir(), 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, t.TempDir(), "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
@@ -579,7 +579,7 @@ func TestMultiStepWithTemplates(t *testing.T) {
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
 	dataDir := t.TempDir()
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
@@ -617,7 +617,7 @@ func TestKillRun(t *testing.T) {
 	wfStore := store.NewWorkflowStore(db)
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, t.TempDir(), 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, t.TempDir(), "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
@@ -654,7 +654,7 @@ func TestArtifactDirectoryCreation(t *testing.T) {
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
 	dataDir := t.TempDir()
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
@@ -698,7 +698,7 @@ func TestContextJSON(t *testing.T) {
 	rt := newWfMockRuntime()
 	launcher := &AgentLauncher{runtime: rt}
 	dataDir := t.TempDir()
-	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, 8420)
+	runner := NewWorkflowRunner(wfStore, launcher, rt, nil, nil, dataDir, "localhost", 8420)
 
 	repoPath := t.TempDir()
 	steps := []StepDef{
