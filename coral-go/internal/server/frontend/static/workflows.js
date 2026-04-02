@@ -119,6 +119,67 @@ export async function launchWorkflowAgent() {
     }
 }
 
+export async function editWorkflowWithAgent(workflowId) {
+    try {
+        // Fetch the workflow details and skill prompt in parallel
+        const [wfResp, doc] = await Promise.all([
+            apiFetch(`/api/workflows/${workflowId}`),
+            apiFetch('/api/agent-docs/workflow-builder'),
+        ]);
+        if (!doc || !doc.content) { showToast('Workflow builder skill not found', true); return; }
+        if (!wfResp) { showToast('Could not load workflow', true); return; }
+
+        const workingDir = document.body.dataset.coralRoot || '';
+        if (!workingDir) { showToast('Could not determine working directory', true); return; }
+
+        // Build an edit-specific prompt with the current workflow context
+        const wfJSON = JSON.stringify(wfResp, null, 2);
+        const editPrompt = `${doc.content}
+
+---
+
+## Current Task: Edit an Existing Workflow
+
+The user wants to modify an existing workflow. Here is the current workflow definition (ID: ${workflowId}):
+
+\`\`\`json
+${wfJSON}
+\`\`\`
+
+**Instructions:**
+1. Start by showing the user a summary of this workflow — its name, description, steps, and what each step does
+2. Ask what they'd like to change (add/remove/modify steps, change prompts, add hooks, adjust timeouts, etc.)
+3. After confirming the changes, update the workflow using: \`curl -X PUT http://localhost:\${CORAL_PORT}/api/workflows/${workflowId} -H 'Content-Type: application/json' -d '...'\`
+4. Offer to trigger a test run and help debug if anything fails
+5. To update the workflow, use PUT (not POST) since it already exists`;
+
+        const resp = await fetch('/api/sessions/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                working_dir: wfResp.repo_path || workingDir,
+                agent_type: 'claude',
+                display_name: `Edit: ${wfResp.name}`,
+                prompt: editPrompt,
+                capabilities: { allow: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'] },
+            }),
+        });
+
+        if (resp.status === 403) { showToast('Demo limit reached — stop existing sessions first', true); return; }
+        const result = await resp.json();
+        if (result.error) { showToast(result.error, true); return; }
+
+        showToast(`Launched: Edit ${wfResp.name}`);
+        setTimeout(async () => {
+            await loadLiveSessions();
+            if (window.switchNavTab) window.switchNavTab('agents');
+            selectLiveSession(result.session_name, 'claude', result.session_id);
+        }, 1500);
+    } catch (e) {
+        showToast('Failed to launch workflow edit agent', true);
+    }
+}
+
 // ── Workflow list ──────────────────────────────────────────────────────
 
 function renderWorkflowList() {
@@ -234,6 +295,9 @@ function renderWorkflowDetail(wf, runs) {
                     <span class="material-icons" style="font-size:14px">play_arrow</span> Run
                 </button>
                 <button class="btn btn-sm" onclick="editWorkflow(${wf.id})">Edit</button>
+                <button class="btn btn-sm" onclick="editWorkflowWithAgent(${wf.id})">
+                    <span class="material-icons" style="font-size:14px">smart_toy</span> Edit with Agent
+                </button>
                 <button class="btn btn-sm" style="color:#f85149" onclick="deleteWorkflow(${wf.id}, '${esc(wf.name)}')">Delete</button>
             </div>
         </div>
