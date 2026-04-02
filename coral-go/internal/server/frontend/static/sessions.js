@@ -44,6 +44,7 @@ export async function selectLiveSession(name, agentType, sessionId) {
         display_name: displayName || null, working_directory: workingDirectory || "",
         prompt: agentData?.prompt || "", model: agentData?.model || "",
         capabilities: agentData?.capabilities || null,
+        board_project: agentData?.board_project || null,
     };
 
     // Restore input text for the new session

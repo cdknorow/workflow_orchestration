@@ -8,7 +8,10 @@ let _boardTaskPollTimer = null;
 
 export function startBoardTaskPoll() {
     stopBoardTaskPoll();
-    // Refresh immediately, then every 10 seconds
+    // Load agent tasks + board tasks immediately, then poll board tasks every 10s
+    if (state.currentSession && state.currentSession.type === 'live') {
+        loadAgentTasks(state.currentSession.name, state.currentSession.session_id);
+    }
     _pollBoardTasksOnce();
     _boardTaskPollTimer = setInterval(_pollBoardTasksOnce, 10000);
 }
@@ -22,7 +25,7 @@ export function stopBoardTaskPoll() {
 
 function _pollBoardTasksOnce() {
     if (!state.currentSession || state.currentSession.type !== 'live') return;
-    const boardProject = state.currentSession.board_name || state.currentSession.name;
+    const boardProject = state.currentSession.board_project || state.currentSession.name;
     if (boardProject) loadBoardTasks(boardProject);
 }
 
