@@ -1076,22 +1076,30 @@
     letter-spacing: 0.03em;
 }
 
-.diff-mode-toggle {
-    background: none;
+.diff-mode-select {
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 3px;
     color: var(--text-muted);
     font-size: 10px;
-    padding: 1px 5px;
+    padding: 1px 4px;
     cursor: pointer;
     text-transform: none;
     letter-spacing: normal;
     font-weight: normal;
     margin-left: 4px;
     vertical-align: middle;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23888' d='M0 2l4 4 4-4z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    padding-right: 14px;
 }
 
-.diff-mode-toggle:hover {
+.diff-mode-select:hover,
+.diff-mode-select:focus {
     color: var(--text-primary);
     border-color: var(--accent);
 }

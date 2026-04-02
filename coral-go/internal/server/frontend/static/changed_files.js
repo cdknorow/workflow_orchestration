@@ -998,25 +998,29 @@ window._closeInlinePreview = function() {
 const _diffModes = ['branch_point', 'previous_commit', 'main_head'];
 const _diffModeLabels = { branch_point: 'vs merge-base', previous_commit: 'vs HEAD~1', main_head: 'vs main' };
 
-export async function toggleGitDiffMode() {
-    const current = _getGitDiffMode();
-    const idx = _diffModes.indexOf(current);
-    const next = _diffModes[(idx + 1) % _diffModes.length];
+export async function setGitDiffMode(mode) {
+    if (!_diffModes.includes(mode)) return;
 
-    // Save to global settings
     try {
         await fetch('/api/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ git_diff_mode: next }),
+            body: JSON.stringify({ git_diff_mode: mode }),
         });
-        state.settings = { ...state.settings, git_diff_mode: next };
+        state.settings = { ...state.settings, git_diff_mode: mode };
     } catch (e) {
         console.error('Failed to save git diff mode:', e);
         return;
     }
 
     refreshChangedFiles();
+}
+
+export async function toggleGitDiffMode() {
+    const current = _getGitDiffMode();
+    const idx = _diffModes.indexOf(current);
+    const next = _diffModes[(idx + 1) % _diffModes.length];
+    setGitDiffMode(next);
 }
 
 function _getGitDiffMode() {
@@ -1068,15 +1072,20 @@ export function renderChangedFiles() {
 
     if (titleEl) {
         const diffMode = _getGitDiffMode();
-        const modeLabel = _diffModeLabels[diffMode] || 'vs merge-base';
-        titleEl.innerHTML = `${files.length} file${files.length !== 1 ? 's' : ''} changed <button class="diff-mode-toggle" onclick="toggleGitDiffMode()" title="Click to switch diff mode">${escapeHtml(modeLabel)}</button>`;
+        const options = _diffModes.map(m =>
+            `<option value="${m}"${m === diffMode ? ' selected' : ''}>${escapeHtml(_diffModeLabels[m])}</option>`
+        ).join('');
+        titleEl.innerHTML = `${files.length} file${files.length !== 1 ? 's' : ''} changed <select class="diff-mode-select" onchange="setGitDiffMode(this.value)" title="Diff comparison mode">${options}</select>`;
     }
     if (countEl) {
         countEl.textContent = files.length > 0 ? String(files.length) : '';
     }
 
     if (files.length === 0) {
-        list.innerHTML = `<div class="file-empty">No changed files<br><button class="diff-mode-toggle" onclick="toggleGitDiffMode()" style="margin-top:8px">Try another diff mode</button></div>`;
+        const emptyOptions = _diffModes.map(m =>
+            `<option value="${m}"${m === _getGitDiffMode() ? ' selected' : ''}>${escapeHtml(_diffModeLabels[m])}</option>`
+        ).join('');
+        list.innerHTML = `<div class="file-empty">No changed files<br><select class="diff-mode-select" onchange="setGitDiffMode(this.value)" style="margin-top:8px" title="Diff comparison mode">${emptyOptions}</select></div>`;
         return;
     }
 
