@@ -40,20 +40,49 @@ A **Team** is a first-class entity stored in the database. It holds the team con
 
 #### `team_members` table
 
-Tracks each agent's membership in a team. This is the definitive record of who was in the team — persists after sessions are killed so teams can be resurrected.
+Each row is a **slot** in the team, not a session record. A slot represents "the Lead Developer position" — the `session_id` is a pointer to whichever session currently fills that slot. When an agent is restarted, the same slot gets a new `session_id`. This preserves team identity across restarts.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER PK | Auto-increment |
 | `team_id` | INTEGER FK | References `teams.id` |
-| `agent_name` | TEXT | Display name (e.g. "Lead Developer") |
+| `agent_name` | TEXT | Display name / slot identity (e.g. "Lead Developer") |
 | `agent_config_json` | TEXT | Per-agent config snapshot (prompt, capabilities, model, etc.) |
-| `session_id` | TEXT | Current/last session ID (null if never launched) |
+| `session_id` | TEXT | Current session filling this slot (updated on restart, null if stopped) |
 | `status` | TEXT | `active`, `sleeping`, `stopped` |
-| `created_at` | TEXT | When the member was added |
-| `stopped_at` | TEXT | When the member was stopped/killed (null if active) |
+| `created_at` | TEXT | When the slot was created |
+| `stopped_at` | TEXT | When the slot was stopped/killed (null if active/sleeping) |
 
-When an individual agent is killed while the team is still running, that member's status becomes `stopped` but the team stays `running`. When the team is killed or sleeps, all active members transition together.
+**Slot semantics:**
+- One row per agent role, not per session. The row persists for the lifetime of the team.
+- `session_id` is mutable — updated when the agent is restarted (new session, same slot).
+- When an agent is individually killed, the slot becomes `stopped`. The team stays `running`.
+- When the team is killed or sleeps, all `active` slots transition together.
+- Resurrect uses `stopped_at` matching to identify which slots were still active at team kill time.
+
+**Example lifecycle:**
+
+```
+Launch team with 2 agents:
+| id | agent_name      | session_id | status | stopped_at |
+|----|-----------------|------------|--------|------------|
+| 1  | Lead Developer  | claude-abc | active | null       |
+| 2  | QA Engineer     | claude-def | active | null       |
+
+Restart Lead Developer (kill + relaunch):
+| 1  | Lead Developer  | claude-xyz | active | null       |  ← session_id updated
+| 2  | QA Engineer     | claude-def | active | null       |
+
+Kill QA Engineer individually:
+| 1  | Lead Developer  | claude-xyz | active  | null             |
+| 2  | QA Engineer     | claude-def | stopped | 2026-04-02T21:30 |  ← individual kill
+
+Kill team:
+| 1  | Lead Developer  | claude-xyz | stopped | 2026-04-02T22:00 |  ← team kill time
+| 2  | QA Engineer     | claude-def | stopped | 2026-04-02T21:30 |  ← unchanged
+
+Resurrect → only relaunches slot 1 (stopped_at matches team's stopped_at)
+```
 
 #### `live_sessions` updates
 
