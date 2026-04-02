@@ -38,6 +38,23 @@ A **Team** is a first-class entity stored in the database. It holds the team con
 | `updated_at` | TEXT | ISO 8601 timestamp |
 | `stopped_at` | TEXT | When the team was stopped/killed (null if active) |
 
+#### `team_members` table
+
+Tracks each agent's membership in a team. This is the definitive record of who was in the team — persists after sessions are killed so teams can be resurrected.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `team_id` | INTEGER FK | References `teams.id` |
+| `agent_name` | TEXT | Display name (e.g. "Lead Developer") |
+| `agent_config_json` | TEXT | Per-agent config snapshot (prompt, capabilities, model, etc.) |
+| `session_id` | TEXT | Current/last session ID (null if never launched) |
+| `status` | TEXT | `active`, `sleeping`, `stopped` |
+| `created_at` | TEXT | When the member was added |
+| `stopped_at` | TEXT | When the member was stopped/killed (null if active) |
+
+When an individual agent is killed while the team is still running, that member's status becomes `stopped` but the team stays `running`. When the team is killed or sleeps, all active members transition together.
+
 #### `live_sessions` updates
 
 Add a `team_id` column (nullable INTEGER, FK to `teams.id`) so each session knows which team it belongs to. This replaces the current inference-by-board-name approach.
@@ -63,6 +80,20 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 
 CREATE INDEX IF NOT EXISTS idx_teams_status ON teams(status);
+
+CREATE TABLE IF NOT EXISTS team_members (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id           INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    agent_name        TEXT NOT NULL,
+    agent_config_json TEXT NOT NULL,
+    session_id        TEXT,
+    status            TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'sleeping', 'stopped')),
+    created_at        TEXT NOT NULL,
+    stopped_at        TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id, status);
 ```
 
 ### Lifecycle
@@ -105,41 +136,75 @@ CREATE INDEX IF NOT EXISTS idx_teams_status ON teams(status);
 #### Kill Team
 `POST /api/sessions/live/team/{boardName}/kill`
 
-1. Kill all live sessions belonging to the team
-2. Set team status to `stopped`, record `stopped_at`
-3. If team has a worktree and `cleanup_worktree` is true, remove it
-4. Unsubscribe agents from board
+1. Snapshot: mark all `active` team_members as `stopped`, record `stopped_at`
+2. Kill all live sessions belonging to the team
+3. Set team status to `stopped`, record `stopped_at`
+4. If `is_worktree = 1`, clean up the worktree
+5. Unsubscribe agents from board
+
+The snapshot at step 1 is critical — it captures which agents were still running at the time of kill. Members already individually stopped before the team kill retain their earlier `stopped_at`.
+
+#### Kill Individual Agent
+When a single agent is killed while its team is still running:
+
+1. Mark that `team_member` as `stopped`
+2. Kill the session as normal
+3. Team stays `running` (other agents continue)
+
+This means the team's member list naturally tracks who's still active vs who was killed early.
 
 #### Sleep Team
 `POST /api/sessions/live/team/{boardName}/sleep`
 
-1. Kill tmux/PTY sessions (sessions stay in DB as sleeping)
-2. Set team status to `sleeping`
-3. Pause the board
-4. Worktree is NOT cleaned up (preserved for wake)
+1. Mark all `active` team_members as `sleeping`
+2. Kill tmux/PTY sessions (sessions stay in DB as sleeping)
+3. Set team status to `sleeping`
+4. Pause the board
+5. Working directory preserved (worktree or otherwise)
 
 #### Wake Team
 `POST /api/sessions/live/team/{boardName}/wake`
 
-1. Relaunch agents from the stored config
-2. Set team status to `running`
-3. Use the existing worktree (if any) as working directory
-4. Unpause the board
+1. Find `sleeping` team_members — these are the agents to relaunch
+2. Relaunch each using their `agent_config_json`
+3. Update member `status` to `active`, update `session_id`
+4. Set team status to `running`
+5. Unpause the board
+
+Only sleeping members are relaunched. Members that were individually killed before the sleep stay `stopped`.
+
+#### Resurrect Team
+`POST /api/teams/{name}/resurrect`
+
+Resurrects a `stopped` team — relaunches the agents that were active at the time it was killed.
+
+1. Find the team by name, verify status is `stopped`
+2. Collect members whose `stopped_at` matches the team's `stopped_at` — these are the agents that were active when the team was killed (not individually killed earlier)
+3. If `is_worktree = 1`, create a fresh worktree from the same base branch (the old one was cleaned up)
+4. Relaunch each member using their `agent_config_json`
+5. Update member `status` to `active`, assign new `session_id`
+6. Set team status to `running`, clear `stopped_at`
+
+This is different from "relaunch" (which uses the original config and starts all agents). Resurrect restores the team's **final state** — only the agents that were still running when it was killed.
+
+#### Relaunch Team
+`POST /api/teams/{name}/relaunch`
+
+Launches a fresh instance from the stored `config_json` — all agents from the original config, not just the ones active at kill time. Useful when you want a clean start.
+
+1. Load `config_json` from the stopped team
+2. Create new team_members for all agents in the config
+3. Launch as if it were a new team (optionally with a fresh worktree)
 
 #### Get Team
 `GET /api/teams/{name}`
 
-Returns the team record including config, status, worktree path, and member sessions.
+Returns the team record including config, status, working_dir, and member list with per-member status.
 
 #### List Teams
 `GET /api/teams`
 
 Returns all teams with status and summary info. Optionally filter by `?status=running`.
-
-#### Relaunch Team
-`POST /api/teams/{name}/relaunch`
-
-Launches a new instance of a stopped team using its stored config. Creates a new `teams` row (or reuses the existing one if the name is unique). Optionally creates a fresh worktree.
 
 ### Worktree Handling
 
@@ -165,13 +230,14 @@ The team stores a `working_dir` and an `is_worktree` flag. The team doesn't care
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/sessions/launch-team` | Launch team (creates teams row) |
-| POST | `/api/sessions/live/team/{name}/kill` | Kill team + cleanup worktree |
-| POST | `/api/sessions/live/team/{name}/sleep` | Sleep team (preserve worktree) |
-| POST | `/api/sessions/live/team/{name}/wake` | Wake team (reuse worktree) |
-| GET | `/api/teams` | List all teams |
-| GET | `/api/teams/{name}` | Get team details + member sessions |
-| POST | `/api/teams/{name}/relaunch` | Relaunch a stopped team |
+| POST | `/api/sessions/launch-team` | Launch team (creates teams + team_members rows) |
+| POST | `/api/sessions/live/team/{name}/kill` | Kill team, snapshot active members, cleanup worktree |
+| POST | `/api/sessions/live/team/{name}/sleep` | Sleep team (preserve working dir) |
+| POST | `/api/sessions/live/team/{name}/wake` | Wake sleeping members only |
+| GET | `/api/teams` | List all teams with status |
+| GET | `/api/teams/{name}` | Get team details + member list with per-member status |
+| POST | `/api/teams/{name}/resurrect` | Resurrect stopped team (only last-active agents) |
+| POST | `/api/teams/{name}/relaunch` | Fresh start from original config (all agents) |
 | DELETE | `/api/teams/{name}` | Delete a stopped team record |
 
 ### UI Changes
