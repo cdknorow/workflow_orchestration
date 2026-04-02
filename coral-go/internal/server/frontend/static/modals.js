@@ -2155,6 +2155,9 @@ async function launchTeam() {
     }
 
     const boardServer = document.getElementById("team-board-server").value.trim();
+    const useWorktree = document.getElementById("launch-team-worktree")?.checked;
+    const baseBranch = document.getElementById("launch-team-base-branch")?.value.trim();
+
     const payload = {
         board_name: boardName,
         working_dir: workingDir,
@@ -2163,6 +2166,10 @@ async function launchTeam() {
         agents,
     };
     if (boardServer) payload.board_server = boardServer;
+    if (useWorktree) {
+        payload.worktree = true;
+        if (baseBranch) payload.base_branch = baseBranch;
+    }
 
     // Disable launch button to prevent double-clicks
     const launchBtn = document.querySelector('#launch-step-team .btn-primary');
@@ -2210,7 +2217,8 @@ async function launchTeam() {
                 });
             }
             if (launched.length - failed.length > 0) {
-                showToast(`Launched team: ${launched.length - failed.length} agents on "${boardName}"`);
+                const wtNote = result.worktree_path ? ` in worktree ${result.worktree_path}` : '';
+                showToast(`Launched team: ${launched.length - failed.length} agents on "${boardName}"${wtNote}`);
             }
             hideLaunchModal();
             setTimeout(loadLiveSessions, 2000);

@@ -93,6 +93,8 @@ var columnMigrations = []struct {
 	{"live_sessions", "mcp_servers", "TEXT"},
 	{"scheduled_jobs", "job_type", "TEXT DEFAULT 'prompt'"},
 	{"scheduled_jobs", "workflow_id", "INTEGER"},
+	{"live_sessions", "worktree_path", "TEXT"},
+	{"live_sessions", "worktree_repo", "TEXT"},
 }
 
 const schemaSQL = `

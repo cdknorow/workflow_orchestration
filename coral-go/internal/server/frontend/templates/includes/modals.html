@@ -283,6 +283,18 @@
                                             <div class="team-settings-note">Apply the default autonomy flag to each launched team agent.</div>
                                         </span>
                                     </label>
+                                    <label class="settings-toggle team-settings-toggle">
+                                        <input type="checkbox" id="launch-team-worktree" onchange="document.getElementById('team-worktree-branch-row').style.display = this.checked ? '' : 'none'">
+                                        <span>
+                                            <strong>Launch in Git Worktree</strong>
+                                            <div class="team-settings-note">Create an isolated git worktree so the team works on a separate branch.</div>
+                                        </span>
+                                    </label>
+                                    <div id="team-worktree-branch-row" style="display:none">
+                                        <label>Base Branch:
+                                            <input type="text" id="launch-team-base-branch" placeholder="main" value="main">
+                                        </label>
+                                    </div>
                                 </div>
                             </details>
                         </section>

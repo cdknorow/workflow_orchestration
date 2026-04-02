@@ -1365,15 +1365,22 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 	// the HTTP request context is cancelled (e.g., during tmux command failures).
 	bgCtx := context.Background()
 
-	// Look up the live session before deleting so we can clean up board state
+	// Look up the live session before deleting so we can clean up board/worktree state
 	var boardName string
 	var wasSleeping bool
+	var worktreePathForCleanup, worktreeRepoForCleanup string
 	if body.SessionID != "" {
 		if ls, err := h.ss.GetLiveSession(bgCtx, body.SessionID); err == nil && ls != nil {
 			if ls.BoardName != nil {
 				boardName = *ls.BoardName
 			}
 			wasSleeping = ls.IsSleeping == 1
+			if ls.WorktreePath != nil {
+				worktreePathForCleanup = *ls.WorktreePath
+			}
+			if ls.WorktreeRepo != nil {
+				worktreeRepoForCleanup = *ls.WorktreeRepo
+			}
 		}
 	}
 
@@ -1409,6 +1416,24 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 	// Clean up temp files (system prompts, settings, action prompts)
 	if body.SessionID != "" {
 		agent.CleanupTempFiles(body.SessionID)
+	}
+
+	// Clean up git worktree if this was the last session using it
+	if worktreePathForCleanup != "" && worktreeRepoForCleanup != "" {
+		// Check if any remaining sessions use this worktree
+		remaining, _ := h.ss.CountSessionsWithWorktree(bgCtx, worktreePathForCleanup)
+		if remaining == 0 {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, "git", "-C", worktreeRepoForCleanup, "worktree", "remove", "--force", worktreePathForCleanup)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					log.Printf("[kill] failed to remove worktree %s: %s", worktreePathForCleanup, string(out))
+				} else {
+					log.Printf("[kill] cleaned up worktree: %s", worktreePathForCleanup)
+				}
+			}()
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -1876,6 +1901,8 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 		BoardServer string   `json:"board_server"`
 		Backend     string   `json:"backend"`
 		BoardType   string   `json:"board_type"`
+		Worktree    bool     `json:"worktree"`
+		BaseBranch  string   `json:"base_branch"`
 		Agents []struct {
 			Name         string              `json:"name"`
 			Prompt       string              `json:"prompt"`
@@ -1920,6 +1947,24 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Create git worktree if requested
+	workingDir := body.WorkingDir
+	var worktreePath string
+	if body.Worktree && body.WorkingDir != "" {
+		branch := body.BaseBranch
+		if branch == "" {
+			branch = "main"
+		}
+		worktreePath = fmt.Sprintf("%s_team_%s", body.WorkingDir, body.BoardName)
+		cmd := exec.CommandContext(ctx, "git", "-C", body.WorkingDir, "worktree", "add", worktreePath, branch)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			errBadRequest(w, fmt.Sprintf("git worktree add failed: %s", string(out)))
+			return
+		}
+		workingDir = worktreePath
+		log.Printf("[launch-team] created worktree at %s (branch %s)", worktreePath, branch)
+	}
+
 	var launched []map[string]any
 
 	for _, agentDef := range body.Agents {
@@ -1940,7 +1985,7 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 			agentFlags = append(agentFlags, "--model", agentDef.Model)
 		}
 
-		result, err := h.launchSession(ctx, body.WorkingDir, agentType, agentDef.Name,
+		result, err := h.launchSession(ctx, workingDir, agentType, agentDef.Name,
 			"", agentFlags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, agentDef.Model, agentDef.Capabilities,
 			agentDef.Tools, agentDef.MCPServers, agentDef.Hooks)
 		if err != nil {
@@ -1949,15 +1994,25 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Store worktree info on the live session
+		if worktreePath != "" {
+			sessionID := result["session_id"].(string)
+			h.ss.UpdateWorktreeInfo(ctx, sessionID, worktreePath, body.WorkingDir)
+		}
+
 		// Board subscription handled by setupBoardAndPrompt (prompt passed as CLI arg)
 		if body.BoardName != "" {
 			h.setupBoardAndPrompt(result["session_id"].(string), result["session_name"].(string),
 				agentType, body.BoardName, agentDef.Name)
 		}
 
-		launched = append(launched, map[string]any{
+		launchResult := map[string]any{
 			"name": agentDef.Name, "session_id": result["session_id"], "session_name": result["session_name"],
-		})
+		}
+		if worktreePath != "" {
+			launchResult["worktree_path"] = worktreePath
+		}
+		launched = append(launched, launchResult)
 	}
 
 	tracking.TrackEvent("team_launched", map[string]string{"agent_count": fmt.Sprintf("%d", len(launched))})

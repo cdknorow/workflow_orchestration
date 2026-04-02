@@ -63,8 +63,10 @@ type LiveSession struct {
 	Model        *string `db:"model" json:"model,omitempty"`
 	Tools        *string `db:"tools" json:"tools,omitempty"`
 	MCPServers   *string `db:"mcp_servers" json:"mcp_servers,omitempty"`
-	PID          int     `db:"pid" json:"pid,omitempty"`
-	CreatedAt    string  `db:"created_at" json:"created_at"`
+	PID           int     `db:"pid" json:"pid,omitempty"`
+	WorktreePath  *string `db:"worktree_path" json:"worktree_path,omitempty"`
+	WorktreeRepo  *string `db:"worktree_repo" json:"worktree_repo,omitempty"`
+	CreatedAt     string  `db:"created_at" json:"created_at"`
 }
 
 // UserSetting is a key-value pair.
@@ -714,7 +716,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 	var sessions []LiveSession
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, worktree_path, worktree_repo, created_at
 		 FROM live_sessions ORDER BY created_at`)
 	return sessions, err
 }
@@ -732,7 +734,7 @@ func (s *SessionStore) GetBoardSessions(ctx context.Context, boardName string) (
 	var sessions []LiveSession
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, worktree_path, worktree_repo, created_at
 		 FROM live_sessions WHERE board_name = ? ORDER BY created_at`, boardName)
 	return sessions, err
 }
@@ -804,7 +806,7 @@ func (s *SessionStore) GetLiveSession(ctx context.Context, sessionID string) (*L
 	var ls LiveSession
 	err := s.db.GetContext(ctx, &ls,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, git_diff_mode, capabilities, model, tools, mcp_servers, pid, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, git_diff_mode, capabilities, model, tools, mcp_servers, pid, worktree_path, worktree_repo, created_at
 		 FROM live_sessions WHERE session_id = ?`, sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -879,6 +881,22 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 			newSession.Capabilities, newSession.Model, newSession.Tools, newSession.MCPServers, newSession.PID, now)
 		return err
 	})
+}
+
+// CountSessionsWithWorktree returns the number of live sessions using a given worktree path.
+func (s *SessionStore) CountSessionsWithWorktree(ctx context.Context, worktreePath string) (int, error) {
+	var count int
+	err := s.db.GetContext(ctx, &count,
+		"SELECT COUNT(*) FROM live_sessions WHERE worktree_path = ?", worktreePath)
+	return count, err
+}
+
+// UpdateWorktreeInfo sets the worktree path and source repo on a live session.
+func (s *SessionStore) UpdateWorktreeInfo(ctx context.Context, sessionID, worktreePath, repoPath string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE live_sessions SET worktree_path = ?, worktree_repo = ? WHERE session_id = ?",
+		worktreePath, repoPath, sessionID)
+	return err
 }
 
 // SetIcon sets or clears the emoji icon for a live session.
