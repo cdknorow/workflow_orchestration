@@ -82,7 +82,7 @@ func Load(dataDir ...string) *Config {
 		Host: envOrDefault("CORAL_HOST", "0.0.0.0"),
 		Port: envIntOrDefault("CORAL_PORT", 8420),
 
-		CoralRoot: envOrDefault("CORAL_ROOT", ""),
+		CoralRoot: envOrDefault("CORAL_ROOT", homeDir),
 		LogDir:    logDir,
 
 		IndexerIntervalS:           120,

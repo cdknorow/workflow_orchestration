@@ -1,7 +1,8 @@
 /* Workflows: list, detail, run views, and CRUD */
 
 import { escapeHtml as esc, escapeAttr as escAttr, showView, showToast } from './utils.js';
-import { apiFetch } from './api.js';
+import { apiFetch, loadLiveSessions } from './api.js';
+import { selectLiveSession } from './sessions.js';
 
 let workflows = [];
 let selectedWorkflowId = null;
@@ -57,6 +58,65 @@ export function initWorkflows() {
 export function showWorkflowsTab() {
     showView('workflows-view');
     fetchWorkflows();
+}
+
+// ── Build with Agent ──────────────────────────────────────────────────
+
+export async function launchWorkflowAgent() {
+    const btn = document.getElementById('wf-build-agent-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:16px">hourglass_top</span> Launching\u2026'; }
+
+    try {
+        // Fetch the skill prompt
+        const doc = await apiFetch('/api/agent-docs/workflow-builder');
+        if (!doc || !doc.content) {
+            showToast('Workflow builder skill not found', true);
+            return;
+        }
+
+        // Get default working directory from body data attribute
+        const workingDir = document.body.dataset.coralRoot || '';
+        if (!workingDir) {
+            showToast('Could not determine working directory', true);
+            return;
+        }
+
+        const resp = await fetch('/api/sessions/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                working_dir: workingDir,
+                agent_type: 'claude',
+                display_name: 'Workflow Builder',
+                prompt: doc.content,
+                capabilities: { allow: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep'] },
+            }),
+        });
+
+        if (resp.status === 403) {
+            showToast('Demo limit reached — stop existing sessions first', true);
+            return;
+        }
+
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, true);
+            return;
+        }
+
+        showToast(`Launched: ${result.session_name}`);
+
+        // Switch to agents tab and navigate to the new session
+        setTimeout(async () => {
+            await loadLiveSessions();
+            if (window.switchNavTab) window.switchNavTab('agents');
+            selectLiveSession(result.session_name, 'claude', result.session_id);
+        }, 1500);
+    } catch (e) {
+        showToast('Failed to launch workflow agent', true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:16px">smart_toy</span> Build with Agent'; }
+    }
 }
 
 // ── Workflow list ──────────────────────────────────────────────────────
@@ -122,6 +182,7 @@ export async function selectWorkflow(id) {
     document.getElementById('wf-detail-container').style.display = '';
     document.getElementById('wf-back-btn').style.display = '';
     document.getElementById('wf-create-btn').style.display = 'none';
+    document.getElementById('wf-build-agent-btn').style.display = 'none';
     document.getElementById('wf-title').textContent = wf.name;
 
     const runs = await fetchWorkflowRuns(id, 10);
@@ -206,6 +267,7 @@ export async function selectWorkflowRun(runId) {
     document.getElementById('wf-run-detail-container').style.display = '';
     document.getElementById('wf-back-btn').style.display = '';
     document.getElementById('wf-create-btn').style.display = 'none';
+    document.getElementById('wf-build-agent-btn').style.display = 'none';
 
     renderRunDetail(run);
 
@@ -543,6 +605,7 @@ export function workflowsBackToList() {
     document.getElementById('wf-run-detail-container').style.display = 'none';
     document.getElementById('wf-back-btn').style.display = 'none';
     document.getElementById('wf-create-btn').style.display = '';
+    document.getElementById('wf-build-agent-btn').style.display = '';
     document.getElementById('wf-title').textContent = 'Workflows';
     fetchWorkflows();
 }
