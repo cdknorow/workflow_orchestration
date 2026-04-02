@@ -25,6 +25,7 @@ coral-go/db-compare
 coral-go/coral-hook-agentic-state
 coral-go/coral-hook-message-check
 coral-go/coral-hook-task-sync
+coral-go/coral-tray
 coral-go/cmd/db-compare/db-compare
 coral-go/agent.test
 *.exe
