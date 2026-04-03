@@ -792,6 +792,9 @@
 }
 
 .board-tasks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 6px 12px;
     font-size: 11px;
     font-weight: 600;
@@ -809,8 +812,8 @@
 .board-task-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 12px;
+    gap: 10px;
+    padding: 6px 12px;
     font-size: 12px;
     line-height: 1.4;
     border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
@@ -844,7 +847,7 @@
     font-size: 11px;
     color: var(--text-muted);
     white-space: nowrap;
-    min-width: 70px;
+    min-width: 100px;
     text-align: right;
     margin-left: auto;
 }
@@ -884,25 +887,25 @@
 .board-task-priority {
     font-size: 10px;
     font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 3px;
+    padding: 2px 6px;
+    border-radius: 4px;
     text-transform: uppercase;
     flex-shrink: 0;
-    min-width: 52px;
+    width: 58px;
     text-align: center;
+    letter-spacing: 0.3px;
 }
 
-.board-task-priority-critical { background: rgba(248,81,73,0.2); color: #f85149; }
-.board-task-priority-high { background: rgba(210,153,34,0.2); color: #d29922; }
-.board-task-priority-medium { background: rgba(136,136,136,0.15); color: var(--text-muted); }
-.board-task-priority-low { background: rgba(136,136,136,0.08); color: var(--text-muted); opacity: 0.7; }
+.board-task-priority-critical { background: rgba(248,81,73,0.15); color: #f85149; }
+.board-task-priority-high { background: rgba(210,153,34,0.15); color: #d29922; }
+.board-task-priority-medium { background: rgba(136,136,136,0.1); color: var(--text-secondary); }
+.board-task-priority-low { background: rgba(136,136,136,0.06); color: var(--text-muted); }
 
 .board-task-assignee {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     flex-shrink: 0;
-    min-width: 80px;
-    max-width: 120px;
+    width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -913,6 +916,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.board-task-hide-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.board-task-hide-toggle input {
+    margin: 0;
+    cursor: pointer;
 }
 
 /* ── Task Detail Modal ─────────────────────────────────────── */

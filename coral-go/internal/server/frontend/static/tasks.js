@@ -226,9 +226,10 @@ export async function loadBoardTasks(boardName) {
     renderBoardTaskList();
 }
 
-// Current sort state for task list
+// Current sort and filter state for task list
 let _taskSortField = 'created_at';
 let _taskSortAsc = false; // default newest first
+let _hideCompleted = true; // hide done tasks by default
 
 function _toggleTaskSort(field) {
     if (_taskSortField === field) {
@@ -239,8 +240,15 @@ function _toggleTaskSort(field) {
     }
     renderBoardTaskList();
 }
+
+function _toggleHideCompleted() {
+    _hideCompleted = !_hideCompleted;
+    renderBoardTaskList();
+}
+
 // Expose globally
 window._toggleTaskSort = _toggleTaskSort;
+window._toggleHideCompleted = _toggleHideCompleted;
 
 const _priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -248,8 +256,8 @@ function _formatTaskTime(ts) {
     if (!ts) return '';
     try {
         const d = new Date(ts);
-        const h = d.getHours(), m = d.getMinutes();
-        return `${d.getMonth()+1}/${d.getDate()} ${h}:${String(m).padStart(2,'0')}`;
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     } catch { return ''; }
 }
 
@@ -257,7 +265,12 @@ export function renderBoardTaskList() {
     const container = document.getElementById('board-task-list');
     if (!container) return;
 
-    const tasks = (state.currentBoardTasks || []).slice().sort((a, b) => {
+    const allTasks = state.currentBoardTasks || [];
+    const completedCount = allTasks.filter(t => t.status === 'completed' || t.status === 'skipped').length;
+    const tasks = allTasks.filter(t => {
+        if (_hideCompleted && (t.status === 'completed' || t.status === 'skipped')) return false;
+        return true;
+    }).sort((a, b) => {
         let cmp = 0;
         if (_taskSortField === 'created_at') {
             cmp = (a.created_at || '').localeCompare(b.created_at || '');
@@ -270,13 +283,21 @@ export function renderBoardTaskList() {
     });
     const section = document.getElementById('board-tasks-section');
 
-    if (tasks.length === 0) {
+    if (allTasks.length === 0) {
         if (section) section.style.display = 'none';
         return;
     }
     if (section) section.style.display = '';
 
     const arrow = (field) => _taskSortField === field ? (_taskSortAsc ? ' ▲' : ' ▼') : '';
+
+    // Render hide-done toggle in the section header
+    const toggleContainer = document.getElementById('board-task-hide-toggle-container');
+    if (toggleContainer) {
+        toggleContainer.innerHTML = completedCount > 0
+            ? `<label class="board-task-hide-toggle"><input type="checkbox" ${_hideCompleted ? 'checked' : ''} onchange="_toggleHideCompleted()"> Hide done (${completedCount})</label>`
+            : '';
+    }
 
     const header = `
         <div class="board-task-item board-task-header">
