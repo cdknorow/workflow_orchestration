@@ -1236,6 +1236,36 @@ export async function launchAgentToBoard() {
     }
 }
 
+// ── Launch Terminal to Board ─────────────────────────────────────────────
+
+export async function launchTerminalToBoard(boardName, workDir) {
+    try {
+        const resp = await fetch("/api/sessions/launch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                working_dir: workDir,
+                agent_type: "terminal",
+                display_name: "Terminal",
+                board_name: boardName,
+            }),
+        });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, "error");
+        } else {
+            showToast(`Launched Terminal on ${boardName}`);
+        }
+    } catch (e) {
+        showToast("Failed to launch terminal", "error");
+    }
+}
+
 // ── Agent Team ────────────────────────────────────────────────────────────
 
 let _teamAgentCounter = 0;
