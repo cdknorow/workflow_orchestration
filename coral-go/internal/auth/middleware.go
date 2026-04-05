@@ -16,7 +16,10 @@ func Middleware(ks *KeyStore) func(http.Handler) http.Handler {
 			// Always allow localhost — but validate Host header to prevent
 			// DNS rebinding (attacker domain resolving to 127.0.0.1)
 			if isLocalhost(r) {
-				if isValidLocalhostHost(r.Host) {
+				// CONNECT requests (MITM proxy) have the target host in r.Host
+				// (e.g. "chatgpt.com:443"), not the proxy host. Skip DNS rebinding
+				// check for CONNECT since the client is verified as localhost by IP.
+				if r.Method == http.MethodConnect || isValidLocalhostHost(r.Host) {
 					next.ServeHTTP(w, r)
 					return
 				}

@@ -415,6 +415,10 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	reconciler := background.NewSessionReconciler(sessStore, agentRT, 30*time.Second)
 	safeGo(ctx, "session_reconciler", func() { reconciler.Run(ctx) })
 
+	// Token poller — extracts token usage from Codex transcripts for cost tracking
+	tokenPoller := background.NewTokenPoller(sessStore, store.NewTokenUsageStore(db), 30*time.Second)
+	safeGo(ctx, "token_poller", func() { tokenPoller.Run(ctx) })
+
 	// Workflow runner — executes multi-step workflows (shell + agent)
 	wfStore := store.NewWorkflowStore(db)
 	connAppStore := store.NewConnectedAppStore(db)
@@ -424,5 +428,5 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	srv.SetWorkflowRunner(wfRunner)
 	scheduler.SetWorkflowRunner(wfRunner, wfStore)
 
-	log.Printf("Started 9 background services + workflow runner (git poller, indexer, idle detector, webhook dispatcher, scheduler, board notifier, remote board poller, batch summarizer, session reconciler)")
+	log.Printf("Started 10 background services + workflow runner (git poller, indexer, idle detector, webhook dispatcher, scheduler, board notifier, remote board poller, batch summarizer, session reconciler, token poller)")
 }

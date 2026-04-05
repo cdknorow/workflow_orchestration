@@ -24,10 +24,11 @@ import (
 
 // mockSessionTerminal implements ptymanager.SessionTerminal for testing.
 type mockSessionTerminal struct {
-	mu       sync.Mutex
-	sessions map[string]*ptymanager.PaneInfo
-	outputs  map[string]string
-	sent     map[string][]string
+	mu              sync.Mutex
+	sessions        map[string]*ptymanager.PaneInfo
+	outputs         map[string]string
+	sent            map[string][]string
+	killSessionCalls []string
 }
 
 func newMockTerminal() *mockSessionTerminal {
@@ -109,6 +110,7 @@ func (m *mockSessionTerminal) CreateSession(_ context.Context, name, workDir str
 func (m *mockSessionTerminal) KillSession(_ context.Context, name, _, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.killSessionCalls = append(m.killSessionCalls, name)
 	delete(m.sessions, name)
 	return nil
 }
@@ -886,13 +888,90 @@ func TestKill_NotLastSessionOnBoard_KeepsPauseState(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	// Board should still be paused (one session remains)
+	// Board should still be paused (one sleeping session remains)
 	assert.True(t, bh.IsPaused(boardName))
 
 	// Verify one session remains
 	count, err := ss.CountBoardSessions(ctx, boardName)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
+}
+
+func TestKill_SleepingSession_AwakeRemains_UnpausesBoard(t *testing.T) {
+	server, handler, terminal, ss := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	bh := NewBoardHandler(handler.bs)
+	handler.SetBoardHandler(bh)
+
+	boardName := "mixed-board"
+	bh.SetPaused(boardName, true)
+
+	// Register one sleeping session and one awake session on the same board
+	terminal.addSession("claude-sleeping-1", "/tmp/test")
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-sleeping-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "sleeping-sid-1", BoardName: &boardName, IsSleeping: 1,
+	})
+	terminal.addSession("claude-awake-1", "/tmp/test")
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-awake-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "awake-sid-1", BoardName: &boardName, IsSleeping: 0,
+	})
+
+	// Board starts paused
+	assert.True(t, bh.IsPaused(boardName))
+
+	// Kill the sleeping session
+	body := bytes.NewBufferString(`{"agent_type": "claude", "session_id": "sleeping-sid-1"}`)
+	resp, err := http.Post(server.URL+"/api/sessions/live/claude-sleeping-1/kill", "application/json", body)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Board should be UNPAUSED — the only remaining session is awake
+	assert.False(t, bh.IsPaused(boardName), "board should be unpaused when no sleeping sessions remain")
+
+	// Verify the awake session still exists
+	count, err := ss.CountBoardSessions(ctx, boardName)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestKill_SleepingSession_SkipsTmuxKill(t *testing.T) {
+	server, handler, terminal, ss := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	bh := NewBoardHandler(handler.bs)
+	handler.SetBoardHandler(bh)
+
+	boardName := "tmux-skip-board"
+
+	// Register a sleeping session (no tmux session exists for sleeping agents)
+	ss.RegisterLiveSession(ctx, &store.LiveSession{
+		AgentName: "claude-sleeping-1", AgentType: "claude", WorkingDir: "/tmp",
+		SessionID: "sleeping-sid-1", BoardName: &boardName, IsSleeping: 1,
+	})
+
+	// Kill the sleeping session
+	body := bytes.NewBufferString(`{"agent_type": "claude", "session_id": "sleeping-sid-1"}`)
+	resp, err := http.Post(server.URL+"/api/sessions/live/claude-sleeping-1/kill", "application/json", body)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// KillSession should NOT have been called on the terminal — sleeping agents
+	// have no tmux session, and calling KillSession risks the fuzzy FindPane
+	// fallback matching a different agent's session.
+	terminal.mu.Lock()
+	calls := len(terminal.killSessionCalls)
+	terminal.mu.Unlock()
+	assert.Equal(t, 0, calls, "KillSession should not be called for sleeping agents")
+
+	// Verify the session was removed from DB
+	count, err := ss.CountBoardSessions(ctx, boardName)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
 }
 
 func TestKill_SleepingBoard_AllSessionsRemoved_NoPTY(t *testing.T) {

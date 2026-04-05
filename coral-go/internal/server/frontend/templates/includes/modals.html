@@ -584,10 +584,12 @@
                     <label class="settings-toggle">
                         <input type="checkbox" id="settings-proxy-enabled">
                         <span>
-                            <strong>LLM Proxy</strong>
-                            <span class="toggle-desc">Route agent API calls through Coral to enable token cost tracking and usage monitoring</span>
+                            <strong>LLM Proxy (Claude)</strong>
+                            <span class="toggle-desc">Route Claude API calls through Coral for token cost tracking and usage monitoring</span>
                         </span>
                     </label>
+                    <!-- Hidden: Codex MITM proxy not yet working reliably (see specs/CODEX_PROXY_COST_TRACKING) -->
+                    <input type="hidden" id="settings-proxy-enabled-codex">
                 </dd>
                 <dt>Terminal Scrollback</dt>
                 <dd>

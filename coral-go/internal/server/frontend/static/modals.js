@@ -2503,12 +2503,19 @@ export async function loadSettings() {
         if (s.refresh_files_on_switch === undefined) {
             s.refresh_files_on_switch = false;
         }
-        // Coerce proxy_enabled (default: disabled)
+        // Coerce proxy_enabled / proxy_enabled_claude (default: disabled)
         if (typeof s.proxy_enabled === "string") {
             s.proxy_enabled = s.proxy_enabled === "True" || s.proxy_enabled === "true";
         }
         if (s.proxy_enabled === undefined) {
             s.proxy_enabled = false;
+        }
+        // Coerce proxy_enabled_codex (default: disabled)
+        if (typeof s.proxy_enabled_codex === "string") {
+            s.proxy_enabled_codex = s.proxy_enabled_codex === "True" || s.proxy_enabled_codex === "true";
+        }
+        if (s.proxy_enabled_codex === undefined) {
+            s.proxy_enabled_codex = false;
         }
         // Default file_search_mode to 'directory'
         if (!s.file_search_mode) {
@@ -2693,7 +2700,7 @@ export async function showSettingsModal() {
     }
 
     // Default Render Engine
-    const currentEngine = s.default_renderer || "block-group";
+    const currentEngine = s.default_renderer || "xterm";
     const options = getEngineNames()
         .map(name => `<option value="${escapeAttr(name)}"${name === currentEngine ? " selected" : ""}>${escapeHtml(name)}</option>`)
         .join("");
@@ -2737,6 +2744,8 @@ export async function showSettingsModal() {
     // Proxy Enabled
     const proxyCheck = document.getElementById("settings-proxy-enabled");
     if (proxyCheck) proxyCheck.checked = !!s.proxy_enabled;
+    const proxyCodexCheck = document.getElementById("settings-proxy-enabled-codex");
+    if (proxyCodexCheck) proxyCodexCheck.checked = !!s.proxy_enabled_codex;
 
     // Terminal Scrollback
     const scrollbackSelect = document.getElementById("settings-terminal-scrollback");
@@ -2894,6 +2903,7 @@ export async function applySettings() {
     localStorage.setItem("coral-update-check-enabled", checkUpdates ? "true" : "false");
     const showScrollbars = document.getElementById("settings-show-scrollbars")?.checked ?? true;
     const proxyEnabled = document.getElementById("settings-proxy-enabled")?.checked || false;
+    const proxyEnabledCodex = document.getElementById("settings-proxy-enabled-codex")?.checked || false;
     const fileSearchMode = document.getElementById("settings-file-search-mode")?.value || "directory";
     const gitDiffMode = document.getElementById("settings-git-diff-mode")?.value || "branch_point";
 
@@ -2921,6 +2931,8 @@ export async function applySettings() {
         cli_path_codex: cliPathCodex,
         cli_path_gemini: cliPathGemini,
         proxy_enabled: proxyEnabled,
+        proxy_enabled_claude: proxyEnabled,
+        proxy_enabled_codex: proxyEnabledCodex,
         file_search_mode: fileSearchMode,
         git_diff_mode: gitDiffMode,
     };

@@ -162,8 +162,11 @@
     opacity: 0.6;
 }
 
-.session-group-item.session-done {
-    opacity: 0.55;
+.session-group-item.session-done .session-label,
+.session-group-item.session-done .session-avatar,
+.session-group-item.session-done .session-goal {
+    color: var(--text-muted);
+    filter: grayscale(1);
 }
 
 .session-group-item.session-done .session-label {

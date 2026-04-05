@@ -82,10 +82,18 @@ func (l *AgentLauncher) LaunchAgent(ctx context.Context, workingDir, agentType, 
 	var launchCmd string
 	if !isTerminal {
 		protocolPath := findProtocolMD()
-		// Resolve proxy URL if proxy is enabled in settings
+		// Resolve proxy URL if proxy is enabled for this agent type
 		var proxyBaseURL string
-		if settings, err := l.sessDB.GetSettings(ctx); err == nil && settings["proxy_enabled"] == "true" {
-			if l.port > 0 {
+		if settings, err := l.sessDB.GetSettings(ctx); err == nil && l.port > 0 {
+			proxyEnabled := false
+			if agentType == "codex" {
+				proxyEnabled = strings.EqualFold(settings["proxy_enabled_codex"], "true")
+			} else if v, ok := settings["proxy_enabled_claude"]; ok {
+				proxyEnabled = strings.EqualFold(v, "true")
+			} else {
+				proxyEnabled = strings.EqualFold(settings["proxy_enabled"], "true")
+			}
+			if proxyEnabled {
 				proxyBaseURL = fmt.Sprintf("http://127.0.0.1:%d/proxy/%s", l.port, sessionID)
 			}
 		}

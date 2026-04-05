@@ -67,10 +67,11 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) 
 	sessionID := chi.URLParam(r, "sessionID")
 	cfg, ok := p.providers[ProviderAnthropic]
 
-	// Determine auth mode: server-side API key or passthrough from the agent.
-	// Claude Code CLI uses OAuth (Authorization: Bearer ...) rather than x-api-key,
-	// so we must forward the agent's original auth headers when no server key is set.
-	usePassthroughAuth := !ok || cfg.APIKey == ""
+	// Determine auth mode: prefer client auth when present (CLI agents bring
+	// their own key via x-api-key or Authorization: Bearer). Fall back to
+	// server-side API key only when the client provides no auth headers.
+	hasClientAuth := r.Header.Get("x-api-key") != "" || r.Header.Get("Authorization") != ""
+	usePassthroughAuth := !ok || cfg.APIKey == "" || hasClientAuth
 	if usePassthroughAuth {
 		// Ensure we have at least one auth header from the agent
 		hasAuth := r.Header.Get("x-api-key") != "" || r.Header.Get("Authorization") != ""
@@ -128,10 +129,8 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) 
 	} else {
 		upstreamReq.Header.Set("anthropic-version", "2023-06-01")
 	}
-	// Forward anthropic-beta header if present (needed for extended thinking, etc.)
-	if v := r.Header.Get("anthropic-beta"); v != "" {
-		upstreamReq.Header.Set("anthropic-beta", v)
-	}
+	// Forward all Anthropic-specific headers (beta, org, etc.)
+	forwardProviderHeaders(r.Header, upstreamReq.Header, "anthropic-")
 
 	if meta.Stream {
 		p.handleAnthropicSSE(w, upstreamReq, reqID, sessionID, meta.Model)
@@ -146,7 +145,9 @@ func (p *Proxy) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Reque
 	sessionID := chi.URLParam(r, "sessionID")
 	cfg, ok := p.providers[ProviderOpenAI]
 
-	usePassthroughAuth := !ok || cfg.APIKey == ""
+	// Prefer client auth when present (CLI agents like Codex bring their own key).
+	// Fall back to server key only when the client provides no auth header.
+	usePassthroughAuth := !ok || cfg.APIKey == "" || r.Header.Get("Authorization") != ""
 	if usePassthroughAuth {
 		if r.Header.Get("Authorization") == "" {
 			http.Error(w, `{"error":"no OpenAI auth provided — set OPENAI_API_KEY or pass Authorization header"}`, http.StatusBadGateway)
@@ -189,6 +190,8 @@ func (p *Proxy) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Reque
 	} else {
 		upstreamReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	}
+	// Forward all OpenAI-specific headers (org, project, beta — needed for OAuth scoping)
+	forwardProviderHeaders(r.Header, upstreamReq.Header, "openai-")
 
 	if meta.Stream {
 		p.handleOpenAISSE(w, upstreamReq, reqID, sessionID, meta.Model)
@@ -203,7 +206,9 @@ func (p *Proxy) HandleOpenAIResponses(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 	cfg, ok := p.providers[ProviderOpenAI]
 
-	usePassthroughAuth := !ok || cfg.APIKey == ""
+	// Prefer client auth when present (CLI agents like Codex bring their own key).
+	// Fall back to server key only when the client provides no auth header.
+	usePassthroughAuth := !ok || cfg.APIKey == "" || r.Header.Get("Authorization") != ""
 	if usePassthroughAuth {
 		if r.Header.Get("Authorization") == "" {
 			http.Error(w, `{"error":"no OpenAI auth provided — set OPENAI_API_KEY or pass Authorization header"}`, http.StatusBadGateway)
@@ -232,7 +237,18 @@ func (p *Proxy) HandleOpenAIResponses(w http.ResponseWriter, r *http.Request) {
 	}
 	p.events.PublishStarted(reqID, sessionID, ProviderOpenAI, meta.Model, meta.Stream)
 
-	upstreamURL := strings.TrimRight(cfg.BaseURL, "/") + "/v1/responses"
+	// Detect ChatGPT OAuth tokens (JWT format) and route to the ChatGPT
+	// backend instead of api.openai.com. ChatGPT OAuth tokens only work
+	// with chatgpt.com/backend-api/codex, not the public API.
+	// Note: ChatGPT backend uses /responses (no /v1/ prefix).
+	isChatGPT := usePassthroughAuth && isChatGPTOAuthToken(r.Header.Get("Authorization"))
+	var upstreamURL string
+	if isChatGPT {
+		upstreamURL = "https://chatgpt.com/backend-api/codex/responses"
+	} else {
+		upstreamURL = strings.TrimRight(cfg.BaseURL, "/") + "/v1/responses"
+	}
+
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
 	if err != nil {
 		p.completeWithError(r.Context(), reqID, sessionID, meta.Model, 0, "failed to create upstream request: "+err.Error())
@@ -245,6 +261,12 @@ func (p *Proxy) HandleOpenAIResponses(w http.ResponseWriter, r *http.Request) {
 		upstreamReq.Header.Set("Authorization", r.Header.Get("Authorization"))
 	} else {
 		upstreamReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+	// Forward all OpenAI-specific headers (org, project, beta — needed for OAuth scoping)
+	forwardProviderHeaders(r.Header, upstreamReq.Header, "openai-")
+	// Forward ChatGPT account ID header if present (needed for OAuth routing)
+	if v := r.Header.Get("ChatGPT-Account-Id"); v != "" {
+		upstreamReq.Header.Set("ChatGPT-Account-Id", v)
 	}
 
 	if meta.Stream {
@@ -746,6 +768,24 @@ func parseOpenAIResponsesSSEChunk(data string, current TokenUsage) TokenUsage {
 	return current
 }
 
+// extractModelFromJSON extracts the model field from a JSON message if present.
+// Checks both top-level "model" and nested "response.model" fields.
+func extractModelFromJSON(data []byte) string {
+	var m struct {
+		Model    string `json:"model"`
+		Response struct {
+			Model string `json:"model"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return ""
+	}
+	if m.Model != "" {
+		return m.Model
+	}
+	return m.Response.Model
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 func (p *Proxy) setProxyHeaders(w http.ResponseWriter, reqID, sessionID string, costUSD float64) {
@@ -760,6 +800,29 @@ func (p *Proxy) setProxyHeaders(w http.ResponseWriter, reqID, sessionID string, 
 func (p *Proxy) completeWithError(ctx context.Context, reqID, sessionID, model string, httpStatus int, errMsg string) {
 	p.store.CompleteRequest(ctx, reqID, TokenUsage{}, CostBreakdown{}, httpStatus, "error", errMsg)
 	p.events.PublishError(reqID, sessionID, model, httpStatus, errMsg)
+}
+
+// forwardProviderHeaders copies all request headers matching the given
+// lowercase prefix (e.g. "openai-", "anthropic-") to the upstream request.
+// This ensures OAuth scoping headers (OpenAI-Organization, OpenAI-Project, etc.)
+// and feature headers (OpenAI-Beta, Anthropic-Beta, etc.) are forwarded.
+func forwardProviderHeaders(src, dst http.Header, lowercasePrefix string) {
+	for name, values := range src {
+		if strings.HasPrefix(strings.ToLower(name), lowercasePrefix) {
+			for _, v := range values {
+				dst.Set(name, v)
+			}
+		}
+	}
+}
+
+// isChatGPTOAuthToken detects if an Authorization header contains a ChatGPT
+// OAuth token (JWT). ChatGPT tokens are JWTs (eyJ...) and must be routed to
+// chatgpt.com/backend-api/codex instead of api.openai.com.
+// Standard OpenAI API keys start with "sk-".
+func isChatGPTOAuthToken(authHeader string) bool {
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	return strings.HasPrefix(token, "eyJ")
 }
 
 func debugProxy() bool {

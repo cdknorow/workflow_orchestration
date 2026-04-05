@@ -550,6 +550,18 @@ func (s *Server) buildRouter() chi.Router {
 		sub.Post("/{sessionID}/responses", llmProxy.HandleOpenAIResponses)
 	})
 
+	// MITM HTTPS proxy for transparent cost tracking (Codex agents set HTTPS_PROXY to this server)
+	if ca, err := proxy.EnsureCA(s.cfg.CoralDir()); err != nil {
+		log.Printf("[server] MITM proxy CA setup failed (CONNECT proxying disabled): %v", err)
+	} else {
+		mitmProxy := proxy.NewMITMProxy(ca, llmProxy.Store(), llmProxy.Events())
+		r.Connect("/*", mitmProxy.HandleConnect)
+		// Create combined cert bundle (system CAs + Coral CA) for agent SSL_CERT_FILE
+		if err := proxy.EnsureCABundle(s.cfg.CoralDir()); err != nil {
+			log.Printf("[server] CA bundle creation failed: %v", err)
+		}
+	}
+
 	// Proxy dashboard API
 	proxyDash := routes.NewProxyDashboardHandler(llmProxy.Store(), llmProxy.Events())
 	r.Get("/api/proxy/pricing", proxyDash.Pricing)

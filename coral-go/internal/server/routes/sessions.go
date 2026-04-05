@@ -1430,9 +1430,10 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If this was the last session on a board, clear board pause state.
-	// This is especially important for sleeping teams: the board is paused
-	// during sleep, and killing sleeping sessions must unpause it.
+	// Clear board pause state if no sleeping sessions remain.
+	// The board is paused during sleep, so we must unpause when either:
+	// (a) all sessions are gone, or
+	// (b) only awake sessions remain (sleeping agents were killed).
 	if boardName != "" && h.boardHandler != nil {
 		remaining, _ := h.ss.CountBoardSessions(bgCtx, boardName)
 		if remaining == 0 {
@@ -1440,11 +1441,22 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 			if wasSleeping {
 				log.Printf("[kill] cleared board pause state for sleeping board %q (no remaining sessions)", boardName)
 			}
+		} else if wasSleeping {
+			// There are remaining sessions but we just killed a sleeping one.
+			// Check if any sleeping sessions are left; if not, unpause.
+			var sleepingCount int
+			allSessions, _ := h.ss.GetAllLiveSessions(bgCtx)
+			for _, ls := range allSessions {
+				if ls.BoardName != nil && *ls.BoardName == boardName && ls.IsSleeping == 1 {
+					sleepingCount++
+				}
+			}
+			if sleepingCount == 0 {
+				h.boardHandler.SetPaused(boardName, false)
+				log.Printf("[kill] cleared board pause state for board %q (no sleeping sessions remain, %d awake)", boardName, remaining)
+			}
 		}
 	}
-
-	// Kill tmux/pty session (may fail if sleeping — that's expected)
-	h.terminal.KillSession(r.Context(), name, body.AgentType, body.SessionID)
 
 	// Clean up board state file so it doesn't accumulate over time
 	removeBoardStateFile(name, h.cfg)
@@ -1453,6 +1465,17 @@ func (h *SessionsHandler) Kill(w http.ResponseWriter, r *http.Request) {
 	if body.SessionID != "" {
 		agent.CleanupTempFiles(body.SessionID)
 	}
+
+	// Sleeping agents have no tmux session (it was terminated when they were
+	// put to sleep). Skip all tmux operations — calling KillSession here
+	// risks the fuzzy FindPane fallback matching a different agent's session.
+	if wasSleeping {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+
+	// Kill tmux/pty session for awake agents
+	h.terminal.KillSession(r.Context(), name, body.AgentType, body.SessionID)
 
 	// Clean up git worktree if this was the last session using it
 	if worktreePathForCleanup != "" && worktreeRepoForCleanup != "" {
@@ -1627,9 +1650,9 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 
 	userSettings, _ := h.ss.GetSettings(ctx)
 
-	// Resolve proxy URL if proxy is enabled
+	// Resolve proxy URL if proxy is enabled for this agent type
 	var restartProxyURL string
-	if userSettings["proxy_enabled"] == "true" {
+	if isProxyEnabledForAgent(userSettings, agentType) {
 		restartProxyURL = fmt.Sprintf("http://127.0.0.1:%d/proxy/%s", h.cfg.Port, newSessionID)
 	}
 
@@ -2653,9 +2676,9 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 
 	role := naming.SubscriberID(displayName, agentType)
 
-	// Resolve proxy URL if proxy is enabled in settings
+	// Resolve proxy URL if proxy is enabled for this agent type
 	var proxyBaseURL string
-	if userSettings["proxy_enabled"] == "true" {
+	if isProxyEnabledForAgent(userSettings, agentType) {
 		proxyBaseURL = fmt.Sprintf("http://127.0.0.1:%d/proxy/%s", h.cfg.Port, sessionID)
 	}
 
@@ -3416,17 +3439,9 @@ func (h *SessionsHandler) Wake(w http.ResponseWriter, r *http.Request) {
 		relaunched++
 	}
 
-	// Clean up orphaned sleeping rows for this board (from old wake code that created duplicates)
-	cleaned := 0
-	refreshed, _ := h.ss.GetAllLiveSessions(ctx)
-	for _, ls := range refreshed {
-		if ls.IsSleeping == 1 && ls.BoardName != nil && *ls.BoardName == boardName {
-			h.ss.UnregisterLiveSession(ctx, ls.SessionID)
-			cleaned++
-		}
-	}
-	if cleaned > 0 {
-		log.Printf("[wake] cleaned %d orphaned sleeping rows for board %s", cleaned, boardName)
+	// Clean up orphaned sleeping rows (duplicates where an awake version exists)
+	if cleaned, err := h.ss.CleanupOrphanedSleeping(ctx); err == nil && cleaned > 0 {
+		log.Printf("[wake] cleaned %d orphaned sleeping rows", cleaned)
 	}
 
 	// Update team status to running
@@ -3481,9 +3496,9 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 		role = ls.AgentType
 	}
 
-	// Resolve proxy URL if proxy is enabled
+	// Resolve proxy URL if proxy is enabled for this agent type
 	var proxyBaseURL string
-	if userSettings["proxy_enabled"] == "true" {
+	if isProxyEnabledForAgent(userSettings, ls.AgentType) {
 		proxyBaseURL = fmt.Sprintf("http://127.0.0.1:%d/proxy/%s", h.cfg.Port, ls.SessionID)
 	}
 

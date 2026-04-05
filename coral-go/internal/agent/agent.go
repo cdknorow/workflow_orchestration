@@ -44,6 +44,7 @@ type LaunchParams struct {
 	Hooks           map[string]interface{} // per-agent hooks to merge into settings (Claude-native) or fire via runner (Gemini/Codex)
 	CLIPath      string // custom path to agent binary (empty = default from PATH)
 	ProxyBaseURL string // proxy base URL (e.g. "http://127.0.0.1:8420/proxy/{session_id}")
+	CoralDir     string // path to coral data directory (~/.coral) for CA cert location
 }
 
 // Agent defines the interface for all agent implementations.

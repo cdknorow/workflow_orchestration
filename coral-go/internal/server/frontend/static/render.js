@@ -919,6 +919,7 @@ export function hideAlertModal() {
 
 export function dismissKilledSession(sessionId) {
     delete state.killedSessions[sessionId];
+    state.liveSessions = state.liveSessions.filter(s => s.session_id !== sessionId);
     renderLiveSessions(state.liveSessions);
 }
 
@@ -1404,8 +1405,10 @@ export function toggleGroupByTeam() {
 }
 
 export function renderLiveSessions(sessions) {
-    // Merge killed sessions back so they appear as "done" with history links
+    // Merge killed sessions back so they appear as "done" with history links.
+    // Use a copy to avoid mutating state.liveSessions.
     const liveIds = new Set(sessions.map(s => s.session_id));
+    sessions = [...sessions];
     for (const [sid, ks] of Object.entries(state.killedSessions)) {
         if (!liveIds.has(sid)) {
             sessions.push(ks);

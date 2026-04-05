@@ -261,3 +261,126 @@ func TestSleepNonexistentSession(t *testing.T) {
 	err := ss.SetSessionSleeping(ctx, "nonexistent", true)
 	require.NoError(t, err)
 }
+
+// ── Cleanup Tests ─────────────────────────────────────────────
+
+func TestCleanupOrphanedSleeping_PreservesSessionsThatFailedToWake(t *testing.T) {
+	db := openTestDB(t)
+	ss := NewSessionStore(db)
+	ctx := context.Background()
+
+	board := "wake-board"
+
+	// Register 3 sessions on the board, all sleeping
+	sessions := []struct {
+		id, agentType, display string
+	}{
+		{"sess-1", "claude", "Lead Developer"},
+		{"sess-2", "claude", "Frontend Dev"},
+		{"sess-3", "claude", "QA Engineer"},
+	}
+	for _, s := range sessions {
+		dn := s.display
+		err := ss.RegisterLiveSession(ctx, &LiveSession{
+			SessionID:   s.id,
+			AgentType:   s.agentType,
+			AgentName:   "repo",
+			WorkingDir:  "/tmp/repo",
+			DisplayName: &dn,
+			BoardName:   strPtr(board),
+			IsSleeping:  1,
+		})
+		require.NoError(t, err)
+	}
+
+	// Simulate: sess-1 was successfully woken (set IsSleeping=0)
+	err := ss.SetSessionSleeping(ctx, "sess-1", false)
+	require.NoError(t, err)
+
+	// sess-2 and sess-3 failed to wake — still sleeping
+	// CleanupOrphanedSleeping should NOT delete them because they don't
+	// have awake duplicates (different display_names)
+	cleaned, err := ss.CleanupOrphanedSleeping(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, cleaned, "no orphans to clean — sleeping sessions with unique display_names should be preserved")
+
+	// Verify all 3 sessions still exist
+	all, err := ss.GetAllLiveSessions(ctx)
+	require.NoError(t, err)
+	assert.Len(t, all, 3, "all sessions should still exist")
+
+	// Count sleeping: should be 2
+	sleepCount := 0
+	for _, ls := range all {
+		if ls.IsSleeping == 1 {
+			sleepCount++
+		}
+	}
+	assert.Equal(t, 2, sleepCount, "2 sessions should still be sleeping (failed to wake)")
+}
+
+func TestCleanupOrphanedSleeping_RemovesDuplicatesOnly(t *testing.T) {
+	db := openTestDB(t)
+	ss := NewSessionStore(db)
+	ctx := context.Background()
+
+	board := "dup-board"
+	dn := "Lead Developer"
+
+	// Register a sleeping session
+	err := ss.RegisterLiveSession(ctx, &LiveSession{
+		SessionID:   "old-sess",
+		AgentType:   "claude",
+		AgentName:   "repo",
+		WorkingDir:  "/tmp/repo",
+		DisplayName: &dn,
+		BoardName:   strPtr(board),
+		IsSleeping:  1,
+	})
+	require.NoError(t, err)
+
+	// Register an awake duplicate with the same display_name + board
+	err = ss.RegisterLiveSession(ctx, &LiveSession{
+		SessionID:   "new-sess",
+		AgentType:   "claude",
+		AgentName:   "repo",
+		WorkingDir:  "/tmp/repo",
+		DisplayName: &dn,
+		BoardName:   strPtr(board),
+		IsSleeping:  0,
+	})
+	require.NoError(t, err)
+
+	// Also register a sleeping session with a different display_name (failed to wake)
+	dn2 := "QA Engineer"
+	err = ss.RegisterLiveSession(ctx, &LiveSession{
+		SessionID:   "qa-sess",
+		AgentType:   "claude",
+		AgentName:   "repo",
+		WorkingDir:  "/tmp/repo",
+		DisplayName: &dn2,
+		BoardName:   strPtr(board),
+		IsSleeping:  1,
+	})
+	require.NoError(t, err)
+
+	// CleanupOrphanedSleeping should only remove "old-sess" (sleeping duplicate
+	// of "new-sess" by display_name), NOT "qa-sess" (no awake counterpart)
+	cleaned, err := ss.CleanupOrphanedSleeping(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, cleaned, "should only clean the one orphaned duplicate")
+
+	all, err := ss.GetAllLiveSessions(ctx)
+	require.NoError(t, err)
+	assert.Len(t, all, 2, "should have 2 sessions remaining")
+
+	// Verify qa-sess still exists and is still sleeping
+	for _, ls := range all {
+		if ls.SessionID == "qa-sess" {
+			assert.Equal(t, 1, ls.IsSleeping, "qa-sess should still be sleeping")
+		}
+		if ls.SessionID == "old-sess" {
+			t.Fatal("old-sess should have been cleaned up")
+		}
+	}
+}

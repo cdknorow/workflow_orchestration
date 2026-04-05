@@ -20,9 +20,11 @@ type TokenUsage struct {
 	CacheReadTokens  int `db:"cache_read_tokens" json:"cache_read_tokens"`
 	CacheWriteTokens int `db:"cache_write_tokens" json:"cache_write_tokens"`
 	TotalTokens      int `db:"total_tokens" json:"total_tokens"`
-	CostUSD      float64 `db:"cost_usd" json:"cost_usd"`
-	NumTurns     int     `db:"num_turns" json:"num_turns"`
-	RecordedAt   string  `db:"recorded_at" json:"recorded_at"`
+	CostUSD        float64 `db:"cost_usd" json:"cost_usd"`
+	NumTurns       int     `db:"num_turns" json:"num_turns"`
+	SessionStartAt string  `db:"session_start_at" json:"session_start_at,omitempty"`
+	LastActivityAt string  `db:"last_activity_at" json:"last_activity_at,omitempty"`
+	RecordedAt     string  `db:"recorded_at" json:"recorded_at"`
 }
 
 // UsageSummary represents aggregated token usage totals.
@@ -55,7 +57,9 @@ func NewTokenUsageStore(db *DB) *TokenUsageStore {
 	return &TokenUsageStore{db: db}
 }
 
-// RecordUsage inserts a token usage snapshot.
+// RecordUsage inserts a per-call token usage record. Each row represents a
+// single API call's delta tokens at a specific timestamp. The composite key
+// (session_id, recorded_at) ensures one row per call — duplicates are ignored.
 func (s *TokenUsageStore) RecordUsage(ctx context.Context, u *TokenUsage) error {
 	if u.RecordedAt == "" {
 		u.RecordedAt = NowUTC()
@@ -65,11 +69,11 @@ func (s *TokenUsageStore) RecordUsage(ctx context.Context, u *TokenUsage) error 
 	}
 
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO token_usage
-		 (session_id, agent_name, agent_type, team_id, board_name, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, recorded_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR IGNORE INTO token_usage
+		 (session_id, agent_name, agent_type, team_id, board_name, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, session_start_at, last_activity_at, recorded_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.SessionID, u.AgentName, u.AgentType, u.TeamID, u.BoardName,
-		u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheWriteTokens, u.TotalTokens, u.CostUSD, u.NumTurns, u.RecordedAt)
+		u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheWriteTokens, u.TotalTokens, u.CostUSD, u.NumTurns, u.SessionStartAt, u.LastActivityAt, u.RecordedAt)
 	if err != nil {
 		return err
 	}
@@ -86,7 +90,8 @@ func (s *TokenUsageStore) GetSessionUsage(ctx context.Context, sessionID string)
 	var u TokenUsage
 	err := s.db.GetContext(ctx, &u,
 		`SELECT id, session_id, agent_name, agent_type, team_id, board_name,
-		 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, recorded_at
+		 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns,
+		 COALESCE(session_start_at, '') as session_start_at, COALESCE(last_activity_at, '') as last_activity_at, recorded_at
 		 FROM token_usage WHERE session_id = ? ORDER BY id DESC LIMIT 1`, sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil

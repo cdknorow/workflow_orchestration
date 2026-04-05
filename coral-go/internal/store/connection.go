@@ -98,6 +98,8 @@ var columnMigrations = []struct {
 	{"live_sessions", "team_id", "INTEGER REFERENCES teams(id) ON DELETE SET NULL"},
 	{"token_usage", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"token_usage", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"token_usage", "session_start_at", "TEXT"},
+	{"token_usage", "last_activity_at", "TEXT"},
 }
 
 const schemaSQL = `
@@ -427,7 +429,7 @@ CREATE TABLE IF NOT EXISTS token_usage (
     recorded_at     TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_token_usage_session_time ON token_usage(session_id, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_token_usage_team ON token_usage(team_id);
 CREATE INDEX IF NOT EXISTS idx_token_usage_time ON token_usage(recorded_at);
 
