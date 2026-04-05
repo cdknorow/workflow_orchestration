@@ -66,11 +66,16 @@ func (p *Proxy) Health(w http.ResponseWriter, r *http.Request) {
 func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 	cfg, ok := p.providers[ProviderAnthropic]
-	if !ok || cfg.APIKey == "" {
-		// Pass through the agent's own API key if we don't have one configured
-		cfg.APIKey = r.Header.Get("x-api-key")
-		if cfg.APIKey == "" {
-			http.Error(w, `{"error":"no Anthropic API key configured"}`, http.StatusBadGateway)
+
+	// Determine auth mode: server-side API key or passthrough from the agent.
+	// Claude Code CLI uses OAuth (Authorization: Bearer ...) rather than x-api-key,
+	// so we must forward the agent's original auth headers when no server key is set.
+	usePassthroughAuth := !ok || cfg.APIKey == ""
+	if usePassthroughAuth {
+		// Ensure we have at least one auth header from the agent
+		hasAuth := r.Header.Get("x-api-key") != "" || r.Header.Get("Authorization") != ""
+		if !hasAuth {
+			http.Error(w, `{"error":"no Anthropic auth provided — set ANTHROPIC_API_KEY or use Claude Code CLI"}`, http.StatusBadGateway)
 			return
 		}
 		if cfg.BaseURL == "" {
@@ -104,8 +109,20 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	upstreamReq.Header.Set("x-api-key", cfg.APIKey)
 	upstreamReq.Header.Set("content-type", "application/json")
+
+	if usePassthroughAuth {
+		// Forward all auth headers from the agent (supports both API key and OAuth)
+		if v := r.Header.Get("x-api-key"); v != "" {
+			upstreamReq.Header.Set("x-api-key", v)
+		}
+		if v := r.Header.Get("Authorization"); v != "" {
+			upstreamReq.Header.Set("Authorization", v)
+		}
+	} else {
+		upstreamReq.Header.Set("x-api-key", cfg.APIKey)
+	}
+
 	if v := r.Header.Get("anthropic-version"); v != "" {
 		upstreamReq.Header.Set("anthropic-version", v)
 	} else {
@@ -128,14 +145,11 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) 
 func (p *Proxy) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 	cfg, ok := p.providers[ProviderOpenAI]
-	if !ok || cfg.APIKey == "" {
-		// Pass through the agent's own API key
-		auth := r.Header.Get("Authorization")
-		if strings.HasPrefix(auth, "Bearer ") {
-			cfg.APIKey = strings.TrimPrefix(auth, "Bearer ")
-		}
-		if cfg.APIKey == "" {
-			http.Error(w, `{"error":"no OpenAI API key configured"}`, http.StatusBadGateway)
+
+	usePassthroughAuth := !ok || cfg.APIKey == ""
+	if usePassthroughAuth {
+		if r.Header.Get("Authorization") == "" {
+			http.Error(w, `{"error":"no OpenAI auth provided — set OPENAI_API_KEY or pass Authorization header"}`, http.StatusBadGateway)
 			return
 		}
 		if cfg.BaseURL == "" {
@@ -169,8 +183,12 @@ func (p *Proxy) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	upstreamReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	upstreamReq.Header.Set("Content-Type", "application/json")
+	if usePassthroughAuth {
+		upstreamReq.Header.Set("Authorization", r.Header.Get("Authorization"))
+	} else {
+		upstreamReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
 
 	if meta.Stream {
 		p.handleOpenAISSE(w, upstreamReq, reqID, sessionID, meta.Model)

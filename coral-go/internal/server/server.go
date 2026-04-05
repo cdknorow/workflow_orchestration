@@ -110,6 +110,7 @@ func New(cfg *config.Config, db *store.DB, backend ptymanager.TerminalBackend, t
 		"frontend/templates/includes/views/workflows.html",
 		"frontend/templates/includes/views/connected_apps.html",
 		"frontend/templates/includes/views/docs.html",
+		"frontend/templates/includes/views/cost_dashboard.html",
 	)
 	if err != nil {
 		log.Printf("Warning: failed to parse index template: %v (serving placeholder)", err)
