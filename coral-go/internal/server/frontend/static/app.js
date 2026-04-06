@@ -19,7 +19,7 @@ import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown
 import { loadSessionCommits } from './commits.js';
 import { showTemplateBrowser } from './template_browser.js';
 import { loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList, showTaskDetailModal, hideTaskDetailModal } from './tasks.js';
-import { loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles, toggleGitDiffMode, setGitDiffMode, toggleStarFile, searchRepoFiles, renderStarredFiles, initFileSearch, initTopBarSearch, showTopBarSearch, hideTopBarSearch, toggleFileSearchMode } from './changed_files.js';
+import { loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles, toggleGitDiffMode, setGitDiffMode, toggleStarFile, copyFilePath, searchRepoFiles, renderStarredFiles, initFileSearch, initTopBarSearch, showTopBarSearch, hideTopBarSearch, toggleFileSearchMode } from './changed_files.js';
 import { initFileMention } from './file_mention.js';
 import { initCommandMention } from './command_mention.js';
 import { loadAgentNotes, initNotesMd } from './agent_notes.js';
@@ -81,7 +81,7 @@ Object.assign(window, {
     loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag,
     // changed_files
     loadChangedFiles, openFileDiff, openFilePreview, openFileEdit, refreshChangedFiles,
-    toggleGitDiffMode, setGitDiffMode, toggleStarFile, searchRepoFiles, renderStarredFiles, toggleFileSearchMode,
+    toggleGitDiffMode, setGitDiffMode, toggleStarFile, copyFilePath, searchRepoFiles, renderStarredFiles, toggleFileSearchMode,
     // tasks
     loadAgentTasks, addAgentTask, toggleAgentTask, deleteAgentTask, editAgentTaskTitle, loadBoardTasks, renderBoardTaskList,
     showTaskDetailModal, hideTaskDetailModal,

@@ -400,6 +400,7 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/sessions/history/{sessionID}/git", histHandler.GetSessionGit)
 	r.Get("/api/sessions/history/{sessionID}/events", histHandler.GetSessionEvents)
 	r.Get("/api/sessions/history/{sessionID}/tasks", histHandler.GetSessionTasks)
+	r.Get("/api/sessions/history/{sessionID}/files", histHandler.GetSessionFiles)
 
 	// Scheduled jobs
 	r.Get("/api/scheduled/jobs", schedHandler.ListJobs)

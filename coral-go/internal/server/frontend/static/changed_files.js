@@ -65,6 +65,7 @@ export function renderStarredFiles() {
             const { dir, name } = splitPath(filepath);
             const escapedPath = escapeHtml(filepath).replace(/'/g, "\\'");
             const starBtn = `<button class="file-star-btn starred" data-filepath="${escapeHtml(filepath)}" onclick="event.stopPropagation(); toggleStarFile('${escapedPath}')" title="Unstar">★</button>`;
+            const copyBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); copyFilePath('${escapedPath}')" title="Copy path"><span class="material-icons">content_copy</span></button>`;
             const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview"><span class="material-icons">visibility</span></button>`;
             const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit"><span class="material-icons">edit</span></button>`;
             return `<div class="file-item file-starred" onclick="openFilePreview('${escapedPath}')">
@@ -73,7 +74,7 @@ export function renderStarredFiles() {
                     <span class="file-name">${escapeHtml(name)}</span>
                     ${dir ? `<span class="file-dir">${escapeHtml(dir)}</span>` : ''}
                 </div>
-                <div class="file-action-btns">${previewBtn}${editBtn}</div>
+                <div class="file-action-btns">${copyBtn}${previewBtn}${editBtn}</div>
             </div>`;
         }).join('');
 }
@@ -455,6 +456,12 @@ export function updateChangedFileCount(count) {
     }
 }
 
+export function copyFilePath(filepath) {
+    navigator.clipboard.writeText(filepath).then(() => {
+        showToast('Path copied');
+    });
+}
+
 function getStatusLabel(status) {
     const map = {
         'M': 'Modified',
@@ -465,6 +472,7 @@ function getStatusLabel(status) {
         '??': 'Untracked',
         'AM': 'Added',
         'MM': 'Modified',
+        'agent_only': 'Agent edit',
     };
     return map[status] || status;
 }
@@ -473,6 +481,7 @@ function getStatusClass(status) {
     if (status === 'A' || status === 'AM' || status === '??') return 'file-added';
     if (status === 'D') return 'file-deleted';
     if (status === 'R') return 'file-renamed';
+    if (status === 'agent_only') return 'file-added';
     return 'file-modified';
 }
 
@@ -1097,24 +1106,31 @@ export function renderChangedFiles() {
         const adds = f.additions > 0 ? `<span class="file-adds">+${f.additions}</span>` : '';
         const dels = f.deletions > 0 ? `<span class="file-dels">-${f.deletions}</span>` : '';
         const stats = (adds || dels) ? `<span class="file-stats">${adds}${dels}</span>` : '';
-        const statusIcon = f.status === '??' ? '?' : f.status === 'A' || f.status === 'AM' ? '+' : f.status === 'D' ? '-' : '~';
+        const statusIcon = f.status === 'agent_only' ? '\u270E' : f.status === '??' ? '?' : f.status === 'A' || f.status === 'AM' ? '+' : f.status === 'D' ? '-' : '~';
         const escapedPath = escapeHtml(f.filepath).replace(/'/g, "\\'");
         const isStarred = starred.has(f.filepath);
+        const isAgentOnly = f.status === 'agent_only';
+        const agentOnlyCls = isAgentOnly ? ' file-agent-only' : '';
+        const agentsHtml = f.agents && f.agents.length > 0
+            ? `<span class="file-agents">${escapeHtml(f.agents.map(a => a.name).join(', '))}</span>`
+            : '';
         const starBtn = `<button class="file-star-btn ${isStarred ? 'starred' : ''}" data-filepath="${escapeHtml(f.filepath)}" onclick="event.stopPropagation(); toggleStarFile('${escapedPath}')" title="${isStarred ? 'Unstar' : 'Star'}">${isStarred ? '★' : '☆'}</button>`;
+        const copyBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); copyFilePath('${escapedPath}')" title="Copy path"><span class="material-icons">content_copy</span></button>`;
         const diffBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileDiff('${escapedPath}')" title="Diff"><span class="material-icons">difference</span></button>`;
         const previewBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFilePreview('${escapedPath}')" title="Preview"><span class="material-icons">visibility</span></button>`;
         const editBtn = `<button class="file-action-btn" onclick="event.stopPropagation(); openFileEdit('${escapedPath}')" title="Edit"><span class="material-icons">edit</span></button>`;
 
-        return `<div class="file-item ${statusCls}" title="${escapeHtml(f.filepath)} (${statusLabel})"
+        return `<div class="file-item ${statusCls}${agentOnlyCls}" title="${escapeHtml(f.filepath)} (${statusLabel})"
                      onclick="openFileDiff('${escapedPath}')">
             ${starBtn}
             <span class="file-status-icon">${statusIcon}</span>
             <div class="file-path-wrap">
                 <span class="file-name">${escapeHtml(name)}</span>
                 ${dir ? `<span class="file-dir">${escapeHtml(dir)}</span>` : ''}
+                ${agentsHtml}
             </div>
             ${stats}
-            <div class="file-action-btns">${diffBtn}${previewBtn}${editBtn}</div>
+            <div class="file-action-btns">${copyBtn}${diffBtn}${previewBtn}${editBtn}</div>
         </div>`;
     }).join('');
 }

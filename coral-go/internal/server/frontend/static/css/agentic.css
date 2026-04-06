@@ -1429,6 +1429,10 @@
 .file-deleted .file-status-icon  { color: var(--error); background: rgba(248, 81, 73, 0.12); }
 .file-renamed .file-status-icon  { color: var(--accent); background: rgba(88, 166, 255, 0.12); }
 
+.file-agents { display: block; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-item.file-agent-only { opacity: 0.7; }
+.file-agent-only .file-status-icon { background: var(--bg-tertiary); color: var(--text-secondary); }
+
 .file-path-wrap {
     flex: 1;
     min-width: 0;

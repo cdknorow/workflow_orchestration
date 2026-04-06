@@ -944,6 +944,27 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Annotate files with agent attribution from agent_events
+	if body.SessionID != "" {
+		if edits, err := h.ts.GetFileEdits(r.Context(), body.SessionID, workdir); err == nil {
+			for fp, agents := range edits {
+				if f, exists := fileMap[fp]; exists {
+					f.Agents = agents
+					f.Source = "git"
+					fileMap[fp] = f
+				}
+			}
+		}
+	}
+
+	// Set source for files without explicit attribution
+	for fp, f := range fileMap {
+		if f.Source == "" {
+			f.Source = "git"
+			fileMap[fp] = f
+		}
+	}
+
 	// Update DB cache
 	files := make([]store.ChangedFile, 0, len(fileMap))
 	for _, f := range fileMap {

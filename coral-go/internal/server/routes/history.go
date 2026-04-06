@@ -429,3 +429,38 @@ func (h *HistoryHandler) GetSessionAgentNotes(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, emptyIfNil(notes))
 }
 
+// GetSessionFiles returns files edited by agents during a historical session.
+// GET /api/sessions/history/{sessionID}/files
+func (h *HistoryHandler) GetSessionFiles(w http.ResponseWriter, r *http.Request) {
+	sid := chi.URLParam(r, "sessionID")
+
+	// Get working directory from git snapshot for path normalization
+	workdir := ""
+	if snap, err := h.gs.GetLatestGitStateBySession(r.Context(), sid); err == nil && snap != nil {
+		workdir = snap.WorkingDirectory
+	}
+
+	edits, err := h.ts.GetFileEdits(r.Context(), sid, workdir)
+	if err != nil {
+		errInternalServer(w, err.Error())
+		return
+	}
+
+	files := make([]store.ChangedFile, 0, len(edits))
+	for fp, agents := range edits {
+		files = append(files, store.ChangedFile{
+			Filepath: fp,
+			Status:   "agent_only",
+			Agents:   agents,
+			Source:    "agent_events",
+		})
+	}
+
+	// Sort by filepath for stable output
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Filepath < files[j].Filepath
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{"session_id": sid, "files": files})
+}
+

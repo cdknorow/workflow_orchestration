@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -360,6 +361,50 @@ func (s *TaskStore) ClearAgentEvents(ctx context.Context, agentName string, sess
 		"DELETE FROM agent_events WHERE agent_name = ?"+filter,
 		args...)
 	return err
+}
+
+// GetFileEdits returns a map of relative file paths to the agents that edited them,
+// derived from Write/Edit tool_use events in agent_events.
+// The workingDir is used to convert absolute paths in detail_json to repo-relative paths.
+func (s *TaskStore) GetFileEdits(ctx context.Context, sessionID, workingDir string) (map[string][]FileAgent, error) {
+	var rows []struct {
+		AgentName    string `db:"agent_name"`
+		FilePath     string `db:"file_path"`
+		LastEditedAt string `db:"last_edited_at"`
+	}
+	err := s.db.SelectContext(ctx, &rows,
+		`SELECT agent_name,
+		        json_extract(detail_json, '$.file_path') as file_path,
+		        MAX(created_at) as last_edited_at
+		 FROM agent_events
+		 WHERE session_id = ?
+		   AND event_type = 'tool_use'
+		   AND tool_name IN ('Write', 'Edit')
+		   AND detail_json IS NOT NULL
+		 GROUP BY agent_name, json_extract(detail_json, '$.file_path')`,
+		sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]FileAgent, len(rows))
+	for _, r := range rows {
+		if r.FilePath == "" {
+			continue
+		}
+		// Convert absolute path to repo-relative
+		relPath := r.FilePath
+		if workingDir != "" && filepath.IsAbs(relPath) {
+			if rel, err := filepath.Rel(workingDir, relPath); err == nil {
+				relPath = rel
+			}
+		}
+		result[relPath] = append(result[relPath], FileAgent{
+			Name:         r.AgentName,
+			LastEditedAt: r.LastEditedAt,
+		})
+	}
+	return result, nil
 }
 
 // ── History queries (by session_id only) ────────────────────────────────

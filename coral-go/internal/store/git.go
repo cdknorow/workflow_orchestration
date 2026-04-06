@@ -27,17 +27,25 @@ type GitSnapshot struct {
 	RecordedAt       string  `db:"recorded_at" json:"recorded_at"`
 }
 
+// FileAgent records which agent last edited a file and when.
+type FileAgent struct {
+	Name         string `json:"name"`
+	LastEditedAt string `json:"last_edited_at"`
+}
+
 // ChangedFile represents a file change in a git working tree.
 type ChangedFile struct {
-	ID               int64  `db:"id" json:"-"`
-	AgentName        string `db:"agent_name" json:"-"`
-	SessionID        *string `db:"session_id" json:"-"`
-	WorkingDirectory string `db:"working_directory" json:"-"`
-	Filepath         string `db:"filepath" json:"filepath"`
-	Additions        int    `db:"additions" json:"additions"`
-	Deletions        int    `db:"deletions" json:"deletions"`
-	Status           string `db:"status" json:"status"`
-	RecordedAt       string `db:"recorded_at" json:"recorded_at"`
+	ID               int64       `db:"id" json:"-"`
+	AgentName        string      `db:"agent_name" json:"-"`
+	SessionID        *string     `db:"session_id" json:"-"`
+	WorkingDirectory string      `db:"working_directory" json:"-"`
+	Filepath         string      `db:"filepath" json:"filepath"`
+	Additions        int         `db:"additions" json:"additions"`
+	Deletions        int         `db:"deletions" json:"deletions"`
+	Status           string      `db:"status" json:"status"`
+	RecordedAt       string      `db:"recorded_at" json:"recorded_at"`
+	Agents           []FileAgent `db:"-" json:"agents,omitempty"`
+	Source           string      `db:"-" json:"source,omitempty"`
 }
 
 // GitStore provides git snapshot and changed file operations.
