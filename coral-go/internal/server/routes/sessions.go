@@ -345,7 +345,7 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 			Model        *string `db:"model"`
 			Capabilities *string `db:"capabilities"`
 		}
-		if err := h.db.SelectContext(ctx, &rows, "SELECT session_id, board_name, display_name, is_sleeping, prompt, model, capabilities FROM live_sessions"); err == nil {
+		if err := h.db.SelectContext(ctx, &rows, "SELECT session_id, board_name, display_name, is_sleeping, prompt, model, capabilities FROM live_sessions WHERE status = 'active'"); err == nil {
 			for _, r := range rows {
 				if r.BoardName != nil {
 					bn := *r.BoardName

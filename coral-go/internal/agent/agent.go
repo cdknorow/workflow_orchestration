@@ -47,6 +47,32 @@ type LaunchParams struct {
 	CoralDir     string // path to coral data directory (~/.coral) for CA cert location
 }
 
+// IndexedSession holds extracted session data from a history file.
+type IndexedSession struct {
+	SessionID      string
+	SourceType     string
+	SourceFile     string  // path to the history file this session came from
+	FileMtime      float64 // Unix timestamp of file modification time
+	FirstTimestamp *string
+	LastTimestamp   *string
+	MessageCount   int
+	DisplaySummary string
+	FTSBody        string
+}
+
+// HistoryScanner is the interface that agent implementations must satisfy
+// to participate in session indexing.
+type HistoryScanner interface {
+	// HistoryBasePath returns the root directory for this agent's history files.
+	HistoryBasePath() string
+	// HistoryGlobPattern returns the glob pattern for history files (e.g., "*.jsonl").
+	HistoryGlobPattern() string
+	// ExtractSessions scans history files under basePath and returns indexed session data.
+	// knownMtimes maps source_file paths to their last-indexed mtime; files whose
+	// mtime has not changed since last index should be skipped.
+	ExtractSessions(basePath string, knownMtimes map[string]float64) ([]IndexedSession, error)
+}
+
 // Agent defines the interface for all agent implementations.
 type Agent interface {
 	// AgentType returns the short identifier (e.g. "claude", "gemini").

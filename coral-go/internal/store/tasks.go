@@ -245,26 +245,49 @@ func (s *TaskStore) InsertAgentEvent(ctx context.Context, event *AgentEvent) (*A
 }
 
 // ListAgentEvents returns recent events for an agent.
+// If agentName is empty, events are not filtered by agent (useful for history queries by session).
 func (s *TaskStore) ListAgentEvents(ctx context.Context, agentName string, limit int, sessionID *string) ([]AgentEvent, error) {
-	filter, filterArgs := sessionFilter(sessionID)
-	args := append([]interface{}{agentName}, filterArgs...)
+	var whereClauses []string
+	var args []interface{}
+	if agentName != "" {
+		whereClauses = append(whereClauses, "agent_name = ?")
+		args = append(args, agentName)
+	}
+	if sessionID != nil {
+		whereClauses = append(whereClauses, "session_id = ?")
+		args = append(args, *sessionID)
+	}
+	where := ""
+	if len(whereClauses) > 0 {
+		where = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
 	args = append(args, limit)
 	var events []AgentEvent
 	err := s.db.SelectContext(ctx, &events,
 		`SELECT id, agent_name, session_id, event_type, tool_name, summary, detail_json, created_at
-		 FROM agent_events WHERE agent_name = ?`+filter+` ORDER BY created_at DESC LIMIT ?`,
+		 FROM agent_events`+where+` ORDER BY created_at DESC LIMIT ?`,
 		args...)
 	return events, err
 }
 
 // GetAgentEventCounts returns tool usage counts for an agent.
+// If agentName is empty, counts are not filtered by agent.
 func (s *TaskStore) GetAgentEventCounts(ctx context.Context, agentName string, sessionID *string) ([]ToolCount, error) {
-	filter, filterArgs := sessionFilter(sessionID)
-	args := append([]interface{}{agentName}, filterArgs...)
+	var whereClauses []string
+	var args []interface{}
+	if agentName != "" {
+		whereClauses = append(whereClauses, "agent_name = ?")
+		args = append(args, agentName)
+	}
+	if sessionID != nil {
+		whereClauses = append(whereClauses, "session_id = ?")
+		args = append(args, *sessionID)
+	}
+	whereClauses = append(whereClauses, "tool_name IS NOT NULL")
+	where := " WHERE " + strings.Join(whereClauses, " AND ")
 	var counts []ToolCount
 	err := s.db.SelectContext(ctx, &counts,
-		`SELECT tool_name, COUNT(*) as count FROM agent_events
-		 WHERE agent_name = ?`+filter+` AND tool_name IS NOT NULL
+		`SELECT tool_name, COUNT(*) as count FROM agent_events`+where+`
 		 GROUP BY tool_name ORDER BY count DESC`,
 		args...)
 	return counts, err

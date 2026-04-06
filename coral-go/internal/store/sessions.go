@@ -37,6 +37,8 @@ type SessionIndex struct {
 	LastTimestamp  *string `db:"last_timestamp" json:"last_timestamp"`
 	MessageCount   int     `db:"message_count" json:"message_count"`
 	DisplaySummary string  `db:"display_summary" json:"summary"`
+	AgentName      string  `db:"agent_name" json:"agent_name,omitempty"`
+	DisplayName    string  `db:"display_name" json:"display_name,omitempty"`
 	IndexedAt      string  `db:"indexed_at" json:"-"`
 	FileMtime      float64 `db:"file_mtime" json:"-"`
 }
@@ -351,11 +353,12 @@ func (s *SessionStore) UpsertSessionIndex(ctx context.Context, idx *SessionIndex
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO session_index
 		 (session_id, source_type, source_file, first_timestamp, last_timestamp,
-		  message_count, display_summary, indexed_at, file_mtime)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  message_count, display_summary, agent_name, display_name, indexed_at, file_mtime)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		idx.SessionID, idx.SourceType, idx.SourceFile,
 		idx.FirstTimestamp, idx.LastTimestamp,
-		idx.MessageCount, idx.DisplaySummary, now, idx.FileMtime)
+		idx.MessageCount, idx.DisplaySummary,
+		idx.AgentName, idx.DisplayName, now, idx.FileMtime)
 	return err
 }
 
@@ -373,9 +376,13 @@ func (s *SessionStore) UpsertFTS(ctx context.Context, sessionID, body string) er
 }
 
 // EnqueueForSummarization adds a session to the summarization queue.
+// If the session already exists with a 'failed' status, it is reset to 'pending'
+// so it will be retried (e.g. after re-indexing with a corrected source_file).
 func (s *SessionStore) EnqueueForSummarization(ctx context.Context, sessionID string) error {
 	_, err := s.db.ExecContext(ctx,
-		"INSERT OR IGNORE INTO summarizer_queue (session_id, status) VALUES (?, 'pending')",
+		`INSERT INTO summarizer_queue (session_id, status) VALUES (?, 'pending')
+		 ON CONFLICT(session_id) DO UPDATE SET status = 'pending', error_msg = NULL
+		 WHERE status = 'failed'`,
 		sessionID)
 	return err
 }
@@ -395,6 +402,36 @@ func (s *SessionStore) GetPendingSummaries(ctx context.Context, limit int) ([]st
 	err := s.db.SelectContext(ctx, &ids,
 		"SELECT session_id FROM summarizer_queue WHERE status = 'pending' LIMIT ?", limit)
 	return ids, err
+}
+
+// GetAgentNames returns agent_name and display_name for sessions from live_sessions.
+func (s *SessionStore) GetAgentNames(ctx context.Context, sessionIDs []string) (map[string][2]string, error) {
+	if len(sessionIDs) == 0 {
+		return map[string][2]string{}, nil
+	}
+	query, args, err := sqlx.In(
+		"SELECT session_id, agent_name, display_name FROM live_sessions WHERE session_id IN (?)",
+		sessionIDs)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		SessionID   string  `db:"session_id"`
+		AgentName   string  `db:"agent_name"`
+		DisplayName *string `db:"display_name"`
+	}
+	if err := s.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, err
+	}
+	result := make(map[string][2]string, len(rows))
+	for _, r := range rows {
+		dn := ""
+		if r.DisplayName != nil {
+			dn = *r.DisplayName
+		}
+		result[r.SessionID] = [2]string{r.AgentName, dn}
+	}
+	return result, nil
 }
 
 // GetIndexedMtimes returns source_file -> file_mtime for all indexed sessions.
@@ -454,6 +491,8 @@ type SessionListItem struct {
 	Tags           []Tag   `json:"tags"`
 	Branch         *string `json:"branch"`
 	DurationSec    *int    `json:"duration_sec"`
+	AgentName      string  `json:"agent_name,omitempty"`
+	DisplayName    string  `json:"display_name,omitempty"`
 }
 
 // ListSessionsPaged returns a paginated, filtered list of sessions.
@@ -544,7 +583,8 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 	// Fetch page
 	offset := (params.Page - 1) * params.PageSize
 	selectFields := `si.session_id, si.source_type, si.source_file,
-		si.first_timestamp, si.last_timestamp, si.message_count, si.display_summary`
+		si.first_timestamp, si.last_timestamp, si.message_count, si.display_summary,
+		si.agent_name, si.display_name`
 	query := fmt.Sprintf("SELECT %s FROM %s%s ORDER BY %s LIMIT ? OFFSET ?",
 		selectFields, fromClause, whereSQL, orderClause)
 	query, pageArgs, err := sqlx.In(query, append(args, params.PageSize, offset)...)
@@ -560,6 +600,8 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 		LastTimestamp  *string `db:"last_timestamp"`
 		MessageCount   int     `db:"message_count"`
 		DisplaySummary string  `db:"display_summary"`
+		AgentName      *string `db:"agent_name"`
+		DisplayName    *string `db:"display_name"`
 	}
 	if err := s.db.SelectContext(ctx, &rows, query, pageArgs...); err != nil {
 		return nil, err
@@ -579,6 +621,10 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 	})
 	tagsMap := make(map[string][]Tag)
 	branchMap := make(map[string]string)
+	agentMap := make(map[string]struct {
+		AgentName   string
+		DisplayName string
+	})
 
 	if len(sessionIDs) > 0 {
 		// Fetch notes metadata
@@ -648,6 +694,31 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 				branchMap[r.SessionID] = r.Branch
 			}
 		}
+
+		// Fetch agent names from live_sessions
+		agentQuery, agentArgs, _ := sqlx.In(
+			`SELECT session_id, agent_name, display_name FROM live_sessions WHERE session_id IN (?)`,
+			sessionIDs)
+		var agentRows []struct {
+			SessionID   string  `db:"session_id"`
+			AgentName   string  `db:"agent_name"`
+			DisplayName *string `db:"display_name"`
+		}
+		if err := s.db.SelectContext(ctx, &agentRows, agentQuery, agentArgs...); err == nil {
+			for _, r := range agentRows {
+				agentMap[r.SessionID] = struct {
+					AgentName   string
+					DisplayName string
+				}{
+					AgentName: r.AgentName,
+				}
+				if r.DisplayName != nil {
+					entry := agentMap[r.SessionID]
+					entry.DisplayName = *r.DisplayName
+					agentMap[r.SessionID] = entry
+				}
+			}
+		}
 	}
 
 	// Build results
@@ -663,6 +734,25 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 			branch = &b
 		}
 
+		// Agent name: use session_index as primary, live_sessions as override
+		agentName := ""
+		displayName := ""
+		if r.AgentName != nil && *r.AgentName != "" {
+			agentName = *r.AgentName
+		}
+		if r.DisplayName != nil && *r.DisplayName != "" {
+			displayName = *r.DisplayName
+		}
+		// Override with live_sessions data if available (more current for active agents)
+		if info, ok := agentMap[r.SessionID]; ok {
+			if info.AgentName != "" {
+				agentName = info.AgentName
+			}
+			if info.DisplayName != "" {
+				displayName = info.DisplayName
+			}
+		}
+
 		sessions[i] = SessionListItem{
 			SessionID:      r.SessionID,
 			SourceType:     r.SourceType,
@@ -676,6 +766,8 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 			Tags:           tags,
 			Branch:         branch,
 			DurationSec:    computeDuration(r.FirstTimestamp, r.LastTimestamp),
+			AgentName:      agentName,
+			DisplayName:    displayName,
 		}
 	}
 
@@ -696,8 +788,8 @@ func (s *SessionStore) RegisterLiveSession(ctx context.Context, ls *LiveSession)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO live_sessions
-		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
 		ls.SessionID, ls.AgentType, ls.AgentName, ls.WorkingDir,
 		ls.DisplayName, ls.ResumeFromID, ls.Flags, ls.IsJob,
 		ls.Prompt, ls.BoardName, ls.BoardServer, ls.Backend, ls.Icon, ls.IsSleeping, ls.BoardType,
@@ -705,10 +797,10 @@ func (s *SessionStore) RegisterLiveSession(ctx context.Context, ls *LiveSession)
 	return err
 }
 
-// UnregisterLiveSession removes a live session record.
+// UnregisterLiveSession marks a live session as inactive (preserves the record for history).
 func (s *SessionStore) UnregisterLiveSession(ctx context.Context, sessionID string) error {
 	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM live_sessions WHERE session_id = ?", sessionID)
+		"UPDATE live_sessions SET status = 'inactive' WHERE session_id = ?", sessionID)
 	return err
 }
 
@@ -718,7 +810,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
 		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, worktree_path, worktree_repo, team_id, created_at
-		 FROM live_sessions ORDER BY created_at`)
+		 FROM live_sessions WHERE status = 'active' ORDER BY created_at`)
 	return sessions, err
 }
 
@@ -726,7 +818,7 @@ func (s *SessionStore) GetAllLiveSessions(ctx context.Context) ([]LiveSession, e
 func (s *SessionStore) CountActiveLiveSessions(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.GetContext(ctx, &count,
-		"SELECT COUNT(*) FROM live_sessions WHERE is_sleeping = 0")
+		"SELECT COUNT(*) FROM live_sessions WHERE is_sleeping = 0 AND status = 'active'")
 	return count, err
 }
 
@@ -736,7 +828,7 @@ func (s *SessionStore) GetBoardSessions(ctx context.Context, boardName string) (
 	err := s.db.SelectContext(ctx, &sessions,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
 		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, worktree_path, worktree_repo, team_id, created_at
-		 FROM live_sessions WHERE board_name = ? ORDER BY created_at`, boardName)
+		 FROM live_sessions WHERE board_name = ? AND status = 'active' ORDER BY created_at`, boardName)
 	return sessions, err
 }
 
@@ -744,7 +836,7 @@ func (s *SessionStore) GetBoardSessions(ctx context.Context, boardName string) (
 func (s *SessionStore) CountLiveSessions(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.GetContext(ctx, &count,
-		"SELECT COUNT(*) FROM live_sessions")
+		"SELECT COUNT(*) FROM live_sessions WHERE status = 'active'")
 	return count, err
 }
 
@@ -768,7 +860,7 @@ func (s *SessionStore) ResolveByPIDs(ctx context.Context, pids []int) (*LiveSess
 	if len(pids) == 0 {
 		return nil, fmt.Errorf("no PIDs provided")
 	}
-	query, args, err := sqlx.In("SELECT session_id, agent_type, agent_name, working_dir, display_name, board_name, pid FROM live_sessions WHERE pid IN (?) AND pid > 0 LIMIT 1", pids)
+	query, args, err := sqlx.In("SELECT session_id, agent_type, agent_name, working_dir, display_name, board_name, pid FROM live_sessions WHERE pid IN (?) AND pid > 0 AND status = 'active' LIMIT 1", pids)
 	if err != nil {
 		return nil, err
 	}
@@ -786,7 +878,7 @@ func (s *SessionStore) ResolveByPIDs(ctx context.Context, pids []int) (*LiveSess
 func (s *SessionStore) CountLiveTeams(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.GetContext(ctx, &count,
-		"SELECT COUNT(DISTINCT board_name) FROM live_sessions WHERE board_name IS NOT NULL AND board_name != ''")
+		"SELECT COUNT(DISTINCT board_name) FROM live_sessions WHERE board_name IS NOT NULL AND board_name != '' AND status = 'active'")
 	return count, err
 }
 
@@ -794,7 +886,7 @@ func (s *SessionStore) CountLiveTeams(ctx context.Context) (int, error) {
 func (s *SessionStore) CountBoardSessions(ctx context.Context, boardName string) (int, error) {
 	var count int
 	err := s.db.GetContext(ctx, &count,
-		"SELECT COUNT(*) FROM live_sessions WHERE board_name = ?", boardName)
+		"SELECT COUNT(*) FROM live_sessions WHERE board_name = ? AND status = 'active'", boardName)
 	return count, err
 }
 
@@ -873,15 +965,15 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 			}
 		}
 
-		if _, err := tx.ExecContext(ctx, "DELETE FROM live_sessions WHERE session_id = ?", oldSessionID); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE live_sessions SET status = 'inactive' WHERE session_id = ?", oldSessionID); err != nil {
 			return err
 		}
 
 		now := nowUTC()
 		_, err = tx.ExecContext(ctx,
 			`INSERT OR REPLACE INTO live_sessions
-			 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 (session_id, agent_type, agent_name, working_dir, display_name, resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, capabilities, model, tools, mcp_servers, pid, status, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
 			newSession.SessionID, newSession.AgentType, newSession.AgentName,
 			newSession.WorkingDir, newSession.DisplayName, newSession.ResumeFromID,
 			newSession.Flags, newSession.IsJob, newSession.Prompt, newSession.BoardName,
@@ -895,7 +987,7 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 func (s *SessionStore) CountSessionsWithWorktree(ctx context.Context, worktreePath string) (int, error) {
 	var count int
 	err := s.db.GetContext(ctx, &count,
-		"SELECT COUNT(*) FROM live_sessions WHERE worktree_path = ?", worktreePath)
+		"SELECT COUNT(*) FROM live_sessions WHERE worktree_path = ? AND status = 'active'", worktreePath)
 	return count, err
 }
 
@@ -976,7 +1068,7 @@ func (s *SessionStore) SetSessionSleeping(ctx context.Context, sessionID string,
 func (s *SessionStore) GetSleepingBoardNames(ctx context.Context) ([]string, error) {
 	var names []string
 	err := s.db.SelectContext(ctx, &names,
-		`SELECT board_name FROM live_sessions WHERE board_name IS NOT NULL
+		`SELECT board_name FROM live_sessions WHERE board_name IS NOT NULL AND status = 'active'
 		 GROUP BY board_name HAVING COUNT(*) = SUM(CASE WHEN is_sleeping = 1 THEN 1 ELSE 0 END)`)
 	if err != nil {
 		return nil, err
@@ -989,7 +1081,7 @@ func (s *SessionStore) GetSleepingBoardNames(ctx context.Context) ([]string, err
 // This cleans up duplicates from old wake code that created new sessions.
 func (s *SessionStore) CleanupOrphanedSleeping(ctx context.Context) (int, error) {
 	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM live_sessions WHERE is_sleeping = 1
+		UPDATE live_sessions SET status = 'inactive' WHERE is_sleeping = 1 AND status = 'active'
 		AND session_id IN (
 			SELECT sleeping.session_id FROM live_sessions sleeping
 			INNER JOIN live_sessions awake
@@ -998,6 +1090,8 @@ func (s *SessionStore) CleanupOrphanedSleeping(ctx context.Context) (int, error)
 			AND sleeping.is_sleeping = 1
 			AND awake.is_sleeping = 0
 			AND sleeping.session_id != awake.session_id
+			AND sleeping.status = 'active'
+			AND awake.status = 'active'
 		)`)
 	if err != nil {
 		return 0, err

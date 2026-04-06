@@ -1098,7 +1098,7 @@ func (s *Store) ClaimTask(ctx context.Context, project, subscriberID string) (*T
 			sessionUUID := naming.SessionIDFromName(sessionName)
 			var exists int
 			err = s.sessionsDB.GetContext(ctx, &exists,
-				`SELECT 1 FROM live_sessions WHERE session_id = ? LIMIT 1`,
+				`SELECT 1 FROM live_sessions WHERE session_id = ? AND status = 'active' LIMIT 1`,
 				sessionUUID)
 			if err == nil {
 				s.db.ExecContext(ctx,

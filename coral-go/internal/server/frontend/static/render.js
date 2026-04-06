@@ -1934,16 +1934,20 @@ export function renderHistorySessions(sessions, total, page, pageSize) {
         const truncated = label.length > 40 ? label.substring(0, 40) + "..." : label;
         const isActive = state.currentSession && state.currentSession.type === "history" && state.currentSession.name === s.session_id;
         const typeTag = s.source_type === "gemini" ? '<span class="badge gemini">gemini</span>' : "";
+        const agentName = s.display_name || s.agent_name || "";
+        const agentTag = agentName ? `<span class="sidebar-agent-name">${escapeHtml(agentName)}</span>` : "";
+        const sourceTypeTag = s.source_type ? `<span class="sidebar-source-type">${escapeHtml(s.source_type)}</span>` : "";
         const branchTag = s.branch ? `<span class="sidebar-branch">${escapeHtml(s.branch)}</span>` : "";
         const tagDots = s.tags ? renderSidebarTagDots(s.tags) : "";
         const timeStr = s.last_timestamp ? formatShortTime(s.last_timestamp) : "";
         const timeTag = timeStr ? `<span class="session-time">${escapeHtml(timeStr)}</span>` : "";
         const durStr = s.duration_sec != null ? formatDuration(s.duration_sec) : '';
         const durTag = durStr ? `<span class="session-dur">${escapeHtml(durStr)}</span>` : '';
+        const bottomMeta = [agentTag, sourceTypeTag, branchTag].filter(Boolean).join('');
         return `<li class="${isActive ? 'active' : ''}" onclick="selectHistorySession('${escapeAttr(s.session_id)}')">
             <div class="session-row-top">${timeTag}${durTag}${typeTag}${tagDots}</div>
             <div class="session-row-mid"><span class="session-label" title="${escapeHtml(label)}">${escapeHtml(truncated)}</span></div>
-            ${branchTag ? `<div class="session-row-bottom">${branchTag}</div>` : ""}
+            ${bottomMeta ? `<div class="session-row-bottom">${bottomMeta}</div>` : ""}
         </li>`;
     }).join("");
 

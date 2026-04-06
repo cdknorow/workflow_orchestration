@@ -7,6 +7,22 @@ let currentNotesData = null;
 let isEditing = false;
 let pollTimer = null;
 
+function hasSummaryContent(data) {
+    if (!data) return false;
+    return Boolean((data.notes_md || data.auto_summary || "").trim());
+}
+
+function updateSummaryActionButton(data, options = {}) {
+    const btn = document.getElementById("history-generate-summary-btn");
+    if (!btn) return;
+
+    const loading = Boolean(options.loading);
+    btn.disabled = loading;
+    btn.textContent = loading
+        ? "Generating..."
+        : (hasSummaryContent(data) ? "Regenerate Summary" : "Generate Summary");
+}
+
 /**
  * Extract the first markdown header from notes/summary content
  * and update the history session title.
@@ -39,11 +55,14 @@ export async function loadSessionNotes(sessionId) {
     document.getElementById("notes-spinner").style.display = "none";
     document.getElementById("notes-edit-area").style.display = "none";
     document.getElementById("notes-edit-btn").textContent = "Edit";
+    document.getElementById("notes-rendered").style.display = "";
+    updateSummaryActionButton(null);
 
     try {
         const resp = await fetch(`/api/sessions/history/${encodeURIComponent(sessionId)}/notes`);
         const data = await resp.json();
         currentNotesData = data;
+        updateSummaryActionButton(data, { loading: Boolean(data.summarizing) });
 
         updateHistoryTitleFromNotes(data);
 
@@ -70,14 +89,17 @@ function pollForSummary(sessionId) {
             currentNotesData = data;
 
             if (data.summarizing) {
+                updateSummaryActionButton(data, { loading: true });
                 pollForSummary(sessionId);
             } else {
                 document.getElementById("notes-spinner").style.display = "none";
                 updateHistoryTitleFromNotes(data);
+                updateSummaryActionButton(data);
                 renderNotes(data);
             }
         } catch (e) {
             document.getElementById("notes-spinner").style.display = "none";
+            updateSummaryActionButton(currentNotesData);
             document.getElementById("notes-rendered").innerHTML =
                 '<div class="empty-notes">Failed to load summary</div>';
         }
@@ -90,7 +112,7 @@ function renderNotes(data) {
 
     const content = data.notes_md || data.auto_summary;
     if (!content) {
-        container.innerHTML = '<div class="empty-notes">No notes yet. Click "Edit" to add notes, or "Re-summarize" to generate an AI summary.</div>';
+        container.innerHTML = '<div class="empty-notes">No notes yet. Click "Edit" to add notes, or "Generate Summary" to create an AI summary.</div>';
         return;
     }
 
@@ -163,6 +185,7 @@ export async function saveNotes() {
             is_user_edited: true,
             updated_at: new Date().toISOString(),
         };
+        updateSummaryActionButton(currentNotesData);
         cancelNotesEdit();
         renderNotes(currentNotesData);
         showToast("Notes saved");
@@ -171,12 +194,13 @@ export async function saveNotes() {
     }
 }
 
-export async function resummarize() {
+export async function generateSummary() {
     if (!state.currentSession || state.currentSession.type !== "history") return;
 
     const sessionId = state.currentSession.name;
     document.getElementById("notes-spinner").style.display = "flex";
     document.getElementById("notes-rendered").innerHTML = "";
+    updateSummaryActionButton(currentNotesData, { loading: true });
 
     try {
         const resp = await fetch(`/api/sessions/history/${encodeURIComponent(sessionId)}/resummarize`, {
@@ -186,6 +210,7 @@ export async function resummarize() {
         document.getElementById("notes-spinner").style.display = "none";
 
         if (result.error) {
+            updateSummaryActionButton(currentNotesData);
             showToast(result.error, true);
             document.getElementById("notes-rendered").innerHTML =
                 '<div class="empty-notes">Summarization failed. Is claude-agent-sdk installed?</div>';
@@ -200,13 +225,21 @@ export async function resummarize() {
                 updated_at: new Date().toISOString(),
             };
             updateHistoryTitleFromNotes(currentNotesData);
+            updateSummaryActionButton(currentNotesData);
             renderNotes(currentNotesData);
             showToast("Summary generated");
+        } else {
+            updateSummaryActionButton(currentNotesData);
         }
     } catch (e) {
         document.getElementById("notes-spinner").style.display = "none";
-        showToast("Failed to resummarize", true);
+        updateSummaryActionButton(currentNotesData);
+        showToast("Failed to generate summary", true);
     }
+}
+
+export async function resummarize() {
+    return generateSummary();
 }
 
 export function switchHistoryTab(tabName) {

@@ -5,43 +5,22 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/store"
 )
-
-// IndexedSession holds extracted session data from a history file.
-type IndexedSession struct {
-	SessionID      string
-	SourceType     string
-	FirstTimestamp *string
-	LastTimestamp   *string
-	MessageCount   int
-	DisplaySummary string
-	FTSBody        string
-}
-
-// HistoryScanner is the interface that agent implementations must satisfy
-// to participate in session indexing.
-type HistoryScanner interface {
-	// HistoryBasePath returns the root directory for this agent's history files.
-	HistoryBasePath() string
-	// HistoryGlobPattern returns the glob pattern for history files (e.g., "*.jsonl").
-	HistoryGlobPattern() string
-	// ExtractSessions parses a history file and returns indexed session data.
-	ExtractSessions(filePath string) ([]IndexedSession, error)
-}
 
 // SessionIndexer scans history files for all registered agents and upserts
 // into session_index + session_fts.
 type SessionIndexer struct {
 	store         *store.SessionStore
-	scanners      []HistoryScanner
+	scanners      []agent.HistoryScanner
 	interval      time.Duration
 	startupDelay  time.Duration
 	logger        *slog.Logger
 }
 
 // NewSessionIndexer creates a new SessionIndexer.
-func NewSessionIndexer(sessionStore *store.SessionStore, scanners []HistoryScanner, interval, startupDelay time.Duration) *SessionIndexer {
+func NewSessionIndexer(sessionStore *store.SessionStore, scanners []agent.HistoryScanner, interval, startupDelay time.Duration) *SessionIndexer {
 	return &SessionIndexer{
 		store:        sessionStore,
 		scanners:     scanners,
@@ -87,58 +66,61 @@ func (idx *SessionIndexer) RunOnce(ctx context.Context) error {
 		return err
 	}
 
-	var indexed, skipped int
+	var indexed int
 
+	// Collect all sessions from all scanners first
+	var allSessions []agent.IndexedSession
 	for _, scanner := range idx.scanners {
 		basePath := scanner.HistoryBasePath()
 		if basePath == "" {
 			continue
 		}
 
-		// Use filepath.Glob to find history files
-		// In a full implementation, this would use scanner.HistoryGlobPattern()
-		// with recursive directory walking. For now, the scanners handle
-		// their own file discovery internally.
-		sessions, err := scanner.ExtractSessions(basePath)
+		sessions, err := scanner.ExtractSessions(basePath, knownMtimes)
 		if err != nil {
 			idx.logger.Warn("scanner error", "base", basePath, "error", err)
 			continue
 		}
-
-		for _, s := range sessions {
-			// Check mtime cache (simplified — full impl checks per-file)
-			_ = knownMtimes // Used in full implementation
-
-			err := idx.store.UpsertSessionIndex(ctx, &store.SessionIndex{
-				SessionID:      s.SessionID,
-				SourceType:     s.SourceType,
-				SourceFile:     basePath,
-				FirstTimestamp: s.FirstTimestamp,
-				LastTimestamp:   s.LastTimestamp,
-				MessageCount:   s.MessageCount,
-				DisplaySummary: s.DisplaySummary,
-				FileMtime:      float64(time.Now().Unix()),
-			})
-			if err != nil {
-				idx.logger.Warn("upsert session index failed", "session", s.SessionID, "error", err)
-				continue
-			}
-
-			if s.FTSBody != "" {
-				if err := idx.store.UpsertFTS(ctx, s.SessionID, s.FTSBody); err != nil {
-					idx.logger.Warn("upsert FTS failed", "session", s.SessionID, "error", err)
-				}
-			}
-
-			if err := idx.store.EnqueueForSummarization(ctx, s.SessionID); err != nil {
-				idx.logger.Warn("enqueue summarization failed", "session", s.SessionID, "error", err)
-			}
-
-			indexed++
-		}
+		allSessions = append(allSessions, sessions...)
 	}
 
-	idx.logger.Info("indexer pass complete", "indexed", indexed, "skipped", skipped)
+	// Batch-lookup agent names from live_sessions
+	sessionIDs := make([]string, len(allSessions))
+	for i, s := range allSessions {
+		sessionIDs[i] = s.SessionID
+	}
+	agentNames, _ := idx.store.GetAgentNames(ctx, sessionIDs)
+
+	for _, s := range allSessions {
+		si := &store.SessionIndex{
+			SessionID:      s.SessionID,
+			SourceType:     s.SourceType,
+			SourceFile:     s.SourceFile,
+			FirstTimestamp: s.FirstTimestamp,
+			LastTimestamp:   s.LastTimestamp,
+			MessageCount:   s.MessageCount,
+			DisplaySummary: s.DisplaySummary,
+			FileMtime:      s.FileMtime,
+		}
+		if names, ok := agentNames[s.SessionID]; ok {
+			si.AgentName = names[0]
+			si.DisplayName = names[1]
+		}
+		if err := idx.store.UpsertSessionIndex(ctx, si); err != nil {
+			idx.logger.Warn("upsert session index failed", "session", s.SessionID, "error", err)
+			continue
+		}
+
+		if s.FTSBody != "" {
+			if err := idx.store.UpsertFTS(ctx, s.SessionID, s.FTSBody); err != nil {
+				idx.logger.Warn("upsert FTS failed", "session", s.SessionID, "error", err)
+			}
+		}
+
+		indexed++
+	}
+
+	idx.logger.Info("indexer pass complete", "indexed", indexed)
 	return nil
 }
 

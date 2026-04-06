@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -25,6 +26,109 @@ func (a *CodexAgent) HistoryBasePath() string {
 }
 
 func (a *CodexAgent) HistoryGlobPattern() string { return "rollout-*.jsonl" }
+
+// ExtractSessions scans Codex history files under basePath and returns indexed sessions.
+// Files whose mtime matches knownMtimes are skipped.
+func (a *CodexAgent) ExtractSessions(basePath string, knownMtimes map[string]float64) ([]IndexedSession, error) {
+	if basePath == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(basePath); os.IsNotExist(err) {
+		return nil, nil
+	}
+	// Codex stores sessions in YYYY/MM/DD/rollout-*.jsonl
+	var sessions []IndexedSession
+	err := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip errors
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !strings.HasPrefix(filepath.Base(path), "rollout-") || !strings.HasSuffix(path, ".jsonl") {
+			return nil
+		}
+		mtime := float64(info.ModTime().Unix())
+		if prev, ok := knownMtimes[path]; ok && prev == mtime {
+			return nil // file unchanged since last index
+		}
+		sess, err := parseCodexSession(path, mtime)
+		if err != nil {
+			slog.Debug("codex: failed to parse session file", "path", path, "error", err)
+			return nil
+		}
+		if sess != nil {
+			sessions = append(sessions, *sess)
+		}
+		return nil
+	})
+	if err != nil {
+		return sessions, err
+	}
+	return sessions, nil
+}
+
+// parseCodexSession parses a Codex JSONL session file.
+func parseCodexSession(fpath string, mtime float64) (*IndexedSession, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	// Derive session ID from filename: rollout-<timestamp>-<id>.jsonl
+	sessionID := strings.TrimSuffix(filepath.Base(fpath), ".jsonl")
+
+	var firstTS, lastTS *string
+	var msgCount int
+	var summary string
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		ts, _ := entry["timestamp"].(string)
+		if ts != "" {
+			if firstTS == nil {
+				firstTS = &ts
+			}
+			tsCopy := ts
+			lastTS = &tsCopy
+		}
+		role, _ := entry["role"].(string)
+		if role == "user" || role == "assistant" {
+			msgCount++
+		}
+		if summary == "" && role == "assistant" {
+			if text := extractFirstText(entry["content"]); text != "" {
+				if len(text) > 200 {
+					text = text[:200]
+				}
+				summary = text
+			}
+		}
+	}
+	if msgCount == 0 {
+		return nil, nil
+	}
+	return &IndexedSession{
+		SessionID:      sessionID,
+		SourceType:     "codex",
+		SourceFile:     fpath,
+		FileMtime:      mtime,
+		FirstTimestamp: firstTS,
+		LastTimestamp:   lastTS,
+		MessageCount:   msgCount,
+		DisplaySummary: summary,
+	}, nil
+}
 
 func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 	bin := resolveBinary(params.CLIPath, "codex")

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdknorow/coral/internal/agent"
 	"github.com/cdknorow/coral/internal/background"
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/oauth"
@@ -362,8 +363,13 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	safeGo(ctx, "git_poller", func() { gitPoller.Run(ctx) })
 
 	// Session indexer
+	scanners := []agent.HistoryScanner{
+		&agent.ClaudeAgent{},
+		&agent.GeminiAgent{},
+		&agent.CodexAgent{},
+	}
 	indexer := background.NewSessionIndexer(
-		sessStore, nil,
+		sessStore, scanners,
 		time.Duration(cfg.IndexerIntervalS)*time.Second,
 		time.Duration(cfg.IndexerStartupDelayS)*time.Second,
 	)
@@ -405,10 +411,13 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	remotePoller.SetDiscoverFn(discoverFn)
 	safeGo(ctx, "remote_board_poller", func() { remotePoller.Run(ctx) })
 
-	// Batch summarizer
+	// Batch summarizer — only runs if auto_summarize setting is enabled
 	summarizeFn := background.BuildSummarizeFn(sessStore)
-	batchSummarizer := background.NewBatchSummarizer(sessStore, summarizeFn)
-	safeGo(ctx, "batch_summarizer", func() { batchSummarizer.Run(ctx) })
+	settings, _ := sessStore.GetSettings(ctx)
+	if settings["auto_summarize"] == "true" {
+		batchSummarizer := background.NewBatchSummarizer(sessStore, summarizeFn)
+		safeGo(ctx, "batch_summarizer", func() { batchSummarizer.Run(ctx) })
+	}
 	srv.SetSummarizeFn(summarizeFn)
 
 	// Session reconciler — periodically detects crashed agents and marks them sleeping

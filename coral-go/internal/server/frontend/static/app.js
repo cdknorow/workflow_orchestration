@@ -14,7 +14,7 @@ import { showLaunchModal, hideLaunchModal, launchSession, showInfoModal, hideInf
 import { toggleBrowser, browserNavigateTo, browserNavigateUp } from './browser.js';
 import { initSidebarResize, initCommandPaneResize, initTaskBarResize, initBoardChatResize, initSidebarCollapse, switchJobsSubtab, initAgenticPanelCollapse, toggleAgenticPanel, initAgenticBlockResize, initAgenticBlockCollapse } from './sidebar.js';
 import { fitTerminal } from './xterm_renderer.js';
-import { loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab } from './notes.js';
+import { loadSessionNotes, saveNotes, generateSummary, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab } from './notes.js';
 import { loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag, loadAllTags } from './tags.js';
 import { loadSessionCommits } from './commits.js';
 import { showTemplateBrowser } from './template_browser.js';
@@ -76,7 +76,7 @@ Object.assign(window, {
     // sessions
     selectLiveSession, selectHistorySession, editAndResubmit, renameAgent, setAgentIcon,
     // notes
-    loadSessionNotes, saveNotes, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab,
+    loadSessionNotes, saveNotes, generateSummary, resummarize, toggleNotesEdit, cancelNotesEdit, switchHistoryTab,
     // tags
     loadSessionTags, addTagToSession, removeTagFromSession, showTagDropdown, hideTagDropdown, createTag,
     // changed_files
@@ -196,7 +196,11 @@ function switchNavTab(tab) {
     } else if (tab === 'tokens') {
         showCostDashboard();
     } else if (tab === 'history') {
-        // Keep current main view, just switch sidebar content
+        if (state.currentSession && state.currentSession.type === 'history') {
+            showView('history-session-view');
+        } else {
+            showView('welcome-screen');
+        }
     } else if (tab === 'agents') {
         // Restore previously selected session or show welcome
         if (state.currentSession && state.currentSession.type === 'live') {

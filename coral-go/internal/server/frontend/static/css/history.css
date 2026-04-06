@@ -56,10 +56,20 @@
     flex: 1;
     overflow: hidden;
     flex-direction: column;
+    min-height: 0;
 }
 
 .history-tab-content.active {
     display: flex;
+}
+
+#history-tab-activity,
+#history-tab-tasks,
+#history-tab-agent-notes,
+#history-tab-commits,
+#history-tab-chat,
+#history-tab-notes {
+    min-height: 0;
 }
 
 /* ── Notes View ────────────────────────────────────────────── */

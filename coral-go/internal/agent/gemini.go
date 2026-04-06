@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -29,6 +30,111 @@ func (a *GeminiAgent) HistoryBasePath() string {
 }
 
 func (a *GeminiAgent) HistoryGlobPattern() string { return "session-*.json" }
+
+// ExtractSessions scans Gemini history files under basePath and returns indexed sessions.
+// Files whose mtime matches knownMtimes are skipped.
+func (a *GeminiAgent) ExtractSessions(basePath string, knownMtimes map[string]float64) ([]IndexedSession, error) {
+	if basePath == "" {
+		return nil, nil
+	}
+	// Gemini stores sessions in ~/.gemini/tmp/<uuid>/chats/session-*.json
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var sessions []IndexedSession
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		chatsDir := filepath.Join(basePath, entry.Name(), "chats")
+		files, err := filepath.Glob(filepath.Join(chatsDir, a.HistoryGlobPattern()))
+		if err != nil {
+			continue
+		}
+		for _, fpath := range files {
+			info, err := os.Stat(fpath)
+			if err != nil {
+				continue
+			}
+			mtime := float64(info.ModTime().Unix())
+			if prev, ok := knownMtimes[fpath]; ok && prev == mtime {
+				continue
+			}
+			sess, err := parseGeminiSession(fpath, mtime)
+			if err != nil {
+				slog.Debug("gemini: failed to parse session file", "path", fpath, "error", err)
+				continue
+			}
+			if sess != nil {
+				sessions = append(sessions, *sess)
+			}
+		}
+	}
+	return sessions, nil
+}
+
+// parseGeminiSession parses a Gemini JSON session file.
+func parseGeminiSession(fpath string, mtime float64) (*IndexedSession, error) {
+	data, err := os.ReadFile(fpath)
+	if err != nil {
+		return nil, err
+	}
+	// Gemini sessions are JSON arrays of message objects
+	var messages []map[string]any
+	if err := json.Unmarshal(data, &messages); err != nil {
+		return nil, err
+	}
+	if len(messages) == 0 {
+		return nil, nil
+	}
+
+	// Extract session ID from filename: session-<id>.json
+	base := filepath.Base(fpath)
+	sessionID := strings.TrimSuffix(strings.TrimPrefix(base, "session-"), ".json")
+
+	var firstTS, lastTS *string
+	var summary string
+	for _, msg := range messages {
+		ts, _ := msg["timestamp"].(string)
+		if ts != "" {
+			if firstTS == nil {
+				firstTS = &ts
+			}
+			tsCopy := ts
+			lastTS = &tsCopy
+		}
+		// Grab first model response as summary
+		if summary == "" {
+			if role, _ := msg["role"].(string); role == "model" {
+				if parts, _ := msg["parts"].([]any); len(parts) > 0 {
+					if p, ok := parts[0].(map[string]any); ok {
+						if text, _ := p["text"].(string); text != "" {
+							if len(text) > 200 {
+								text = text[:200]
+							}
+							summary = text
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return &IndexedSession{
+		SessionID:      sessionID,
+		SourceType:     "gemini",
+		SourceFile:     fpath,
+		FileMtime:      mtime,
+		FirstTimestamp: firstTS,
+		LastTimestamp:   lastTS,
+		MessageCount:   len(messages),
+		DisplaySummary: summary,
+	}, nil
+}
 
 func (a *GeminiAgent) BuildLaunchCommand(params LaunchParams) string {
 	bin := resolveBinary(params.CLIPath, "gemini")

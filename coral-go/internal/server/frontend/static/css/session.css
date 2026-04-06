@@ -41,6 +41,9 @@
 
 .session-row-bottom {
     margin-top: 1px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
 
 .session-list li:hover {
@@ -862,6 +865,22 @@
     margin-top: 1px;
 }
 
+.sidebar-agent-name {
+    display: block;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-source-type {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: lowercase;
+}
+
 .sidebar-branch svg {
     flex-shrink: 0;
     opacity: 0.7;
@@ -1184,5 +1203,3 @@
     background: var(--bg-hover);
     color: var(--text-primary);
 }
-
-

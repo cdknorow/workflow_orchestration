@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -23,6 +24,131 @@ func (a *ClaudeAgent) HistoryBasePath() string {
 }
 
 func (a *ClaudeAgent) HistoryGlobPattern() string { return "*.jsonl" }
+
+// ExtractSessions scans Claude history files under basePath and returns indexed sessions.
+// Files whose mtime matches knownMtimes are skipped.
+func (a *ClaudeAgent) ExtractSessions(basePath string, knownMtimes map[string]float64) ([]IndexedSession, error) {
+	if basePath == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var sessions []IndexedSession
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		projectDir := filepath.Join(basePath, entry.Name())
+		files, err := filepath.Glob(filepath.Join(projectDir, a.HistoryGlobPattern()))
+		if err != nil {
+			continue
+		}
+		for _, fpath := range files {
+			info, err := os.Stat(fpath)
+			if err != nil {
+				continue
+			}
+			mtime := float64(info.ModTime().Unix())
+			if prev, ok := knownMtimes[fpath]; ok && prev == mtime {
+				continue // file unchanged since last index
+			}
+			sess, err := parseClaudeSessions(fpath, mtime)
+			if err != nil {
+				slog.Debug("claude: failed to parse session file", "path", fpath, "error", err)
+				continue
+			}
+			sessions = append(sessions, sess...)
+		}
+	}
+	return sessions, nil
+}
+
+// parseClaudeSessions parses a Claude JSONL file and extracts session metadata.
+func parseClaudeSessions(fpath string, mtime float64) ([]IndexedSession, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	sessionID := strings.TrimSuffix(filepath.Base(fpath), ".jsonl")
+	var firstTS, lastTS *string
+	var msgCount int
+	var summaryParts []string
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		ts, _ := entry["timestamp"].(string)
+		if ts != "" {
+			if firstTS == nil {
+				firstTS = &ts
+			}
+			lastCopy := ts
+			lastTS = &lastCopy
+		}
+		etype, _ := entry["type"].(string)
+		if etype == "user" || etype == "assistant" {
+			msgCount++
+		}
+		// Grab first assistant text for display summary
+		if etype == "assistant" && len(summaryParts) < 1 {
+			if msg, _ := entry["message"].(map[string]any); msg != nil {
+				if text := extractFirstText(msg["content"]); text != "" {
+					if len(text) > 200 {
+						text = text[:200]
+					}
+					summaryParts = append(summaryParts, text)
+				}
+			}
+		}
+	}
+	if msgCount == 0 {
+		return nil, nil
+	}
+	return []IndexedSession{{
+		SessionID:      sessionID,
+		SourceType:     "claude",
+		SourceFile:     fpath,
+		FileMtime:      mtime,
+		FirstTimestamp: firstTS,
+		LastTimestamp:   lastTS,
+		MessageCount:   msgCount,
+		DisplaySummary: strings.Join(summaryParts, " "),
+	}}, nil
+}
+
+// extractFirstText gets the first text string from message content.
+func extractFirstText(content any) string {
+	switch c := content.(type) {
+	case string:
+		return c
+	case []any:
+		for _, block := range c {
+			if b, ok := block.(map[string]any); ok {
+				if bt, _ := b["type"].(string); bt == "text" {
+					if t, _ := b["text"].(string); t != "" {
+						return t
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
 
 func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 	bin := resolveBinary(params.CLIPath, "claude")
