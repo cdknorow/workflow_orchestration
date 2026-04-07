@@ -103,6 +103,7 @@ var columnMigrations = []struct {
 	{"token_usage", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"token_usage", "session_start_at", "TEXT"},
 	{"token_usage", "last_activity_at", "TEXT"},
+	{"token_usage", "source", "TEXT NOT NULL DEFAULT 'jsonl'"},
 }
 
 const schemaSQL = `

@@ -166,11 +166,11 @@ func TestListUsage_InvalidTeamID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestListUsage_DeduplicatesCumulativeSnapshots(t *testing.T) {
+func TestListUsage_SumsPerTurnDeltas(t *testing.T) {
 	ts, _, router := setupTokenUsageTest(t)
 	ctx := t.Context()
 
-	// Record two cumulative snapshots for the same session
+	// Record two per-turn delta records for the same session — should be summed
 	require.NoError(t, ts.RecordUsage(ctx, &store.TokenUsage{
 		SessionID: "s1", AgentName: "a1", InputTokens: 100, TotalTokens: 100, CostUSD: 0.01,
 	}))
@@ -186,13 +186,13 @@ func TestListUsage_DeduplicatesCumulativeSnapshots(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	records := body["records"].([]any)
-	// Only the latest snapshot should be returned
+	// Per-turn deltas summed per session — one aggregated row
 	assert.Len(t, records, 1)
-	assert.Equal(t, float64(500), records[0].(map[string]any)["total_tokens"])
+	assert.Equal(t, float64(600), records[0].(map[string]any)["total_tokens"])
 
 	totals := body["totals"].(map[string]any)
-	assert.Equal(t, float64(500), totals["total_tokens"])
-	assert.InDelta(t, 0.05, totals["cost_usd"].(float64), 0.001)
+	assert.Equal(t, float64(600), totals["total_tokens"])
+	assert.InDelta(t, 0.06, totals["cost_usd"].(float64), 0.001)
 }
 
 func TestUsageSummary_Empty(t *testing.T) {
@@ -280,11 +280,11 @@ func TestUsageSummary_SinceFilter(t *testing.T) {
 	assert.Equal(t, float64(1), totals["num_sessions"])
 }
 
-func TestUsageSummary_DeduplicatesWithinAgentType(t *testing.T) {
+func TestUsageSummary_SumsPerTurnDeltas(t *testing.T) {
 	ts, _, router := setupTokenUsageTest(t)
 	ctx := t.Context()
 
-	// Two cumulative snapshots for the same session
+	// Two per-turn delta records for the same session — should be summed
 	require.NoError(t, ts.RecordUsage(ctx, &store.TokenUsage{
 		SessionID: "s1", AgentName: "a1", AgentType: "claude",
 		TotalTokens: 100, CostUSD: 0.01,
@@ -303,8 +303,8 @@ func TestUsageSummary_DeduplicatesWithinAgentType(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 
 	totals := body["totals"].(map[string]any)
-	// Should only count the latest snapshot, not sum both
-	assert.Equal(t, float64(500), totals["total_tokens"])
+	// Records are per-turn deltas — both should be summed
+	assert.Equal(t, float64(600), totals["total_tokens"])
 	assert.Equal(t, float64(1), totals["num_sessions"])
 }
 

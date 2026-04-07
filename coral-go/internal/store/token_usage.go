@@ -25,6 +25,7 @@ type TokenUsage struct {
 	SessionStartAt string  `db:"session_start_at" json:"session_start_at,omitempty"`
 	LastActivityAt string  `db:"last_activity_at" json:"last_activity_at,omitempty"`
 	RecordedAt     string  `db:"recorded_at" json:"recorded_at"`
+	Source         string  `db:"source" json:"source,omitempty"`
 }
 
 // UsageSummary represents aggregated token usage totals.
@@ -38,6 +39,26 @@ type UsageSummary struct {
 	CostUSD          float64 `db:"cost_usd" json:"cost_usd"`
 	NumSessions      int     `db:"num_sessions" json:"num_sessions"`
 }
+
+// AgentUsageSummary represents per-agent (session) token usage aggregates.
+type AgentUsageSummary struct {
+	SessionID        string  `db:"session_id" json:"session_id"`
+	AgentName        string  `db:"agent_name" json:"agent_name"`
+	AgentType        string  `db:"agent_type" json:"agent_type"`
+	BoardName        *string `db:"board_name" json:"board_name,omitempty"`
+	InputTokens      int64   `db:"input_tokens" json:"input_tokens"`
+	OutputTokens     int64   `db:"output_tokens" json:"output_tokens"`
+	CacheReadTokens  int64   `db:"cache_read_tokens" json:"cache_read_tokens"`
+	CacheWriteTokens int64   `db:"cache_write_tokens" json:"cache_write_tokens"`
+	TotalTokens      int64   `db:"total_tokens" json:"total_tokens"`
+	CostUSD          float64 `db:"cost_usd" json:"cost_usd"`
+	NumRecords       int     `db:"num_records" json:"requests"`
+}
+
+// sourceDedup is a SQL filter that prefers JSONL records over proxy records
+// for the same session. When both sources exist, only JSONL is counted to
+// avoid double-counting tokens.
+const sourceDedup = `(COALESCE(source,'jsonl') = 'jsonl' OR session_id NOT IN (SELECT DISTINCT session_id FROM token_usage WHERE source = 'jsonl'))`
 
 // UsageFilter specifies filters for ListUsage.
 type UsageFilter struct {
@@ -68,12 +89,16 @@ func (s *TokenUsageStore) RecordUsage(ctx context.Context, u *TokenUsage) error 
 		u.AgentType = "claude"
 	}
 
+	if u.Source == "" {
+		u.Source = "jsonl"
+	}
+
 	result, err := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO token_usage
-		 (session_id, agent_name, agent_type, team_id, board_name, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, session_start_at, last_activity_at, recorded_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (session_id, agent_name, agent_type, team_id, board_name, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, session_start_at, last_activity_at, recorded_at, source)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.SessionID, u.AgentName, u.AgentType, u.TeamID, u.BoardName,
-		u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheWriteTokens, u.TotalTokens, u.CostUSD, u.NumTurns, u.SessionStartAt, u.LastActivityAt, u.RecordedAt)
+		u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheWriteTokens, u.TotalTokens, u.CostUSD, u.NumTurns, u.SessionStartAt, u.LastActivityAt, u.RecordedAt, u.Source)
 	if err != nil {
 		return err
 	}
@@ -85,14 +110,20 @@ func (s *TokenUsageStore) RecordUsage(ctx context.Context, u *TokenUsage) error 
 	return nil
 }
 
-// GetSessionUsage returns the latest token usage snapshot for a session.
+// GetSessionUsage returns aggregated token usage for a session (sum of all per-turn records).
 func (s *TokenUsageStore) GetSessionUsage(ctx context.Context, sessionID string) (*TokenUsage, error) {
 	var u TokenUsage
 	err := s.db.GetContext(ctx, &u,
-		`SELECT id, session_id, agent_name, agent_type, team_id, board_name,
-		 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns,
-		 COALESCE(session_start_at, '') as session_start_at, COALESCE(last_activity_at, '') as last_activity_at, recorded_at
-		 FROM token_usage WHERE session_id = ? ORDER BY id DESC LIMIT 1`, sessionID)
+		`SELECT MAX(id) as id, session_id, MAX(agent_name) as agent_name, MAX(agent_type) as agent_type,
+		 MAX(team_id) as team_id, MAX(board_name) as board_name,
+		 COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens,
+		 COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens, COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
+		 COALESCE(SUM(total_tokens), 0) as total_tokens, COALESCE(SUM(cost_usd), 0) as cost_usd,
+		 COUNT(*) as num_turns,
+		 COALESCE(MIN(session_start_at), '') as session_start_at,
+		 COALESCE(MAX(last_activity_at), '') as last_activity_at,
+		 MAX(recorded_at) as recorded_at
+		 FROM token_usage WHERE session_id = ? AND `+sourceDedup+` GROUP BY session_id`, sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -102,8 +133,7 @@ func (s *TokenUsageStore) GetSessionUsage(ctx context.Context, sessionID string)
 	return &u, nil
 }
 
-// GetTeamUsage returns aggregated token usage for a team.
-// Uses the latest snapshot per session to avoid double-counting cumulative data.
+// GetTeamUsage returns aggregated token usage for a team (sum of all per-turn records).
 func (s *TokenUsageStore) GetTeamUsage(ctx context.Context, teamID int64) (*UsageSummary, error) {
 	var summary UsageSummary
 	err := s.db.GetContext(ctx, &summary,
@@ -113,19 +143,15 @@ func (s *TokenUsageStore) GetTeamUsage(ctx context.Context, teamID int64) (*Usag
 		        COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
 		        COALESCE(SUM(total_tokens), 0) as total_tokens,
 		        COALESCE(SUM(cost_usd), 0) as cost_usd,
-		        COUNT(*) as num_sessions
-		 FROM (
-		   SELECT session_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd,
-		          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id DESC) as rn
-		   FROM token_usage WHERE team_id = ?
-		 ) WHERE rn = 1`, teamID)
+		        COUNT(DISTINCT session_id) as num_sessions
+		 FROM token_usage WHERE team_id = ? AND `+sourceDedup, teamID)
 	if err != nil {
 		return nil, err
 	}
 	return &summary, nil
 }
 
-// GetBoardUsage returns aggregated token usage for a board.
+// GetBoardUsage returns aggregated token usage for a board (sum of all per-turn records).
 func (s *TokenUsageStore) GetBoardUsage(ctx context.Context, boardName string) (*UsageSummary, error) {
 	var summary UsageSummary
 	err := s.db.GetContext(ctx, &summary,
@@ -135,12 +161,8 @@ func (s *TokenUsageStore) GetBoardUsage(ctx context.Context, boardName string) (
 		        COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
 		        COALESCE(SUM(total_tokens), 0) as total_tokens,
 		        COALESCE(SUM(cost_usd), 0) as cost_usd,
-		        COUNT(*) as num_sessions
-		 FROM (
-		   SELECT session_id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd,
-		          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id DESC) as rn
-		   FROM token_usage WHERE board_name = ?
-		 ) WHERE rn = 1`, boardName)
+		        COUNT(DISTINCT session_id) as num_sessions
+		 FROM token_usage WHERE board_name = ? AND `+sourceDedup, boardName)
 	if err != nil {
 		return nil, err
 	}
@@ -158,27 +180,49 @@ func (s *TokenUsageStore) GetUsageSummary(ctx context.Context, since string) ([]
 	          COALESCE(SUM(total_tokens), 0) as total_tokens,
 	          COALESCE(SUM(cost_usd), 0) as cost_usd,
 	          COUNT(DISTINCT session_id) as num_sessions
-	   FROM (
-	     SELECT session_id, agent_type, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd,
-	            ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id DESC) as rn
-	     FROM token_usage`
+	   FROM token_usage WHERE ` + sourceDedup + ` AND 1=1`
 	var args []interface{}
 	if since != "" {
-		query += " WHERE recorded_at >= ?"
+		query += " AND recorded_at >= ?"
 		args = append(args, since)
 	}
-	query += `) WHERE rn = 1 GROUP BY agent_type`
+	query += ` GROUP BY agent_type`
 	err := s.db.SelectContext(ctx, &summaries, query, args...)
 	return summaries, err
 }
 
-// ListUsage returns filtered token usage records (latest per session).
+// GetUsageSummaryByAgent returns per-agent (session) usage aggregates since a given time.
+func (s *TokenUsageStore) GetUsageSummaryByAgent(ctx context.Context, since string) ([]AgentUsageSummary, error) {
+	var summaries []AgentUsageSummary
+	query := `SELECT session_id, agent_name, agent_type, board_name,
+	          COALESCE(SUM(input_tokens), 0) as input_tokens,
+	          COALESCE(SUM(output_tokens), 0) as output_tokens,
+	          COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+	          COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
+	          COALESCE(SUM(total_tokens), 0) as total_tokens,
+	          COALESCE(SUM(cost_usd), 0) as cost_usd,
+	          COUNT(*) as num_records
+	   FROM token_usage WHERE ` + sourceDedup + ` AND 1=1`
+	var args []interface{}
+	if since != "" {
+		query += " AND recorded_at >= ?"
+		args = append(args, since)
+	}
+	query += ` GROUP BY session_id ORDER BY cost_usd DESC`
+	err := s.db.SelectContext(ctx, &summaries, query, args...)
+	return summaries, err
+}
+
+// ListUsage returns aggregated token usage per session (sum of all per-turn records).
 func (s *TokenUsageStore) ListUsage(ctx context.Context, f UsageFilter) ([]TokenUsage, error) {
-	query := `SELECT id, session_id, agent_name, agent_type, team_id, board_name,
-	          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, recorded_at
-	   FROM (
-	     SELECT *, ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id DESC) as rn
-	     FROM token_usage WHERE 1=1`
+	query := `SELECT MAX(id) as id, session_id, MAX(agent_name) as agent_name, MAX(agent_type) as agent_type,
+	          MAX(team_id) as team_id, MAX(board_name) as board_name,
+	          COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens,
+	          COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens, COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
+	          COALESCE(SUM(total_tokens), 0) as total_tokens, COALESCE(SUM(cost_usd), 0) as cost_usd,
+	          COUNT(*) as num_turns, MAX(recorded_at) as recorded_at,
+	          COALESCE(MAX(source), 'jsonl') as source
+	   FROM token_usage WHERE ` + sourceDedup + ` AND 1=1`
 	var args []interface{}
 
 	if f.SessionID != "" {
@@ -198,7 +242,7 @@ func (s *TokenUsageStore) ListUsage(ctx context.Context, f UsageFilter) ([]Token
 		args = append(args, f.Since)
 	}
 
-	query += `) WHERE rn = 1 ORDER BY recorded_at DESC`
+	query += ` GROUP BY session_id ORDER BY MAX(recorded_at) DESC`
 
 	var results []TokenUsage
 	err := s.db.SelectContext(ctx, &results, query, args...)
@@ -213,12 +257,14 @@ func (s *TokenUsageStore) GetLatestUsageBySessionIDs(ctx context.Context, sessio
 	}
 
 	query, args, err := sqlx.In(
-		`SELECT id, session_id, agent_name, agent_type, team_id, board_name,
-		 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, num_turns, recorded_at
-		 FROM (
-		   SELECT *, ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY id DESC) as rn
-		   FROM token_usage WHERE session_id IN (?)
-		 ) WHERE rn = 1`, sessionIDs)
+		`SELECT MAX(id) as id, session_id, MAX(agent_name) as agent_name, MAX(agent_type) as agent_type,
+		 MAX(team_id) as team_id, MAX(board_name) as board_name,
+		 COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens,
+		 COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens, COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
+		 COALESCE(SUM(total_tokens), 0) as total_tokens, COALESCE(SUM(cost_usd), 0) as cost_usd,
+		 COUNT(*) as num_turns, MAX(recorded_at) as recorded_at
+		 FROM token_usage WHERE session_id IN (?) AND `+sourceDedup+`
+		 GROUP BY session_id`, sessionIDs)
 	if err != nil {
 		return nil, err
 	}

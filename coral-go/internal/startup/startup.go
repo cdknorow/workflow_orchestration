@@ -22,6 +22,7 @@ import (
 	"github.com/cdknorow/coral/internal/background"
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/oauth"
+	"github.com/cdknorow/coral/internal/proxy"
 	"github.com/cdknorow/coral/internal/ptymanager"
 	"github.com/cdknorow/coral/internal/server"
 	"github.com/cdknorow/coral/internal/store"
@@ -428,9 +429,29 @@ func startBackgroundServices(ctx context.Context, db *store.DB, cfg *config.Conf
 	reconciler := background.NewSessionReconciler(sessStore, agentRT, 30*time.Second)
 	safeGo(ctx, "session_reconciler", func() { reconciler.Run(ctx) })
 
-	// Token poller — extracts token usage from Codex transcripts for cost tracking
-	tokenPoller := background.NewTokenPoller(sessStore, store.NewTokenUsageStore(db), 30*time.Second)
+	// Token poller — extracts token usage from Codex/Claude transcripts for cost tracking
+	tokenUsageStore := store.NewTokenUsageStore(db)
+	tokenPoller := background.NewTokenPoller(sessStore, tokenUsageStore, 30*time.Second)
 	safeGo(ctx, "token_poller", func() { tokenPoller.Run(ctx) })
+
+	// Wire proxy → token_usage table so proxy-captured tokens appear in the unified API
+	if p := srv.Proxy(); p != nil {
+		p.SetTokenUsageRecorder(func(ctx context.Context, rec *proxy.TokenUsageRecord) error {
+			return tokenUsageStore.RecordUsage(ctx, &store.TokenUsage{
+				SessionID:        rec.SessionID,
+				AgentName:        rec.AgentName,
+				AgentType:        rec.AgentType,
+				InputTokens:      rec.InputTokens,
+				OutputTokens:     rec.OutputTokens,
+				CacheReadTokens:  rec.CacheReadTokens,
+				CacheWriteTokens: rec.CacheWriteTokens,
+				TotalTokens:      rec.InputTokens + rec.OutputTokens + rec.CacheReadTokens + rec.CacheWriteTokens,
+				CostUSD:          rec.CostUSD,
+				RecordedAt:       rec.RecordedAt,
+				Source:           rec.Source,
+			})
+		})
+	}
 
 	// Workflow runner — executes multi-step workflows (shell + agent)
 	wfStore := store.NewWorkflowStore(db)

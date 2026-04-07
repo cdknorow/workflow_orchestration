@@ -189,6 +189,7 @@ func (p *Proxy) handleBedrockJSON(w http.ResponseWriter, req *http.Request, reqI
 		p.events.PublishError(reqID, sessionID, model, resp.StatusCode, errMsg)
 	} else {
 		p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+		p.recordTokenUsage(req.Context(), sessionID, ProviderAnthropic, model, usage, breakdown)
 	}
 
 	p.setProxyHeaders(w, reqID, sessionID, breakdown.TotalCostUSD)
@@ -263,6 +264,7 @@ func (p *Proxy) handleBedrockSSE(w http.ResponseWriter, req *http.Request, reqID
 	breakdown := CalculateCostBreakdown(model, usage)
 	p.store.CompleteRequest(completeCtx, reqID, usage, breakdown, resp.StatusCode, "success", "")
 	p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+	p.recordTokenUsage(completeCtx, sessionID, ProviderAnthropic, model, usage, breakdown)
 
 	if debugProxy() {
 		slog.Info("[proxy] bedrock SSE complete",

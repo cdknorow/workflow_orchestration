@@ -1145,8 +1145,8 @@ func (s *Store) computeAndStoreTaskCost(ctx context.Context, taskID int64) {
 		        COALESCE(SUM(output_tokens), 0) AS output_tokens,
 		        COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
 		        COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens
-		 FROM proxy_requests
-		 WHERE session_id = ? AND started_at >= ? AND started_at <= ?`,
+		 FROM token_usage
+		 WHERE session_id = ? AND recorded_at >= ? AND recorded_at <= ?`,
 		*task.SessionID, *task.ClaimedAt, *task.CompletedAt)
 	if err != nil {
 		return
@@ -1239,7 +1239,7 @@ type TaskLiveCost struct {
 }
 
 // GetTaskLiveCost computes the current cost for a task by querying
-// proxy_requests from claimed_at to now. Returns nil if the task has no session_id
+// token_usage from claimed_at to now. Returns nil if the task has no session_id
 // or the sessions DB is not available.
 func (s *Store) GetTaskLiveCost(ctx context.Context, project string, taskID int64) (*TaskLiveCost, error) {
 	if s.sessionsDB == nil {
@@ -1274,8 +1274,8 @@ func (s *Store) GetTaskLiveCost(ctx context.Context, project string, taskID int6
 		        COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
 		        COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
 		        COUNT(*) AS request_count
-		 FROM proxy_requests
-		 WHERE session_id = ? AND started_at >= ?`,
+		 FROM token_usage
+		 WHERE session_id = ? AND recorded_at >= ?`,
 		*task.SessionID, *task.ClaimedAt)
 	if err != nil {
 		return nil, err

@@ -33,7 +33,7 @@ func TestTokenUsageStore_RecordAndGet(t *testing.T) {
 	assert.Equal(t, 500, got.OutputTokens)
 	assert.Equal(t, 1500, got.TotalTokens)
 	assert.InDelta(t, 0.03, got.CostUSD, 0.001)
-	assert.Equal(t, 5, got.NumTurns)
+	assert.Equal(t, 1, got.NumTurns) // COUNT(*) of records
 }
 
 func TestTokenUsageStore_GetSessionUsage_Latest(t *testing.T) {
@@ -52,11 +52,11 @@ func TestTokenUsageStore_GetSessionUsage_Latest(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Should return the latest
+	// Should return the sum of all per-turn records
 	got, err := s.GetSessionUsage(ctx, "sess-1")
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Equal(t, 300, got.TotalTokens)
+	assert.Equal(t, 450, got.TotalTokens) // 150 + 300
 }
 
 func TestTokenUsageStore_GetSessionUsage_NotFound(t *testing.T) {
@@ -91,9 +91,9 @@ func TestTokenUsageStore_GetTeamUsage(t *testing.T) {
 
 	summary, err := s.GetTeamUsage(ctx, teamID)
 	require.NoError(t, err)
-	// Should sum latest per session: s1(300) + s2(800) = 1100
-	assert.Equal(t, int64(1100), summary.TotalTokens)
-	assert.InDelta(t, 0.07, summary.CostUSD, 0.001)
+	// Should sum all per-turn records: s1(150+300) + s2(800) = 1250
+	assert.Equal(t, int64(1250), summary.TotalTokens)
+	assert.InDelta(t, 0.08, summary.CostUSD, 0.001)
 	assert.Equal(t, 2, summary.NumSessions)
 }
 
@@ -245,11 +245,11 @@ func TestTokenUsageStore_GetLatestUsageBySessionIDs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 
-	// s1 should have the latest snapshot
-	assert.Equal(t, 500, result["s1"].TotalTokens)
-	assert.InDelta(t, 0.05, result["s1"].CostUSD, 0.001)
+	// s1 should have the sum of all per-turn records
+	assert.Equal(t, 600, result["s1"].TotalTokens) // 100 + 500
+	assert.InDelta(t, 0.06, result["s1"].CostUSD, 0.001)
 
-	// s2 should have its only snapshot
+	// s2 should have its only record
 	assert.Equal(t, 200, result["s2"].TotalTokens)
 
 	// s3 should not be present

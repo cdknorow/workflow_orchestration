@@ -2078,17 +2078,18 @@ export async function updateHistoryTokenUsage(sessionId) {
     if (!sessionId) { container.style.display = 'none'; return; }
 
     try {
-        const resp = await fetch(`/api/proxy/session/${encodeURIComponent(sessionId)}/cost`);
+        const resp = await fetch(`/api/token-usage?session_id=${encodeURIComponent(sessionId)}`);
         if (!resp.ok) { container.style.display = 'none'; return; }
         const data = await resp.json();
-        if (!data.total_requests) { container.style.display = 'none'; return; }
+        const t = data.totals;
+        if (!t || !t.total_tokens || t.total_tokens === 0) { container.style.display = 'none'; return; }
 
-        document.getElementById('htu-input').textContent = _formatTokens(data.total_input_tokens || 0);
-        document.getElementById('htu-output').textContent = _formatTokens(data.total_output_tokens || 0);
-        const cache = (data.total_cache_read_tokens || 0) + (data.total_cache_write_tokens || 0);
+        document.getElementById('htu-input').textContent = _formatTokens(t.input_tokens || 0);
+        document.getElementById('htu-output').textContent = _formatTokens(t.output_tokens || 0);
+        const cache = (t.cache_read_tokens || 0) + (t.cache_write_tokens || 0);
         document.getElementById('htu-cache').textContent = cache > 0 ? _formatTokens(cache) : '—';
-        document.getElementById('htu-requests').textContent = String(data.total_requests);
-        document.getElementById('htu-cost').textContent = data.total_cost_usd > 0 ? _formatCost(data.total_cost_usd) : '—';
+        document.getElementById('htu-requests').textContent = String(t.num_sessions || '—');
+        document.getElementById('htu-cost').textContent = t.cost_usd > 0 ? _formatCost(t.cost_usd) : '—';
         container.style.display = '';
     } catch {
         container.style.display = 'none';

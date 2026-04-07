@@ -38,6 +38,7 @@ func testStoreWithSessionsDB(t *testing.T) (*Store, *sqlx.DB) {
 		working_dir  TEXT NOT NULL DEFAULT '',
 		display_name TEXT,
 		board_name   TEXT,
+		status       TEXT NOT NULL DEFAULT 'active',
 		created_at   TEXT NOT NULL DEFAULT ''
 	)`)
 	sessDB.MustExec(`CREATE TABLE IF NOT EXISTS proxy_requests (
@@ -70,8 +71,39 @@ func testStoreWithSessionsDB(t *testing.T) (*Store, *sqlx.DB) {
 		pricing_cache_write_per_mtok REAL NOT NULL DEFAULT 0
 	)`)
 
+	sessDB.MustExec(`CREATE TABLE IF NOT EXISTS token_usage (
+		id               INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id       TEXT NOT NULL,
+		agent_name       TEXT NOT NULL DEFAULT '',
+		agent_type       TEXT NOT NULL DEFAULT 'claude',
+		team_id          INTEGER,
+		board_name       TEXT,
+		input_tokens     INTEGER NOT NULL DEFAULT 0,
+		output_tokens    INTEGER NOT NULL DEFAULT 0,
+		cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+		cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+		total_tokens     INTEGER NOT NULL DEFAULT 0,
+		cost_usd         REAL NOT NULL DEFAULT 0,
+		num_turns        INTEGER NOT NULL DEFAULT 0,
+		session_start_at TEXT,
+		last_activity_at TEXT,
+		recorded_at      TEXT NOT NULL,
+		source           TEXT NOT NULL DEFAULT 'jsonl'
+	)`)
+	sessDB.MustExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_token_usage_session_time ON token_usage(session_id, recorded_at)`)
+
 	s.SetSessionsDB(sessDB)
 	return s, sessDB
+}
+
+// insertTokenUsage is a test helper to insert a token usage record into the sessions DB.
+func insertTokenUsage(t *testing.T, sessDB *sqlx.DB, sessionID, recordedAt string, costUSD float64, inputTok, outputTok, cacheRead, cacheWrite int) {
+	t.Helper()
+	_, err := sessDB.Exec(
+		`INSERT INTO token_usage (session_id, agent_name, agent_type, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, recorded_at, source)
+		 VALUES (?, '', 'claude', ?, ?, ?, ?, ?, ?, ?, 'proxy')`,
+		sessionID, inputTok, outputTok, cacheRead, cacheWrite, inputTok+outputTok+cacheRead+cacheWrite, costUSD, recordedAt)
+	require.NoError(t, err)
 }
 
 // insertLiveSession is a test helper to insert a live session into the sessions DB.
@@ -160,22 +192,21 @@ func TestCompleteTask_CostComputation(t *testing.T) {
 	require.NotNil(t, claimed.SessionID)
 	require.NotNil(t, claimed.ClaimedAt)
 
-	// Use the claimed_at time as anchor. Proxy requests should have timestamps
-	// between claimed_at and the upcoming completed_at.
-	claimedAt := *claimed.ClaimedAt
+	// Backdate claimed_at so the window spans a known range.
+	// Records at anchor and anchor+1s will be inside; completedAt (now) is well after.
+	anchor := time.Now().Add(-10 * time.Second).UTC().Format(time.RFC3339)
+	anchor1 := time.Now().Add(-9 * time.Second).UTC().Format(time.RFC3339)
+	s.db.ExecContext(ctx, `UPDATE board_tasks SET claimed_at = ? WHERE id = ?`, anchor, claimed.ID)
 
-	// Insert proxy requests WITHIN the task window (use claimed_at itself as the timestamp
-	// since completed_at will be >= claimed_at).
-	insertProxyRequest(t, sessDB, "req-1", "dev", claimedAt, 0.05, 1000, 200, 500, 100)
-	insertProxyRequest(t, sessDB, "req-2", "dev", claimedAt, 0.03, 2000, 300, 400, 50)
+	insertTokenUsage(t, sessDB, "dev", anchor, 0.05, 1000, 200, 500, 100)
+	insertTokenUsage(t, sessDB, "dev", anchor1, 0.03, 2000, 300, 400, 50)
 
-	// Insert a proxy request OUTSIDE the window (well before claim) — should NOT be counted.
-	claimedTime, _ := time.Parse(time.RFC3339, claimedAt)
-	tBefore := claimedTime.Add(-10 * time.Second).UTC().Format(time.RFC3339)
-	insertProxyRequest(t, sessDB, "req-old", "dev", tBefore, 1.00, 99999, 99999, 99999, 99999)
+	// Insert a token usage record OUTSIDE the window (before claimed_at) — should NOT be counted.
+	tBefore := time.Now().Add(-20 * time.Second).UTC().Format(time.RFC3339)
+	insertTokenUsage(t, sessDB, "dev", tBefore, 1.00, 99999, 99999, 99999, 99999)
 
-	// Insert a proxy request for a DIFFERENT session — should NOT be counted.
-	insertProxyRequest(t, sessDB, "req-other", "other-session", claimedAt, 2.00, 50000, 50000, 50000, 50000)
+	// Insert a token usage record for a DIFFERENT session — should NOT be counted.
+	insertTokenUsage(t, sessDB, "other-session", anchor, 2.00, 50000, 50000, 50000, 50000)
 
 	// Complete the task.
 	completed, err := s.CompleteTask(ctx, "proj", claimed.ID, "dev", nil)
@@ -248,8 +279,8 @@ func TestCancelTask_CostComputation(t *testing.T) {
 
 	claimedAt := *claimed.ClaimedAt
 
-	// Insert proxy request during the task (use claimed_at as timestamp).
-	insertProxyRequest(t, sessDB, "req-cancel-1", "dev", claimedAt, 0.12, 5000, 800, 1200, 300)
+	// Insert token usage during the task (use claimed_at as timestamp).
+	insertTokenUsage(t, sessDB, "dev", claimedAt, 0.12, 5000, 800, 1200, 300)
 
 	// Cancel the task.
 	msg := "Not needed anymore"
@@ -348,10 +379,14 @@ func TestGetTaskLiveCost_InProgressTask(t *testing.T) {
 	require.NotNil(t, claimed)
 	require.NotNil(t, claimed.SessionID)
 
-	// Insert proxy requests after claim.
-	claimedAt := *claimed.ClaimedAt
-	insertProxyRequest(t, sessDB, "live-req-1", "dev", claimedAt, 0.10, 3000, 500, 800, 200)
-	insertProxyRequest(t, sessDB, "live-req-2", "dev", claimedAt, 0.05, 1000, 100, 200, 50)
+	// Insert token usage after claim.
+	// Backdate claimed_at so we can use two records at known timestamps.
+	anchor := time.Now().Add(-10 * time.Second).UTC().Format(time.RFC3339)
+	anchor1 := time.Now().Add(-9 * time.Second).UTC().Format(time.RFC3339)
+	s.db.ExecContext(ctx, `UPDATE board_tasks SET claimed_at = ? WHERE id = ?`, anchor, claimed.ID)
+
+	insertTokenUsage(t, sessDB, "dev", anchor, 0.10, 3000, 500, 800, 200)
+	insertTokenUsage(t, sessDB, "dev", anchor1, 0.05, 1000, 100, 200, 50)
 
 	// Query live cost — task is still in_progress.
 	cost, err := s.GetTaskLiveCost(ctx, "proj", claimed.ID)
@@ -375,18 +410,18 @@ func TestGetTaskLiveCost_ExcludesOldRequests(t *testing.T) {
 	sub(s, ctx, "proj", "dev", "Developer")
 	insertLiveSession(t, sessDB, "dev", "proj", "Developer")
 
-	// Insert a proxy request BEFORE any task is claimed.
+	// Insert a token usage record BEFORE any task is claimed.
 	oldTime := time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339)
-	insertProxyRequest(t, sessDB, "old-req", "dev", oldTime, 5.00, 99999, 99999, 99999, 99999)
+	insertTokenUsage(t, sessDB, "dev", oldTime, 5.00, 99999, 99999, 99999, 99999)
 
 	s.CreateTask(ctx, "proj", "Fresh work", "", "medium", "admin")
 	claimed, err := s.ClaimTask(ctx, "proj", "dev")
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 
-	// Insert one request after claim.
+	// Insert one record after claim.
 	claimedAt := *claimed.ClaimedAt
-	insertProxyRequest(t, sessDB, "new-req", "dev", claimedAt, 0.02, 500, 100, 0, 0)
+	insertTokenUsage(t, sessDB, "dev", claimedAt, 0.02, 500, 100, 0, 0)
 
 	cost, err := s.GetTaskLiveCost(ctx, "proj", claimed.ID)
 	require.NoError(t, err)

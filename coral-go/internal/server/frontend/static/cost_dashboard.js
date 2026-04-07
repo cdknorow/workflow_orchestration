@@ -54,22 +54,55 @@ export function stopCostDashboard() {
 export async function _refreshCostDashboard() {
     const period = document.getElementById('cost-time-range')?.value || 'day';
 
+    // Map period to a 'since' timestamp for the unified token-usage API
+    const sinceMap = { 'hour': 1, 'day': 24, 'week': 168, 'month': 720, 'all': 0 };
+    const hoursAgo = sinceMap[period] || 24;
+    const since = hoursAgo > 0 ? new Date(Date.now() - hoursAgo * 3600000).toISOString() : '';
+    const sinceParam = since ? `?since=${encodeURIComponent(since)}` : '';
+
     try {
-        const [statsResp, reqResp] = await Promise.all([
-            fetch(`/api/proxy/stats?period=${encodeURIComponent(period)}`).catch(() => null),
+        const [summaryResp, reqResp] = await Promise.all([
+            fetch(`/api/token-usage/summary${sinceParam}`).catch(() => null),
             fetch('/api/proxy/requests?limit=100').catch(() => null),
         ]);
 
-        if (statsResp && statsResp.ok) {
-            const data = await statsResp.json();
-            _setText('cost-input-tokens', _formatTokens(data.total_input_tokens || 0));
-            _setText('cost-output-tokens', _formatTokens(data.total_output_tokens || 0));
-            _setText('cost-cache-read', _formatTokens(data.total_cache_read_tokens || 0));
-            _setText('cost-cache-write', _formatTokens(data.total_cache_write_tokens || 0));
-            _setText('cost-total-requests', String(data.total_requests || 0));
-            _setText('cost-total-cost', _formatCost(data.total_cost_usd || 0));
-            _renderModelTable(data.by_model || []);
-            _renderAgentTable(data.by_agent || []);
+        if (summaryResp && summaryResp.ok) {
+            const data = await summaryResp.json();
+            const t = data.totals || {};
+            _setText('cost-input-tokens', _formatTokens(t.input_tokens || 0));
+            _setText('cost-output-tokens', _formatTokens(t.output_tokens || 0));
+            _setText('cost-cache-read', _formatTokens(t.cache_read_tokens || 0));
+            _setText('cost-cache-write', _formatTokens(t.cache_write_tokens || 0));
+            _setText('cost-total-requests', String(t.num_sessions || 0));
+            _setText('cost-total-cost', _formatCost(t.cost_usd || 0));
+
+            // Render per-agent-type breakdown as model table
+            _renderModelTable((data.by_agent_type || []).map(a => ({
+                model: a.agent_type || 'unknown',
+                requests: a.num_sessions || 0,
+                input_tokens: a.input_tokens || 0,
+                output_tokens: a.output_tokens || 0,
+                cache_read_tokens: a.cache_read_tokens || 0,
+                cache_write_tokens: a.cache_write_tokens || 0,
+                cost_usd: a.cost_usd || 0,
+            })));
+
+            // Render per-agent (session) breakdown
+            _renderAgentTable((data.by_agent || []).map(a => {
+                let name = a.agent_name || 'unknown';
+                if (a.board_name) name += ` (${a.board_name})`;
+                return {
+                    session_id: a.session_id,
+                    agent_name: a.agent_name,
+                    display_name: name,
+                    requests: a.requests || 0,
+                    input_tokens: a.input_tokens || 0,
+                    output_tokens: a.output_tokens || 0,
+                    cache_read_tokens: a.cache_read_tokens || 0,
+                    cache_write_tokens: a.cache_write_tokens || 0,
+                    cost_usd: a.cost_usd || 0,
+                };
+            }));
         }
 
         if (reqResp && reqResp.ok) {

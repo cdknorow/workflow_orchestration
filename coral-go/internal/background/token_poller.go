@@ -70,13 +70,15 @@ func (p *TokenPoller) pollOnce(ctx context.Context) {
 	}
 
 	for _, ls := range sessions {
-		if ls.AgentType != at.Codex {
-			continue
-		}
 		if ls.IsSleeping == 1 {
 			continue
 		}
-		p.pollCodexSession(ctx, &ls)
+		switch ls.AgentType {
+		case at.Codex:
+			p.pollCodexSession(ctx, &ls)
+		case at.Claude:
+			p.pollClaudeSession(ctx, &ls)
+		}
 	}
 }
 
@@ -150,7 +152,7 @@ func (p *TokenPoller) pollCodexSession(ctx context.Context, ls *store.LiveSessio
 		if model == "" {
 			model = "gpt-5.4"
 		}
-		costUSD := estimateCost(model, deltaInput, deltaOutput, deltaCached)
+		costUSD := estimateCost(model, deltaInput, deltaOutput, deltaCached, 0)
 
 		record := &store.TokenUsage{
 			SessionID:       ls.SessionID,
@@ -165,7 +167,8 @@ func (p *TokenPoller) pollCodexSession(ctx context.Context, ls *store.LiveSessio
 			CostUSD:         costUSD,
 			SessionStartAt:  usage.SessionStartAt,
 			LastActivityAt:  call.Timestamp,
-			RecordedAt:      call.Timestamp, // Use the actual event timestamp as the key
+			RecordedAt:      call.Timestamp,
+			Source:          "jsonl",
 		}
 
 		if err := p.usageStore.RecordUsage(ctx, record); err != nil {
@@ -425,12 +428,217 @@ func peekCodexCWD(path string) string {
 	return ""
 }
 
+// ── Claude JSONL token tracking ───────────────────────────────
+
+// claudeCallData represents a single assistant turn's token usage from a Claude JSONL file.
+type claudeCallData struct {
+	InputTokens      int
+	OutputTokens     int
+	CacheReadTokens  int
+	CacheWriteTokens int
+	Model            string
+	Timestamp        string
+}
+
+// claudeUsageData holds all per-turn usage records extracted from a Claude JSONL file.
+type claudeUsageData struct {
+	Calls          []claudeCallData
+	SessionStartAt string
+}
+
+func (p *TokenPoller) pollClaudeSession(ctx context.Context, ls *store.LiveSession) {
+	// Resolve the JSONL file path (cached per session)
+	jsonlPath, ok := p.sessionPaths[ls.SessionID]
+	if !ok {
+		jsonlPath = resolveClaudeTranscriptPath(ls.SessionID, ls.WorkingDir)
+		if jsonlPath == "" {
+			return
+		}
+		p.logger.Info("matched JSONL file for Claude session",
+			"session_id", ls.SessionID[:8],
+			"path", filepath.Base(jsonlPath))
+		p.sessionPaths[ls.SessionID] = jsonlPath
+	}
+
+	// Check mtime to skip unchanged files
+	info, err := os.Stat(jsonlPath)
+	if err != nil {
+		return
+	}
+	if lastMtime, ok := p.lastMtime[jsonlPath]; ok && !info.ModTime().After(lastMtime) {
+		return
+	}
+	p.lastMtime[jsonlPath] = info.ModTime()
+
+	usage := extractClaudeUsage(jsonlPath)
+	if usage == nil || len(usage.Calls) == 0 {
+		return
+	}
+
+	// Skip entries we've already processed
+	alreadyProcessed := p.lastEntryCount[ls.SessionID]
+	if len(usage.Calls) <= alreadyProcessed {
+		return
+	}
+	newCalls := usage.Calls[alreadyProcessed:]
+
+	agentName := ""
+	if ls.DisplayName != nil {
+		agentName = *ls.DisplayName
+	}
+
+	for _, call := range newCalls {
+		// Skip zero-usage entries
+		if call.InputTokens == 0 && call.OutputTokens == 0 {
+			continue
+		}
+
+		model := call.Model
+		if model == "" {
+			model = "claude-sonnet-4-20250514"
+		}
+		costUSD := estimateCost(model, call.InputTokens, call.OutputTokens, call.CacheReadTokens, call.CacheWriteTokens)
+
+		record := &store.TokenUsage{
+			SessionID:        ls.SessionID,
+			AgentName:        agentName,
+			AgentType:        at.Claude,
+			TeamID:           ls.TeamID,
+			BoardName:        ls.BoardName,
+			InputTokens:      call.InputTokens,
+			OutputTokens:     call.OutputTokens,
+			CacheReadTokens:  call.CacheReadTokens,
+			CacheWriteTokens: call.CacheWriteTokens,
+			TotalTokens:      call.InputTokens + call.OutputTokens + call.CacheReadTokens + call.CacheWriteTokens,
+			CostUSD:          costUSD,
+			SessionStartAt:   usage.SessionStartAt,
+			LastActivityAt:   call.Timestamp,
+			RecordedAt:       call.Timestamp,
+			Source:           "jsonl",
+		}
+
+		if err := p.usageStore.RecordUsage(ctx, record); err != nil {
+			p.logger.Error("failed to record Claude usage", "session_id", ls.SessionID, "error", err)
+			continue
+		}
+
+		p.logger.Debug("recorded Claude turn",
+			"session_id", ls.SessionID[:8],
+			"model", model,
+			"input", call.InputTokens,
+			"output", call.OutputTokens,
+			"cost_usd", costUSD,
+			"timestamp", call.Timestamp)
+	}
+
+	p.lastEntryCount[ls.SessionID] = len(usage.Calls)
+}
+
+// extractClaudeUsage reads a Claude JSONL file and extracts per-turn token usage
+// from assistant entries. Unlike Codex (cumulative), Claude values are per-turn.
+func extractClaudeUsage(path string) *claudeUsageData {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil
+	}
+
+	result := &claudeUsageData{}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var entry struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			Message   struct {
+				Model string `json:"model"`
+				Usage struct {
+					InputTokens              int `json:"input_tokens"`
+					OutputTokens             int `json:"output_tokens"`
+					CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+					CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+				} `json:"usage"`
+			} `json:"message"`
+		}
+
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		// Capture first timestamp as session start
+		if entry.Timestamp != "" && result.SessionStartAt == "" {
+			result.SessionStartAt = entry.Timestamp
+		}
+
+		// Extract usage from assistant entries
+		if entry.Type == "assistant" && entry.Message.Usage.InputTokens > 0 {
+			result.Calls = append(result.Calls, claudeCallData{
+				InputTokens:      entry.Message.Usage.InputTokens,
+				OutputTokens:     entry.Message.Usage.OutputTokens,
+				CacheReadTokens:  entry.Message.Usage.CacheReadInputTokens,
+				CacheWriteTokens: entry.Message.Usage.CacheCreationInputTokens,
+				Model:            entry.Message.Model,
+				Timestamp:        entry.Timestamp,
+			})
+		}
+	}
+
+	if len(result.Calls) == 0 {
+		return nil
+	}
+	return result
+}
+
+// resolveClaudeTranscriptPath finds the Claude JSONL file for a session.
+func resolveClaudeTranscriptPath(sessionID, workingDir string) string {
+	home, _ := os.UserHomeDir()
+	basePath := os.Getenv("CLAUDE_PROJECTS_DIR")
+	if basePath == "" {
+		basePath = filepath.Join(home, ".claude", "projects")
+	}
+
+	// Try working directory hint first
+	if workingDir != "" {
+		encoded := strings.ReplaceAll(workingDir, "/", "-")
+		candidate := filepath.Join(basePath, encoded, sessionID+".jsonl")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	// Search all project dirs
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		candidate := filepath.Join(basePath, entry.Name(), sessionID+".jsonl")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // estimateCost calculates estimated cost based on model pricing.
-func estimateCost(model string, inputTokens, outputTokens, cachedTokens int) float64 {
+func estimateCost(model string, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int) float64 {
 	breakdown := proxy.CalculateCostBreakdown(model, proxy.TokenUsage{
-		InputTokens:     inputTokens,
-		OutputTokens:    outputTokens,
-		CacheReadTokens: cachedTokens,
+		InputTokens:      inputTokens,
+		OutputTokens:     outputTokens,
+		CacheReadTokens:  cacheReadTokens,
+		CacheWriteTokens: cacheWriteTokens,
 	})
 	return breakdown.TotalCostUSD
 }

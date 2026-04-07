@@ -19,13 +19,32 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// TokenUsageRecord is the data passed to the token usage recorder callback.
+type TokenUsageRecord struct {
+	SessionID        string
+	AgentName        string
+	AgentType        string
+	Model            string
+	InputTokens      int
+	OutputTokens     int
+	CacheReadTokens  int
+	CacheWriteTokens int
+	CostUSD          float64
+	RecordedAt       string
+	Source           string // "proxy"
+}
+
+// TokenUsageRecorderFn writes a token usage record to the unified token_usage table.
+type TokenUsageRecorderFn func(ctx context.Context, record *TokenUsageRecord) error
+
 // Proxy is the core LLM proxy handler.
 type Proxy struct {
-	store     *Store
-	providers map[Provider]ProviderConfig
-	client    *http.Client
-	events    *EventHub
-	startedAt time.Time
+	store         *Store
+	providers     map[Provider]ProviderConfig
+	client        *http.Client
+	events        *EventHub
+	startedAt     time.Time
+	recordTokenFn TokenUsageRecorderFn
 }
 
 // New creates a new Proxy with the given database and provider configs.
@@ -70,6 +89,51 @@ func (p *Proxy) GetSessionUpstream(ctx context.Context, sessionID string, provid
 		return "https://api.openai.com"
 	default:
 		return "https://api.anthropic.com"
+	}
+}
+
+// SetTokenUsageRecorder sets the callback for writing to the unified token_usage table.
+func (p *Proxy) SetTokenUsageRecorder(fn TokenUsageRecorderFn) {
+	p.recordTokenFn = fn
+}
+
+// recordTokenUsage writes a token usage record if the recorder is configured.
+func (p *Proxy) recordTokenUsage(ctx context.Context, sessionID string, provider Provider, model string, usage TokenUsage, breakdown CostBreakdown) {
+	if p.recordTokenFn == nil {
+		return
+	}
+
+	record := &TokenUsageRecord{
+		SessionID:        sessionID,
+		Model:            model,
+		InputTokens:      usage.InputTokens,
+		OutputTokens:     usage.OutputTokens,
+		CacheReadTokens:  usage.CacheReadTokens,
+		CacheWriteTokens: usage.CacheWriteTokens,
+		CostUSD:          breakdown.TotalCostUSD,
+		RecordedAt:       time.Now().UTC().Format(time.RFC3339),
+		Source:           "proxy",
+	}
+
+	// Look up agent info from live_sessions
+	if p.store != nil {
+		var meta struct {
+			AgentName *string `db:"agent_name"`
+			AgentType *string `db:"agent_type"`
+		}
+		if err := p.store.db.GetContext(ctx, &meta,
+			"SELECT agent_name, agent_type FROM live_sessions WHERE session_id = ?", sessionID); err == nil {
+			if meta.AgentName != nil {
+				record.AgentName = *meta.AgentName
+			}
+			if meta.AgentType != nil {
+				record.AgentType = *meta.AgentType
+			}
+		}
+	}
+
+	if err := p.recordTokenFn(ctx, record); err != nil {
+		slog.Debug("[proxy] failed to record token usage", "session_id", sessionID, "error", err)
 	}
 }
 
@@ -354,6 +418,7 @@ func (p *Proxy) handleOpenAIResponsesJSON(w http.ResponseWriter, req *http.Reque
 		p.events.PublishError(reqID, sessionID, model, resp.StatusCode, errMsg)
 	} else {
 		p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+		p.recordTokenUsage(req.Context(), sessionID, ProviderOpenAI, model, usage, breakdown)
 	}
 
 	p.setProxyHeaders(w, reqID, sessionID, breakdown.TotalCostUSD)
@@ -425,6 +490,7 @@ func (p *Proxy) handleOpenAIResponsesSSE(w http.ResponseWriter, req *http.Reques
 	breakdown := CalculateCostBreakdown(model, usage)
 	p.store.CompleteRequest(completeCtx, reqID, usage, breakdown, resp.StatusCode, "success", "")
 	p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+	p.recordTokenUsage(completeCtx, sessionID, ProviderOpenAI, model, usage, breakdown)
 
 	if debugProxy() {
 		slog.Info("[proxy] openai responses SSE complete",
@@ -467,6 +533,7 @@ func (p *Proxy) handleAnthropicJSON(w http.ResponseWriter, req *http.Request, re
 		p.events.PublishError(reqID, sessionID, model, resp.StatusCode, errMsg)
 	} else {
 		p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+		p.recordTokenUsage(req.Context(), sessionID, ProviderAnthropic, model, usage, breakdown)
 	}
 
 	// Forward response to agent with proxy headers
@@ -544,6 +611,7 @@ func (p *Proxy) handleAnthropicSSE(w http.ResponseWriter, req *http.Request, req
 	breakdown := CalculateCostBreakdown(model, usage)
 	p.store.CompleteRequest(completeCtx, reqID, usage, breakdown, resp.StatusCode, "success", "")
 	p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+	p.recordTokenUsage(completeCtx, sessionID, ProviderAnthropic, model, usage, breakdown)
 
 	if debugProxy() {
 		slog.Info("[proxy] anthropic SSE complete",
@@ -585,6 +653,7 @@ func (p *Proxy) handleOpenAIJSON(w http.ResponseWriter, req *http.Request, reqID
 		p.events.PublishError(reqID, sessionID, model, resp.StatusCode, errMsg)
 	} else {
 		p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+		p.recordTokenUsage(req.Context(), sessionID, ProviderOpenAI, model, usage, breakdown)
 	}
 
 	p.setProxyHeaders(w, reqID, sessionID, breakdown.TotalCostUSD)
@@ -657,6 +726,7 @@ func (p *Proxy) handleOpenAISSE(w http.ResponseWriter, req *http.Request, reqID,
 	breakdown := CalculateCostBreakdown(model, usage)
 	p.store.CompleteRequest(completeCtx, reqID, usage, breakdown, resp.StatusCode, "success", "")
 	p.events.PublishCompleted(reqID, sessionID, model, usage, breakdown.TotalCostUSD, 0, resp.StatusCode)
+	p.recordTokenUsage(completeCtx, sessionID, ProviderOpenAI, model, usage, breakdown)
 
 	if debugProxy() {
 		slog.Info("[proxy] openai SSE complete",
