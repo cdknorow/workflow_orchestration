@@ -695,6 +695,7 @@ async function _openInlinePane(filepath, initialView) {
             </button>
             <span class="inline-preview-filepath" title="${escapeHtml(filepath)}">${escapeHtml(name)}</span>
             <div class="inline-preview-actions">
+                <button class="inline-preview-mode-btn file-star-btn ${_getStarredFiles().includes(filepath) ? 'starred' : ''}" id="preview-star-btn" onclick="window._togglePreviewStar()" title="Star">${_getStarredFiles().includes(filepath) ? '★' : '☆'}</button>
                 <button class="inline-preview-mode-btn" id="mode-btn-diff" onclick="window._switchMode('diff')" title="Diff"><span class="material-icons">difference</span></button>
                 <button class="inline-preview-mode-btn" id="mode-btn-preview" onclick="window._switchMode('preview')" title="Preview"><span class="material-icons">visibility</span></button>
                 <button class="inline-preview-mode-btn" id="mode-btn-edit" onclick="window._switchMode('edit')" title="Edit"><span class="material-icons">edit</span></button>
@@ -874,6 +875,18 @@ function _updateModeButtons(activeMode) {
     const saveBtn = document.getElementById('preview-save-btn');
     if (saveBtn) saveBtn.style.display = activeMode === 'edit' ? '' : 'none';
 }
+
+/** Toggle star on the currently previewed file. */
+window._togglePreviewStar = function() {
+    if (!_previewState) return;
+    toggleStarFile(_previewState.filepath);
+    const btn = document.getElementById('preview-star-btn');
+    if (btn) {
+        const isStarred = _getStarredFiles().includes(_previewState.filepath);
+        btn.textContent = isStarred ? '★' : '☆';
+        btn.classList.toggle('starred', isStarred);
+    }
+};
 
 /** Switch between diff, preview, and edit modes. */
 window._switchMode = async function(targetMode) {

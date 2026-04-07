@@ -1113,11 +1113,12 @@
     padding: 2px;
     font-size: 14px;
     line-height: 1;
-    opacity: 0.3;
+    opacity: 0.5;
+    color: var(--text-secondary);
     transition: opacity 0.15s;
 }
 
-.file-star-btn:hover, .file-star-btn:focus { opacity: 0.7; outline: none; }
+.file-star-btn:hover, .file-star-btn:focus { opacity: 0.85; outline: none; }
 .file-star-btn:focus-visible { opacity: 0.7; outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
 .file-star-btn.starred { opacity: 1; color: var(--warning); }
 
