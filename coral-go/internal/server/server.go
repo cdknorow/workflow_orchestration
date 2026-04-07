@@ -168,6 +168,11 @@ func (s *Server) BoardStore() *board.Store {
 	return s.boardStore
 }
 
+// Proxy returns the LLM proxy instance, or nil if not yet initialized.
+func (s *Server) Proxy() *proxy.Proxy {
+	return s.proxy
+}
+
 // RestoreSleepingBoards restores board pause state for sleeping teams on startup.
 func (s *Server) RestoreSleepingBoards() {
 	ss := store.NewSessionStore(s.db)

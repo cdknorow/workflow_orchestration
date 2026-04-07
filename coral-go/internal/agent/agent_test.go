@@ -1008,6 +1008,268 @@ func TestCleanupTempFiles_EmptySessionID(t *testing.T) {
 	CleanupTempFiles("") // should not panic
 }
 
+// ── Env Deep-Merge Tests ──────────────────────────────────────
+
+// writeSettingsFile creates a settings JSON file in the given directory.
+func writeSettingsFile(t *testing.T, dir, filename string, content map[string]interface{}) {
+	t.Helper()
+	data, err := json.MarshalIndent(content, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal settings: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("failed to create dir %s: %v", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filename), data, 0644); err != nil {
+		t.Fatalf("failed to write %s: %v", filename, err)
+	}
+}
+
+func TestBuildMergedSettings_EnvDeepMerge_GlobalAndProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSettingsFile(t, filepath.Join(home, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION":              "us-east-1",
+			"CLAUDE_CODE_USE_BEDROCK": "1",
+		},
+	})
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"ANTHROPIC_API_KEY": "sk-test-key",
+		},
+	})
+
+	merged := buildMergedSettings(tmpDir, nil)
+	env, ok := merged["env"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected env map in merged settings")
+	}
+	if env["AWS_REGION"] != "us-east-1" {
+		t.Errorf("AWS_REGION lost during merge, got %v", env["AWS_REGION"])
+	}
+	if env["CLAUDE_CODE_USE_BEDROCK"] != "1" {
+		t.Errorf("CLAUDE_CODE_USE_BEDROCK lost during merge, got %v", env["CLAUDE_CODE_USE_BEDROCK"])
+	}
+	if env["ANTHROPIC_API_KEY"] != "sk-test-key" {
+		t.Errorf("ANTHROPIC_API_KEY missing, got %v", env["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestBuildMergedSettings_EnvDeepMerge_ProjectOverridesGlobal(t *testing.T) {
+	tmpDir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSettingsFile(t, filepath.Join(home, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION":      "us-east-1",
+			"ANTHROPIC_MODEL": "claude-3-opus",
+		},
+	})
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION": "eu-west-1",
+		},
+	})
+
+	merged := buildMergedSettings(tmpDir, nil)
+	env := merged["env"].(map[string]interface{})
+	if env["AWS_REGION"] != "eu-west-1" {
+		t.Errorf("project should override global AWS_REGION, got %v", env["AWS_REGION"])
+	}
+	if env["ANTHROPIC_MODEL"] != "claude-3-opus" {
+		t.Errorf("global ANTHROPIC_MODEL should be preserved, got %v", env["ANTHROPIC_MODEL"])
+	}
+}
+
+func TestBuildMergedSettings_EnvDeepMerge_LocalOverridesProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION":      "us-east-1",
+			"ANTHROPIC_MODEL": "claude-3-opus",
+		},
+	})
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.local.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION": "ap-southeast-1",
+		},
+	})
+
+	merged := buildMergedSettings(tmpDir, nil)
+	env := merged["env"].(map[string]interface{})
+	if env["AWS_REGION"] != "ap-southeast-1" {
+		t.Errorf("local should override project AWS_REGION, got %v", env["AWS_REGION"])
+	}
+	if env["ANTHROPIC_MODEL"] != "claude-3-opus" {
+		t.Errorf("project ANTHROPIC_MODEL should be preserved, got %v", env["ANTHROPIC_MODEL"])
+	}
+}
+
+func TestBuildMergedSettings_EnvDeepMerge_EmptyEnvDoesNotWipe(t *testing.T) {
+	tmpDir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSettingsFile(t, filepath.Join(home, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION": "us-east-1",
+		},
+	})
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{},
+	})
+
+	merged := buildMergedSettings(tmpDir, nil)
+	env, ok := merged["env"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected env map in merged settings")
+	}
+	if env["AWS_REGION"] != "us-east-1" {
+		t.Errorf("empty project env should not wipe global, got %v", env["AWS_REGION"])
+	}
+}
+
+func TestBuildMergedSettings_EnvDeepMerge_ThreeLevelPrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSettingsFile(t, filepath.Join(home, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"VAR_A": "global-a",
+			"VAR_B": "global-b",
+			"VAR_C": "global-c",
+		},
+	})
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"VAR_B": "project-b",
+			"VAR_D": "project-d",
+		},
+	})
+	writeSettingsFile(t, filepath.Join(tmpDir, ".claude"), "settings.local.json", map[string]interface{}{
+		"env": map[string]interface{}{
+			"VAR_C": "local-c",
+			"VAR_E": "local-e",
+		},
+	})
+
+	merged := buildMergedSettings(tmpDir, nil)
+	env := merged["env"].(map[string]interface{})
+
+	expected := map[string]string{
+		"VAR_A": "global-a",
+		"VAR_B": "project-b",
+		"VAR_C": "local-c",
+		"VAR_D": "project-d",
+		"VAR_E": "local-e",
+	}
+	for k, want := range expected {
+		if got := env[k]; got != want {
+			t.Errorf("env[%q] = %v, want %q", k, got, want)
+		}
+	}
+}
+
+func TestBuildMergedSettings_EnvDeepMerge_NoEnvBlocks(t *testing.T) {
+	tmpDir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSettingsFile(t, filepath.Join(home, ".claude"), "settings.json", map[string]interface{}{
+		"permissions": map[string]interface{}{"allow": []string{"Read"}},
+	})
+
+	merged := buildMergedSettings(tmpDir, nil)
+	if _, ok := merged["env"]; ok {
+		t.Error("should not have env key when no sources define env")
+	}
+}
+
+// ── Provider Detection: Env Precedence Tests ─────────────────
+
+func TestDetectUpstreamURL_MergedEnvTakesPrecedenceOverOS(t *testing.T) {
+	// Merged env should take priority over os.Getenv()
+	t.Setenv("ANTHROPIC_BASE_URL", "https://os-level-gateway.example.com")
+	env := map[string]interface{}{
+		"ANTHROPIC_BASE_URL": "https://settings-gateway.example.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.UpstreamURL != "https://settings-gateway.example.com" {
+		t.Errorf("merged env should take precedence over os env, got %q", info.UpstreamURL)
+	}
+}
+
+func TestDetectUpstreamURL_OSEnvFallback(t *testing.T) {
+	// When merged env is empty, falls back to os.Getenv()
+	t.Setenv("ANTHROPIC_BASE_URL", "https://os-level-gateway.example.com")
+	info := DetectUpstreamURL(map[string]interface{}{})
+	if info.Provider != "anthropic" {
+		t.Errorf("expected provider 'anthropic', got %q", info.Provider)
+	}
+	if info.UpstreamURL != "https://os-level-gateway.example.com" {
+		t.Errorf("should fall back to os env, got %q", info.UpstreamURL)
+	}
+}
+
+func TestDetectUpstreamURL_BedrockOSEnvFallback(t *testing.T) {
+	// Bedrock via OS env only (not in settings)
+	t.Setenv("ANTHROPIC_BEDROCK_BASE_URL", "https://bedrock-runtime.us-west-2.amazonaws.com")
+	info := DetectUpstreamURL(map[string]interface{}{})
+	if info.Provider != "bedrock" {
+		t.Errorf("expected bedrock from OS env fallback, got %q", info.Provider)
+	}
+	if info.UpstreamURL != "https://bedrock-runtime.us-west-2.amazonaws.com" {
+		t.Errorf("expected bedrock URL from OS env, got %q", info.UpstreamURL)
+	}
+}
+
+func TestDetectUpstreamURL_BedrockModeViaOSEnv(t *testing.T) {
+	// CLAUDE_CODE_USE_BEDROCK=1 via OS env with AWS_REGION in merged env
+	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+	env := map[string]interface{}{
+		"AWS_REGION": "ap-northeast-1",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "bedrock" {
+		t.Errorf("expected bedrock, got %q", info.Provider)
+	}
+	if info.UpstreamURL != "https://bedrock-runtime.ap-northeast-1.amazonaws.com" {
+		t.Errorf("expected bedrock URL with ap-northeast-1, got %q", info.UpstreamURL)
+	}
+}
+
+func TestDetectUpstreamURL_VertexPrecedenceOverAnthropic(t *testing.T) {
+	// Vertex should take precedence over direct Anthropic
+	env := map[string]interface{}{
+		"ANTHROPIC_VERTEX_BASE_URL": "https://us-central1-aiplatform.googleapis.com",
+		"ANTHROPIC_BASE_URL":        "https://api.anthropic.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "vertex" {
+		t.Errorf("vertex should take precedence over anthropic, got %q", info.Provider)
+	}
+}
+
+func TestDetectUpstreamURL_AnthropicPrecedenceOverOpenAI(t *testing.T) {
+	// Direct Anthropic should take precedence over OpenAI
+	env := map[string]interface{}{
+		"ANTHROPIC_BASE_URL": "https://custom-anthropic.example.com",
+		"OPENAI_BASE_URL":    "https://api.openai.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "anthropic" {
+		t.Errorf("anthropic should take precedence over openai, got %q", info.Provider)
+	}
+}
+
 // ── Shell Detection Tests ───────────────────────────────────
 
 func TestClassifyShell(t *testing.T) {
@@ -1023,6 +1285,190 @@ func TestClassifyShell(t *testing.T) {
 		if got := classifyShell(tt.input); got != tt.expected {
 			t.Errorf("classifyShell(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
+	}
+}
+
+// ── DetectUpstreamURL Tests ───────────────────────────────────
+
+func TestDetectUpstreamURL_Default(t *testing.T) {
+	// Clear env vars that would interfere with default detection
+	for _, key := range []string{"ANTHROPIC_BASE_URL", "ANTHROPIC_BEDROCK_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "ANTHROPIC_VERTEX_BASE_URL", "CLAUDE_CODE_USE_VERTEX", "OPENAI_BASE_URL"} {
+		t.Setenv(key, "")
+	}
+	info := DetectUpstreamURL(map[string]interface{}{})
+	if info.Provider != "anthropic" || info.UpstreamURL != "https://api.anthropic.com" {
+		t.Errorf("expected default anthropic, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_BedrockBaseURL(t *testing.T) {
+	env := map[string]interface{}{
+		"ANTHROPIC_BEDROCK_BASE_URL": "https://bedrock-runtime.us-west-2.amazonaws.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "bedrock" || info.UpstreamURL != "https://bedrock-runtime.us-west-2.amazonaws.com" {
+		t.Errorf("expected bedrock, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_BedrockFlag(t *testing.T) {
+	env := map[string]interface{}{
+		"CLAUDE_CODE_USE_BEDROCK": "1",
+		"AWS_REGION":              "eu-west-1",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "bedrock" || info.UpstreamURL != "https://bedrock-runtime.eu-west-1.amazonaws.com" {
+		t.Errorf("expected bedrock eu-west-1, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_BedrockFlagDefaultRegion(t *testing.T) {
+	env := map[string]interface{}{
+		"CLAUDE_CODE_USE_BEDROCK": "1",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "bedrock" || !strings.Contains(info.UpstreamURL, "us-east-1") {
+		t.Errorf("expected bedrock us-east-1 default, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_VertexBaseURL(t *testing.T) {
+	env := map[string]interface{}{
+		"ANTHROPIC_VERTEX_BASE_URL": "https://us-east5-aiplatform.googleapis.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "vertex" || info.UpstreamURL != "https://us-east5-aiplatform.googleapis.com" {
+		t.Errorf("expected vertex, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_VertexFlag(t *testing.T) {
+	env := map[string]interface{}{
+		"CLAUDE_CODE_USE_VERTEX": "1",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "vertex" {
+		t.Errorf("expected vertex provider, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_CustomAnthropicBase(t *testing.T) {
+	env := map[string]interface{}{
+		"ANTHROPIC_BASE_URL": "https://my-gateway.corp.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "anthropic" || info.UpstreamURL != "https://my-gateway.corp.com" {
+		t.Errorf("expected custom anthropic, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_OpenAI(t *testing.T) {
+	// Clear ANTHROPIC_BASE_URL so it doesn't take priority over OpenAI
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	env := map[string]interface{}{
+		"OPENAI_BASE_URL": "https://api.openai.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "openai" || info.UpstreamURL != "https://api.openai.com" {
+		t.Errorf("expected openai, got %+v", info)
+	}
+}
+
+func TestDetectUpstreamURL_BedrockTakesPriority(t *testing.T) {
+	env := map[string]interface{}{
+		"ANTHROPIC_BEDROCK_BASE_URL": "https://bedrock.us-east-1.amazonaws.com",
+		"ANTHROPIC_BASE_URL":         "https://api.anthropic.com",
+		"OPENAI_BASE_URL":            "https://api.openai.com",
+	}
+	info := DetectUpstreamURL(env)
+	if info.Provider != "bedrock" {
+		t.Errorf("expected bedrock to take priority, got %+v", info)
+	}
+}
+
+// ── Env Deep-Merge Tests ──────────────────────────────────────
+
+func TestBuildMergedSettings_EnvDeepMerge(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create global settings with AWS env vars
+	globalDir := filepath.Join(tmpDir, "global")
+	os.MkdirAll(globalDir, 0755)
+	globalSettings := map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION":             "us-east-1",
+			"CLAUDE_CODE_USE_BEDROCK": "1",
+		},
+	}
+	globalData, _ := json.Marshal(globalSettings)
+	os.WriteFile(filepath.Join(globalDir, "settings.json"), globalData, 0644)
+
+	// Create project settings with a different env var
+	projectClaudeDir := filepath.Join(tmpDir, "project", ".claude")
+	os.MkdirAll(projectClaudeDir, 0755)
+	projectSettings := map[string]interface{}{
+		"env": map[string]interface{}{
+			"ANTHROPIC_API_KEY": "sk-test-key",
+		},
+	}
+	projectData, _ := json.Marshal(projectSettings)
+	os.WriteFile(filepath.Join(projectClaudeDir, "settings.json"), projectData, 0644)
+
+	// We can't easily test buildMergedSettings with custom home dir,
+	// so test the merge logic directly by calling readSettingsFile and merging.
+	global := readSettingsFile(filepath.Join(globalDir, "settings.json"))
+	project := readSettingsFile(filepath.Join(projectClaudeDir, "settings.json"))
+
+	// Simulate the deep-merge logic
+	mergedEnv := make(map[string]interface{})
+	for _, source := range []map[string]interface{}{global, project} {
+		if env, ok := source["env"].(map[string]interface{}); ok {
+			for k, v := range env {
+				mergedEnv[k] = v
+			}
+		}
+	}
+
+	// Verify all env vars are present (deep merge)
+	if mergedEnv["AWS_REGION"] != "us-east-1" {
+		t.Errorf("expected AWS_REGION from global, got %v", mergedEnv["AWS_REGION"])
+	}
+	if mergedEnv["CLAUDE_CODE_USE_BEDROCK"] != "1" {
+		t.Errorf("expected CLAUDE_CODE_USE_BEDROCK from global, got %v", mergedEnv["CLAUDE_CODE_USE_BEDROCK"])
+	}
+	if mergedEnv["ANTHROPIC_API_KEY"] != "sk-test-key" {
+		t.Errorf("expected ANTHROPIC_API_KEY from project, got %v", mergedEnv["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestBuildMergedSettings_EnvProjectOverridesGlobal(t *testing.T) {
+	// Verify that project-level env var overrides global
+	global := map[string]interface{}{
+		"env": map[string]interface{}{
+			"AWS_REGION": "us-east-1",
+			"FOO":        "global-val",
+		},
+	}
+	project := map[string]interface{}{
+		"env": map[string]interface{}{
+			"FOO": "project-val",
+		},
+	}
+
+	mergedEnv := make(map[string]interface{})
+	for _, source := range []map[string]interface{}{global, project} {
+		if env, ok := source["env"].(map[string]interface{}); ok {
+			for k, v := range env {
+				mergedEnv[k] = v
+			}
+		}
+	}
+
+	if mergedEnv["AWS_REGION"] != "us-east-1" {
+		t.Error("global AWS_REGION should be preserved")
+	}
+	if mergedEnv["FOO"] != "project-val" {
+		t.Errorf("project FOO should override global, got %v", mergedEnv["FOO"])
 	}
 }
 

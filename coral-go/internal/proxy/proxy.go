@@ -51,6 +51,28 @@ func (p *Proxy) Events() *EventHub {
 	return p.events
 }
 
+// SetSessionUpstream stores the upstream config for a proxy session.
+func (p *Proxy) SetSessionUpstream(ctx context.Context, sessionID, provider, upstreamURL string) error {
+	return p.store.SetSessionUpstream(ctx, sessionID, provider, upstreamURL)
+}
+
+// GetSessionUpstream retrieves the upstream URL for a session, falling back to
+// the provider config if no per-session upstream is set.
+func (p *Proxy) GetSessionUpstream(ctx context.Context, sessionID string, provider Provider) string {
+	if u, err := p.store.GetSessionUpstream(ctx, sessionID); err == nil && u.UpstreamURL != "" {
+		return u.UpstreamURL
+	}
+	if cfg, ok := p.providers[provider]; ok && cfg.BaseURL != "" {
+		return cfg.BaseURL
+	}
+	switch provider {
+	case ProviderOpenAI:
+		return "https://api.openai.com"
+	default:
+		return "https://api.anthropic.com"
+	}
+}
+
 // Health returns proxy health status.
 // GET /proxy/health
 func (p *Proxy) Health(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +87,15 @@ func (p *Proxy) Health(w http.ResponseWriter, r *http.Request) {
 // POST /proxy/{sessionID}/v1/messages
 func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
+
+	// Check if this session uses Bedrock — delegate to Bedrock handler
+	if p.store != nil {
+		if meta, err := p.store.GetSessionUpstream(r.Context(), sessionID); err == nil && meta != nil && meta.Provider == "bedrock" {
+			p.HandleBedrockMessages(w, r)
+			return
+		}
+	}
+
 	cfg, ok := p.providers[ProviderAnthropic]
 
 	// Determine auth mode: prefer client auth when present (CLI agents bring
@@ -102,7 +133,12 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) 
 	}
 	p.events.PublishStarted(reqID, sessionID, ProviderAnthropic, meta.Model, meta.Stream)
 
-	upstreamURL := strings.TrimRight(cfg.BaseURL, "/") + "/v1/messages"
+	// Use per-session upstream URL if available, otherwise fall back to provider config
+	baseURL := p.GetSessionUpstream(r.Context(), sessionID, ProviderAnthropic)
+	if baseURL == "" {
+		baseURL = cfg.BaseURL
+	}
+	upstreamURL := strings.TrimRight(baseURL, "/") + "/v1/messages"
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
 	if err != nil {
 		p.completeWithError(r.Context(), reqID, sessionID, meta.Model, 0, "failed to create upstream request: "+err.Error())
@@ -176,7 +212,12 @@ func (p *Proxy) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Reque
 	}
 	p.events.PublishStarted(reqID, sessionID, ProviderOpenAI, meta.Model, meta.Stream)
 
-	upstreamURL := strings.TrimRight(cfg.BaseURL, "/") + "/v1/chat/completions"
+	// Use per-session upstream URL if available, otherwise fall back to provider config
+	baseURL := p.GetSessionUpstream(r.Context(), sessionID, ProviderOpenAI)
+	if baseURL == "" {
+		baseURL = cfg.BaseURL
+	}
+	upstreamURL := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))
 	if err != nil {
 		p.completeWithError(r.Context(), reqID, sessionID, meta.Model, 0, "failed to create upstream request: "+err.Error())
@@ -246,7 +287,12 @@ func (p *Proxy) HandleOpenAIResponses(w http.ResponseWriter, r *http.Request) {
 	if isChatGPT {
 		upstreamURL = "https://chatgpt.com/backend-api/codex/responses"
 	} else {
-		upstreamURL = strings.TrimRight(cfg.BaseURL, "/") + "/v1/responses"
+		// Use per-session upstream URL if available
+		respBaseURL := p.GetSessionUpstream(r.Context(), sessionID, ProviderOpenAI)
+		if respBaseURL == "" {
+			respBaseURL = cfg.BaseURL
+		}
+		upstreamURL = strings.TrimRight(respBaseURL, "/") + "/v1/responses"
 	}
 
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, bytes.NewReader(body))

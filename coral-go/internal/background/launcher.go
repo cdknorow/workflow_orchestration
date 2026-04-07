@@ -19,12 +19,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// SessionUpstreamFn is called when a session's upstream provider is detected.
+// It stores the per-session upstream config in the proxy.
+type SessionUpstreamFn func(ctx context.Context, sessionID, provider, upstreamURL string) error
+
 // AgentLauncher creates agent sessions and launches agents.
 type AgentLauncher struct {
-	runtime AgentRuntime
-	sessDB  *store.SessionStore
-	logger  *slog.Logger
-	port    int // server port for proxy URL construction
+	runtime            AgentRuntime
+	sessDB             *store.SessionStore
+	logger             *slog.Logger
+	port               int // server port for proxy URL construction
+	setSessionUpstream SessionUpstreamFn
 }
 
 // NewAgentLauncher creates a new AgentLauncher.
@@ -35,6 +40,11 @@ func NewAgentLauncher(runtime AgentRuntime, sessDB *store.SessionStore, port int
 		logger:  slog.Default().With("service", "agent_launcher"),
 		port:    port,
 	}
+}
+
+// SetSessionUpstreamFn sets the callback for storing per-session upstream config.
+func (l *AgentLauncher) SetSessionUpstreamFn(fn SessionUpstreamFn) {
+	l.setSessionUpstream = fn
 }
 
 // LaunchResult contains the result of launching an agent.
@@ -84,6 +94,7 @@ func (l *AgentLauncher) LaunchAgent(ctx context.Context, workingDir, agentType, 
 		protocolPath := findProtocolMD()
 		// Resolve proxy URL if proxy is enabled for this agent type
 		var proxyBaseURL string
+		var upstreamProvider, upstreamBaseURL string
 		if settings, err := l.sessDB.GetSettings(ctx); err == nil && l.port > 0 {
 			proxyEnabled := false
 			if agentType == "codex" {
@@ -95,16 +106,31 @@ func (l *AgentLauncher) LaunchAgent(ctx context.Context, workingDir, agentType, 
 			}
 			if proxyEnabled {
 				proxyBaseURL = fmt.Sprintf("http://127.0.0.1:%d/proxy/%s", l.port, sessionID)
+
+				// Detect upstream provider from merged settings env + OS env
+				mergedSettings := agent.BuildMergedSettingsForDetection(workingDir)
+				upstream := agent.DetectUpstreamURL(mergedSettings)
+				upstreamProvider = upstream.Provider
+				upstreamBaseURL = upstream.UpstreamURL
+
+				// Register the upstream config with the proxy
+				if l.setSessionUpstream != nil {
+					if err := l.setSessionUpstream(ctx, sessionID, upstream.Provider, upstream.UpstreamURL); err != nil {
+						slog.Warn("failed to set session upstream", "session_id", sessionID, "error", err)
+					}
+				}
 			}
 		}
 
 		launchCmd = ag.BuildLaunchCommand(agent.LaunchParams{
-			SessionID:       sessionID,
-			ProtocolPath:    protocolPath,
-			ResumeSessionID: resumeSessionID,
-			Flags:           flags,
-			WorkingDir:      workingDir,
-			ProxyBaseURL:    proxyBaseURL,
+			SessionID:        sessionID,
+			ProtocolPath:     protocolPath,
+			ResumeSessionID:  resumeSessionID,
+			Flags:            flags,
+			WorkingDir:       workingDir,
+			ProxyBaseURL:     proxyBaseURL,
+			UpstreamBaseURL:  upstreamBaseURL,
+			UpstreamProvider: upstreamProvider,
 		})
 		// Ensure coral-hook-* binaries are reachable from app bundles
 		launchCmd = agent.WrapWithBundlePath(launchCmd)

@@ -43,6 +43,15 @@ func (s *Store) migrate() {
 		updated_at   TEXT NOT NULL DEFAULT ''
 	)`)
 
+	// Per-session proxy upstream config for universal reroute.
+	s.db.MustExec(`CREATE TABLE IF NOT EXISTS proxy_sessions (
+		session_id   TEXT PRIMARY KEY,
+		provider     TEXT NOT NULL DEFAULT 'anthropic',
+		upstream_url TEXT NOT NULL DEFAULT '',
+		aws_region   TEXT NOT NULL DEFAULT '',
+		created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+
 	schema := `
 	CREATE TABLE IF NOT EXISTS proxy_requests (
 		id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,6 +108,7 @@ func (s *Store) migrate() {
 		"ALTER TABLE proxy_requests ADD COLUMN pricing_cache_read_per_mtok REAL NOT NULL DEFAULT 0",
 		"ALTER TABLE proxy_requests ADD COLUMN pricing_cache_write_per_mtok REAL NOT NULL DEFAULT 0",
 		"ALTER TABLE proxy_requests ADD COLUMN display_name TEXT",
+		"ALTER TABLE proxy_requests ADD COLUMN upstream_url TEXT DEFAULT ''",
 	} {
 		s.db.Exec(stmt) // ignore duplicate-column errors
 	}
@@ -138,6 +148,7 @@ type ProxyRequest struct {
 	ErrorMessage             *string `db:"error_message" json:"error_message"`
 	HTTPStatus               *int    `db:"http_status" json:"http_status"`
 	CacheHit                 int     `db:"cache_hit" json:"cache_hit"`
+	UpstreamURL              *string `db:"upstream_url" json:"upstream_url,omitempty"`
 }
 
 // CreateRequest inserts a new pending proxy request.
@@ -287,6 +298,33 @@ func (s *Store) GetRequestByID(ctx context.Context, requestID string) (*ProxyReq
 		return nil, err
 	}
 	return &req, nil
+}
+
+// SessionUpstream holds the per-session upstream proxy config.
+type SessionUpstream struct {
+	SessionID   string `db:"session_id" json:"session_id"`
+	Provider    string `db:"provider" json:"provider"`
+	UpstreamURL string `db:"upstream_url" json:"upstream_url"`
+	AWSRegion   string `db:"aws_region" json:"aws_region"`
+}
+
+// SetSessionUpstream stores the upstream config for a proxy session.
+func (s *Store) SetSessionUpstream(ctx context.Context, sessionID, provider, upstreamURL string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO proxy_sessions (session_id, provider, upstream_url)
+		 VALUES (?, ?, ?)`,
+		sessionID, provider, upstreamURL)
+	return err
+}
+
+// GetSessionUpstream retrieves the upstream config for a proxy session.
+func (s *Store) GetSessionUpstream(ctx context.Context, sessionID string) (*SessionUpstream, error) {
+	var u SessionUpstream
+	err := s.db.GetContext(ctx, &u, "SELECT session_id, provider, upstream_url, aws_region FROM proxy_sessions WHERE session_id = ?", sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // AgentStats holds per-agent (session) aggregates.
