@@ -265,9 +265,10 @@ export function showBoardChatTab(boardName) {
     panel.innerHTML = `
         <div class="board-chat-header">
             <a class="board-chat-title" href="#" onclick="event.preventDefault(); selectBoardProject('${escapeAttr(boardName)}')" title="Open full board view">${escapeHtml(boardName)}</a>
-            <button class="btn-nav" id="board-chat-pause-btn" onclick="toggleBoardPause()" title="Pause/Resume message reads">Pause Reads</button>
+            <button class="btn-nav" id="board-chat-pause-btn" onclick="window._toggleBoardChatPause('${escapeAttr(boardName)}')" title="Pause/Resume message reads">Pause Reads</button>
             <button class="btn-nav board-select-btn" onclick="window._toggleBoardChatSelect()" title="Select messages to export">Export</button>
         </div>
+        <div class="board-paused-banner" id="board-chat-paused-banner" style="display:none">Board reads are paused — agents cannot see new messages</div>
         <div class="board-chat-messages" id="board-panel-msgs"></div>
         <div class="board-chat-input-pane" id="board-chat-input-pane">
             <div class="board-chat-resize-handle" id="board-chat-resize-handle"></div>
@@ -559,6 +560,29 @@ async function _sendBoardChat(boardName) {
 }
 window._sendBoardChat = _sendBoardChat;
 
+async function _toggleBoardChatPause(boardName) {
+    const btn = document.getElementById('board-chat-pause-btn');
+    const banner = document.getElementById('board-chat-paused-banner');
+    const wasPaused = btn?.classList.contains('mb-action-danger');
+    const endpoint = wasPaused ? 'resume' : 'pause';
+    try {
+        await fetch(`/api/board/${encodeURIComponent(boardName)}/${endpoint}`, { method: 'POST' });
+        if (btn) {
+            if (wasPaused) {
+                btn.textContent = 'Pause Reads';
+                btn.classList.remove('mb-action-danger');
+            } else {
+                btn.textContent = 'Resume Reads';
+                btn.classList.add('mb-action-danger');
+            }
+        }
+        if (banner) {
+            banner.style.display = wasPaused ? 'none' : '';
+        }
+    } catch { /* ignore */ }
+}
+window._toggleBoardChatPause = _toggleBoardChatPause;
+
 async function _toggleBoardPause(boardName) {
     const btn = document.getElementById('board-pause-btn');
     const isPaused = btn?.classList.contains('paused');
@@ -576,14 +600,18 @@ async function _checkBoardPauseState(boardName) {
         const resp = await fetch(`/api/board/${encodeURIComponent(boardName)}/paused`);
         const data = await resp.json();
         const btn = document.getElementById('board-chat-pause-btn');
+        const banner = document.getElementById('board-chat-paused-banner');
         if (btn) {
             if (data.paused) {
                 btn.textContent = 'Resume Reads';
-                btn.classList.add('btn-warning');
+                btn.classList.add('mb-action-danger');
             } else {
                 btn.textContent = 'Pause Reads';
-                btn.classList.remove('btn-warning');
+                btn.classList.remove('mb-action-danger');
             }
+        }
+        if (banner) {
+            banner.style.display = data.paused ? '' : 'none';
         }
     } catch { /* ignore */ }
 }

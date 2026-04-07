@@ -124,14 +124,19 @@ func Start(ctx context.Context, cfg *config.Config, opts Options) (*RunningServe
 
 	// Build the HTTP server
 	srv := server.New(cfg, db, backend, terminal)
-	srv.RestoreSleepingBoards()
 
 	// Reconcile orphaned live sessions: if the app was killed without
 	// cleanly sleeping sessions, they remain in live_sessions with
 	// is_sleeping=0 but no actual process running. Detect these and
-	// mark them as sleeping so the user can wake them.
+	// mark them as sleeping so the user can wake them. Also wakes
+	// sessions that are marked sleeping but still running (e.g. tmux
+	// survived a server restart).
 	reconcileOrphanedSessions(ctx, db, agentRT)
 	reconcileOrphanedTeams(ctx, db)
+
+	// Restore board pause state AFTER reconciliation so it reflects
+	// the final sleeping state (including recovered sessions).
+	srv.RestoreSleepingBoards()
 
 	httpServer := &http.Server{
 		Handler:           srv.Router(),
@@ -189,8 +194,18 @@ func reconcileOrphanedSessions(ctx context.Context, db *store.DB, agentRT backgr
 	}
 
 	orphaned := 0
+	recovered := 0
 	for _, ls := range liveSessions {
 		if ls.IsSleeping == 1 {
+			// Check if a sleeping session is actually alive (e.g. tmux still running
+			// after a server restart). If so, wake it.
+			if alive[ls.SessionID] {
+				if err := ss.SetSessionSleeping(ctx, ls.SessionID, false); err != nil {
+					log.Printf("[startup] failed to wake recovered session %s: %v", ls.SessionID[:8], err)
+					continue
+				}
+				recovered++
+			}
 			continue
 		}
 		if alive[ls.SessionID] {
@@ -205,6 +220,9 @@ func reconcileOrphanedSessions(ctx context.Context, db *store.DB, agentRT backgr
 	}
 	if orphaned > 0 {
 		log.Printf("[startup] Marked %d orphaned session(s) as sleeping", orphaned)
+	}
+	if recovered > 0 {
+		log.Printf("[startup] Recovered %d sleeping session(s) that are still alive", recovered)
 	}
 }
 

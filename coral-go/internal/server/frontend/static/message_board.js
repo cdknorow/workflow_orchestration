@@ -354,10 +354,10 @@ function updatePauseButton() {
         if (!btn) continue;
         if (isPaused) {
             btn.textContent = 'Resume Reads';
-            btn.classList.add('btn-warning');
+            btn.classList.add('mb-action-danger');
         } else {
             btn.textContent = 'Pause Reads';
-            btn.classList.remove('btn-warning');
+            btn.classList.remove('mb-action-danger');
         }
     }
 }

@@ -1072,6 +1072,17 @@
     flex-shrink: 0;
 }
 
+.board-paused-banner {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--error, #f85149);
+    background: rgba(248, 81, 73, 0.1);
+    border-bottom: 1px solid rgba(248, 81, 73, 0.3);
+    padding: 6px 10px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
 .board-chat-title {
     flex: 1;
     color: var(--text-primary);
