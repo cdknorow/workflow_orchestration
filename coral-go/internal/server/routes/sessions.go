@@ -2902,6 +2902,9 @@ func (h *SessionsHandler) setupBoardAndPrompt(sessionID, sessionName, agentType,
 		if isOrchestrator {
 			receiveMode = "all"
 		}
+		if agentType == "terminal" {
+			receiveMode = "none"
+		}
 
 		// Preserve existing receive_mode on re-subscribe (e.g. restart).
 		// Use session-name lookup to find the subscription for THIS session,
