@@ -110,6 +110,10 @@ func (n *BoardNotifier) RunOnce(ctx context.Context) error {
 			n.logger.Info("skipping agent with no session ID", "agent", a.AgentName)
 			continue
 		}
+		// Terminals don't process board messages — skip them
+		if a.AgentType == "terminal" {
+			continue
+		}
 
 		subscriberID := naming.SubscriberID(a.DisplayName, a.AgentType)
 		liveBoardIDs[subscriberID] = true
