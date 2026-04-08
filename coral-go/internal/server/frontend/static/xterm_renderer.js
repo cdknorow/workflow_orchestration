@@ -171,7 +171,7 @@ export function createTerminal(containerEl) {
         return terminal;
     }
 
-    const scrollback = parseInt((state.settings || {}).terminal_scrollback, 10) || 1000;
+    const scrollback = parseInt((state.settings || {}).terminal_scrollback, 10) || 20000;
     terminal = new Terminal({
         cursorBlink: true,
         cursorStyle: 'block',

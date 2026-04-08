@@ -2749,7 +2749,7 @@ export async function showSettingsModal() {
 
     // Terminal Scrollback
     const scrollbackSelect = document.getElementById("settings-terminal-scrollback");
-    if (scrollbackSelect) scrollbackSelect.value = s.terminal_scrollback || "1000";
+    if (scrollbackSelect) scrollbackSelect.value = s.terminal_scrollback || "20000";
 
     // Fit Pane Width
     const fitPaneCheck = document.getElementById("settings-fit-pane-width");
@@ -2898,7 +2898,7 @@ export async function applySettings() {
     const cliPathGemini = document.getElementById("settings-cli-path-gemini")?.value.trim() || "";
     const fitPaneWidth = document.getElementById("settings-fit-pane-width")?.checked || false;
     const notifyNeedsInput = document.getElementById("settings-notify-needs-input")?.checked || false;
-    const terminalScrollback = document.getElementById("settings-terminal-scrollback")?.value || "1000";
+    const terminalScrollback = document.getElementById("settings-terminal-scrollback")?.value || "20000";
     const checkUpdates = document.getElementById("settings-check-updates")?.checked ?? true;
     localStorage.setItem("coral-update-check-enabled", checkUpdates ? "true" : "false");
     const showScrollbars = document.getElementById("settings-show-scrollbars")?.checked ?? true;
@@ -2974,7 +2974,7 @@ export async function applySettings() {
         // Apply scrollback to existing terminal
         const term = getTerminal();
         if (term) {
-            term.options.scrollback = parseInt(terminalScrollback, 10) || 1000;
+            term.options.scrollback = parseInt(terminalScrollback, 10) || 20000;
         }
 
         // Apply scrollbar visibility

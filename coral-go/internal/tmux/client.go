@@ -392,7 +392,11 @@ func (c *Client) HasSession(ctx context.Context, name string) bool {
 // from being prepended to commands sent via send-keys.
 func (c *Client) NewSession(ctx context.Context, name, workDir string) error {
 	_, err := c.run(ctx, "new-session", "-d", "-s", name, "-c", workDir)
-	return err
+	if err != nil {
+		return err
+	}
+	c.run(ctx, "set-option", "-t", name, "history-limit", "50000")
+	return nil
 }
 
 // SetEnvironment sets an environment variable for a tmux session.
