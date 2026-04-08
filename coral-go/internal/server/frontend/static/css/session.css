@@ -404,6 +404,18 @@
     opacity: 0.7;
 }
 
+.board-card-branch {
+    margin-left: 6px;
+    color: var(--accent-primary, #58a6ff);
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.board-card-branch svg {
+    opacity: 0.8;
+}
+
 .agent-dir-chip {
     font-size: 10px;
     background: var(--bg-tertiary);

@@ -85,17 +85,19 @@ export function connectCoralWs() {
                 // state.prevSummaryState[id] = s.summary || null;
             }
 
-            // Preserve commands from previous data (REST includes them, WS does not)
+            // Preserve commands and branch from previous data when not included in WS update
             if (state.liveSessions && state.liveSessions.length) {
-                const cmdMap = {};
+                const prevMap = {};
                 for (const s of state.liveSessions) {
                     const key = s.session_id || s.name;
-                    if (s.commands) cmdMap[key] = s.commands;
+                    prevMap[key] = s;
                 }
                 for (const s of data.sessions) {
-                    if (!s.commands) {
-                        const key = s.session_id || s.name;
-                        if (cmdMap[key]) s.commands = cmdMap[key];
+                    const key = s.session_id || s.name;
+                    const prev = prevMap[key];
+                    if (prev) {
+                        if (!s.commands && prev.commands) s.commands = prev.commands;
+                        if (!s.branch && prev.branch) s.branch = prev.branch;
                     }
                 }
             }
