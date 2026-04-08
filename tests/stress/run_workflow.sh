@@ -164,10 +164,10 @@ fi
 
 log "Test 3: List workflows..."
 list_count=$(api GET "" | jq_py "len(d.get('workflows', []))")
-if [[ "$list_count" == "1" ]]; then
-    pass "List returns 1 workflow"
+if [[ "$list_count" == "2" ]]; then
+    pass "List returns 2 workflows (1 seeded demo + 1 test)"
 else
-    fail "List returned $list_count workflows, expected 1"
+    fail "List returned $list_count workflows, expected 2"
 fi
 
 # ═══════════════════════════════════════════════════════════════════

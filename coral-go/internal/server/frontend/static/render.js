@@ -951,6 +951,18 @@ export function dismissKilledSession(sessionId) {
     renderLiveSessions(state.liveSessions);
 }
 
+export function dismissBoardKilled(boardName) {
+    const killedIds = Object.keys(state.killedSessions).filter(sid => {
+        const s = state.killedSessions[sid];
+        return s && s.board_project === boardName;
+    });
+    for (const sid of killedIds) {
+        delete state.killedSessions[sid];
+    }
+    state.liveSessions = state.liveSessions.filter(s => !killedIds.includes(s.session_id));
+    renderLiveSessions(state.liveSessions);
+}
+
 export function copyFolderPath(path) {
     if (!path) return;
     navigator.clipboard.writeText(path).then(() => {
@@ -1569,6 +1581,10 @@ export function renderLiveSessions(sessions) {
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
                     Kill All
                 </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); dismissBoardKilled('${escapeAttr(boardName)}')" title="Remove all killed agents from the sidebar">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h10M5 6V4a3 3 0 0 1 6 0v2M6 10v2M10 10v2M4 6l1 8h6l1-8"/></svg>
+                    Dismiss All
+                </button>
             </div>
         </div>`;
         const branchLine = boardBranch ? `<div class="board-card-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="4" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><path d="M5 6v4M10.2 5.2 7 8"/></svg> <span class="branch-name">${escapeHtml(boardBranch)}</span><button class="branch-copy-btn" onclick="event.stopPropagation(); navigator.clipboard.writeText('${escapeAttr(boardBranch)}'); this.textContent='✓'; setTimeout(() => this.innerHTML='<svg width=\\'10\\' height=\\'10\\' viewBox=\\'0 0 16 16\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.5\\' stroke-linecap=\\'round\\'><rect x=\\'4\\' y=\\'4\\' width=\\'9\\' height=\\'9\\' rx=\\'1\\'/><path d=\\'M4 8H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1\\'/></svg>', 1000)" title="Copy branch name"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="4" width="9" height="9" rx="1"/><path d="M4 8H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></button></div>` : '';
@@ -1783,6 +1799,10 @@ export function renderLiveSessions(sessions) {
                         <button class="overflow-menu-item overflow-menu-danger" onclick="event.stopPropagation(); closeSidebarKebabs(); killBoard('${escapeAttr(boardName)}')">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
                             Kill All
+                        </button>
+                        <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); dismissBoardKilled('${escapeAttr(boardName)}')" title="Remove all killed agents from the sidebar">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h10M5 6V4a3 3 0 0 1 6 0v2M6 10v2M10 10v2M4 6l1 8h6l1-8"/></svg>
+                            Dismiss All
                         </button>
                     </div>
                 </div>`;
