@@ -159,7 +159,8 @@
 .xterm-container {
     flex: 1;
     min-height: 0;
-    padding: 4px 4px 12px;
+    overflow: hidden;
+    padding: 4px 4px 4px;
     background: var(--bg-primary);
 }
 

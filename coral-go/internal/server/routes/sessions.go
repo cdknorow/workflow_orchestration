@@ -1604,6 +1604,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	agentImpl := agent.GetAgent(agentType)
 	var storedFlags []string
 	var storedPrompt, storedBoard, storedBoardServer, storedDisplayName, storedBoardType, storedModel string
+	var storedContextWindow int
 	var storedCaps *agent.Capabilities
 	var storedCapsJSON *string
 	var storedTools []string
@@ -1619,6 +1620,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 			storedDisplayName = derefStrPtr(ls.DisplayName)
 			storedBoardType = derefStrPtr(ls.BoardType)
 			storedModel = derefStrPtr(ls.Model)
+			storedContextWindow = ls.ContextWindow
 			storedCapsJSON = ls.Capabilities
 			storedToolsJSON = ls.Tools
 			storedMCPServersJSON = ls.MCPServers
@@ -1637,6 +1639,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Model != "" {
 		storedModel = body.Model
+		storedContextWindow = proxy.LookupContextWindow(body.Model)
 	}
 	if body.Capabilities != nil {
 		storedCaps = body.Capabilities
@@ -1740,10 +1743,11 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		BoardServer:  strPtr(storedBoardServer),
 		BoardType:    strPtr(storedBoardType),
 		Capabilities: storedCapsJSON,
-		Model:        strPtr(storedModel),
-		Tools:        storedToolsJSON,
-		MCPServers:   storedMCPServersJSON,
-		PID:          restartPID,
+		Model:         strPtr(storedModel),
+		ContextWindow: storedContextWindow,
+		Tools:         storedToolsJSON,
+		MCPServers:    storedMCPServersJSON,
+		PID:           restartPID,
 	})
 	h.ss.MigrateDisplayName(ctx, body.SessionID, newSessionID)
 

@@ -163,7 +163,10 @@ export async function selectLiveSession(name, agentType, sessionId) {
         connectTerminalWs(tmuxName, agentType, sessionId);
         // Fit terminal after session switch — the container may already be
         // visible at the right size so ResizeObserver won't fire.
+        // Double-fit: first at 50ms for quick response, second at 250ms
+        // after layout has fully settled (WebKit webview can be slow).
         setTimeout(fitTerminal, 50);
+        setTimeout(fitTerminal, 250);
     } else {
         dbg('switching to capture mode, disposing terminal');
         document.getElementById("xterm-container").style.display = "none";

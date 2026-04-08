@@ -907,7 +907,7 @@ func (s *SessionStore) GetLiveSession(ctx context.Context, sessionID string) (*L
 	var ls LiveSession
 	err := s.db.GetContext(ctx, &ls,
 		`SELECT session_id, agent_type, agent_name, working_dir, display_name,
-		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, git_diff_mode, capabilities, model, tools, mcp_servers, pid, worktree_path, worktree_repo, team_id, created_at
+		 resume_from_id, flags, is_job, prompt, board_name, board_server, backend, icon, is_sleeping, board_type, git_diff_mode, capabilities, model, context_window, tools, mcp_servers, pid, worktree_path, worktree_repo, team_id, created_at
 		 FROM live_sessions WHERE session_id = ?`, sessionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -921,7 +921,7 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 		// Carry forward flags, prompt, board from old session if not set
 		var old LiveSession
 		err := tx.GetContext(ctx, &old,
-			"SELECT flags, prompt, board_name, board_server, icon, is_sleeping, board_type, display_name, is_job, backend, capabilities, model, tools, mcp_servers FROM live_sessions WHERE session_id = ?",
+			"SELECT flags, prompt, board_name, board_server, icon, is_sleeping, board_type, display_name, is_job, backend, capabilities, model, context_window, tools, mcp_servers FROM live_sessions WHERE session_id = ?",
 			oldSessionID)
 		if err == nil {
 			if newSession.Flags == nil {
@@ -950,6 +950,9 @@ func (s *SessionStore) ReplaceLiveSession(ctx context.Context, oldSessionID stri
 			}
 			if newSession.Model == nil {
 				newSession.Model = old.Model
+			}
+			if newSession.ContextWindow == 0 {
+				newSession.ContextWindow = old.ContextWindow
 			}
 			if newSession.Tools == nil {
 				newSession.Tools = old.Tools
