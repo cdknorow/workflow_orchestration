@@ -1073,6 +1073,16 @@ func (h *SessionsHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
 	sessionID := r.URL.Query().Get("session_id")
 
+	// Read file search limit from user settings (default 500)
+	fileSearchLimit := 500
+	if settings, err := h.ss.GetSettings(r.Context()); err == nil {
+		if v, ok := settings["file_search_limit"]; ok {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				fileSearchLimit = n
+			}
+		}
+	}
+
 	workdir := h.resolveGitRoot(r.Context(), name, "", sessionID)
 	if workdir == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"files": []string{}})
@@ -1084,7 +1094,7 @@ func (h *SessionsHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Directory browsing mode: list entries in a specific directory
 	if dir != "" {
-		h.searchFilesDir(w, ctx, workdir, dir, query)
+		h.searchFilesDir(w, ctx, workdir, dir, query, fileSearchLimit)
 		return
 	}
 
@@ -1100,8 +1110,8 @@ func (h *SessionsHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if query == "" {
-		if len(allFiles) > 50 {
-			allFiles = allFiles[:50]
+		if len(allFiles) > fileSearchLimit {
+			allFiles = allFiles[:fileSearchLimit]
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"files": allFiles})
 		return
@@ -1133,9 +1143,9 @@ func (h *SessionsHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		return matches[i].path < matches[j].path
 	})
-	result := make([]string, 0, 50)
+	result := make([]string, 0, fileSearchLimit)
 	for i, m := range matches {
-		if i >= 50 {
+		if i >= fileSearchLimit {
 			break
 		}
 		result = append(result, m.path)
@@ -1148,7 +1158,7 @@ func (h *SessionsHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 // like ls/tab-completion. Returns entries with name, path, and type
 // (dir/file). Directories are listed first, then files. An optional
 // filter (from the 'q' parameter) restricts results to matching names.
-func (h *SessionsHandler) searchFilesDir(w http.ResponseWriter, _ context.Context, workdir, dir, filter string) {
+func (h *SessionsHandler) searchFilesDir(w http.ResponseWriter, _ context.Context, workdir, dir, filter string, limit int) {
 	// Normalize dir: strip leading/trailing slashes, use "." for root
 	dir = strings.TrimPrefix(dir, "/")
 	dir = strings.TrimSuffix(dir, "/")
@@ -1236,9 +1246,8 @@ func (h *SessionsHandler) searchFilesDir(w http.ResponseWriter, _ context.Contex
 	entries = append(entries, dirs...)
 	entries = append(entries, files...)
 
-	// Limit to 100 entries
-	if len(entries) > 100 {
-		entries = entries[:100]
+	if len(entries) > limit {
+		entries = entries[:limit]
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{

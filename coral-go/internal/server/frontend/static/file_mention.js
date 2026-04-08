@@ -172,7 +172,8 @@ export function fuzzyFilter(files, query) {
 
     // Sort by score (lower = better match)
     scored.sort((a, b) => a.score - b.score);
-    return scored.slice(0, 50).map(s => s.fp);
+    const limit = parseInt((state.settings || {}).file_search_limit, 10) || 500;
+    return scored.slice(0, limit).map(s => s.fp);
 }
 
 async function onInput(e) {

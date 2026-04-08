@@ -110,8 +110,8 @@
 /* ── Agent Avatars ──────────────────────────────────────────── */
 
 .agent-avatar {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     flex-shrink: 0;
     display: flex;
@@ -122,7 +122,7 @@
 }
 
 .agent-avatar-emoji {
-    font-size: 14px;
+    font-size: 19px;
     line-height: 1;
 }
 

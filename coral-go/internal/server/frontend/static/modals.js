@@ -2774,6 +2774,8 @@ export async function showSettingsModal() {
     // File Search Mode (defaults to 'directory')
     const fileSearchSelect = document.getElementById("settings-file-search-mode");
     if (fileSearchSelect) fileSearchSelect.value = s.file_search_mode || 'directory';
+    const fileSearchLimitSelect = document.getElementById("settings-file-search-limit");
+    if (fileSearchLimitSelect) fileSearchLimitSelect.value = s.file_search_limit || "500";
 
     // Git Diff Mode (defaults to 'previous_commit')
     const gitDiffSelect = document.getElementById("settings-git-diff-mode");
@@ -2910,6 +2912,7 @@ export async function applySettings() {
     const proxyEnabled = document.getElementById("settings-proxy-enabled")?.checked || false;
     const proxyEnabledCodex = document.getElementById("settings-proxy-enabled-codex")?.checked || false;
     const fileSearchMode = document.getElementById("settings-file-search-mode")?.value || "directory";
+    const fileSearchLimit = document.getElementById("settings-file-search-limit")?.value || "500";
     const gitDiffMode = document.getElementById("settings-git-diff-mode")?.value || "branch_point";
 
     // Parse theme selection — "custom:<name>" or built-in "dark"/"light"/"system"
@@ -2940,6 +2943,7 @@ export async function applySettings() {
         proxy_enabled_claude: proxyEnabled,
         proxy_enabled_codex: proxyEnabledCodex,
         file_search_mode: fileSearchMode,
+        file_search_limit: fileSearchLimit,
         git_diff_mode: gitDiffMode,
     };
 
