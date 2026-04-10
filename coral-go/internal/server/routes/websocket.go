@@ -242,7 +242,7 @@ func (h *SessionsHandler) buildSessionListForWS(r *http.Request) ([]map[string]a
 		}
 	}
 
-	fileCounts, _ := h.gs.GetAllChangedFileCounts(ctx)
+	fileCounts, _ := h.ts.GetAllEditedFileCounts(ctx)
 	if fileCounts == nil {
 		fileCounts = map[string]int{}
 	}
@@ -345,11 +345,7 @@ func (h *SessionsHandler) buildSessionListForWS(r *http.Request) ([]map[string]a
 			"waiting_reason":     waitingReason,
 			"waiting_summary":    waitingSummary,
 			"working":            working,
-			"changed_file_count": func() int {
-				if c, ok := fileCounts[sid]; ok { return c }
-				if c, ok := fileCounts[agent.AgentName]; ok { return c }
-				return 0
-			}(),
+			"changed_file_count": fileCounts[sid],
 			"commands":           map[string]string{"compress": "/compact", "clear": "/clear"},
 			"board_project":      boardProject(boardSubs, liveBoardNames, agent.TmuxSession, sid),
 			"board_job_title":    boardJobTitle(boardSubs, liveBoardNames, agent.TmuxSession, sid),

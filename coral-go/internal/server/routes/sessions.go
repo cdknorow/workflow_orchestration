@@ -278,7 +278,7 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if gitState == nil {
 		gitState = map[string]*store.GitSnapshot{}
 	}
-	fileCounts, _ := h.gs.GetAllChangedFileCounts(ctx)
+	fileCounts, _ := h.ts.GetAllEditedFileCounts(ctx)
 	if fileCounts == nil {
 		fileCounts = map[string]int{}
 	}
@@ -391,15 +391,10 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 			git = gitState[agent.AgentName]
 		}
 
-		// Resolve changed file count
+		// Resolve changed file count (from Write/Edit tool events)
 		fc := 0
 		if sid != "" {
 			if c, ok := fileCounts[sid]; ok {
-				fc = c
-			}
-		}
-		if fc == 0 {
-			if c, ok := fileCounts[agent.AgentName]; ok {
 				fc = c
 			}
 		}

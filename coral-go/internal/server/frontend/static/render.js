@@ -126,6 +126,9 @@ function buildSessionTooltip(s) {
         `<tr><td class="tt-label">Branch</td><td class="tt-value">${escapeHtml(branch)}</td></tr>`,
         `<tr><td class="tt-label">Agent</td><td class="tt-value">${escapeHtml(agent)}</td></tr>`,
     ];
+    if (s.changed_file_count > 0) {
+        rows.push(`<tr><td class="tt-label">Files changed</td><td class="tt-value">${s.changed_file_count}</td></tr>`);
+    }
     if (s.token_cost_usd > 0 || s.token_input > 0) {
         const tokIn = _formatTokens(s.token_input || 0);
         const tokOut = _formatTokens(s.token_output || 0);

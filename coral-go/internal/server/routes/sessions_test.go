@@ -1131,3 +1131,78 @@ func TestEditionLimits_SingleLaunch_AtExactCap_Blocked(t *testing.T) {
 	assert.Contains(t, result["error"], "Demo limit", "error message should mention demo limit")
 	assert.Contains(t, result["error"], "8", "error message should mention the limit number")
 }
+
+func TestEditedFileCount_InLiveResponse(t *testing.T) {
+	server, handler, terminal, _ := setupSessionsTestServer(t)
+	ctx := context.Background()
+
+	// Session IDs are parsed from tmux session names: "claude-{uuid}" → session_id = "{uuid}"
+	agentName := "claude-00000000-0000-0000-0000-000000000099"
+	sessionID := "00000000-0000-0000-0000-000000000099" // must match parsed UUID
+
+	agentName2 := "claude-00000000-0000-0000-0000-000000000098"
+	sessionID2 := "00000000-0000-0000-0000-000000000098"
+
+	terminal.addSession(agentName, "/tmp/test")
+	terminal.addSession(agentName2, "/tmp/test2")
+
+	// Insert Write/Edit events with detail_json for agent 1
+	writeTool := "Write"
+	editTool := "Edit"
+	detail1 := `{"file_path":"/tmp/test/main.go"}`
+	detail2 := `{"file_path":"/tmp/test/utils.go"}`
+	detail3 := `{"file_path":"/tmp/test/main.go"}` // duplicate — should not increase count
+
+	for _, ev := range []struct {
+		tool   string
+		detail string
+	}{
+		{writeTool, detail1},
+		{editTool, detail2},
+		{writeTool, detail3},
+	} {
+		tool := ev.tool
+		det := ev.detail
+		_, err := handler.ts.InsertAgentEvent(ctx, &store.AgentEvent{
+			AgentName:  agentName,
+			SessionID:  &sessionID,
+			EventType:  "tool_use",
+			ToolName:   &tool,
+			DetailJSON: &det,
+		})
+		require.NoError(t, err)
+	}
+
+	// Agent 2 has no Write/Edit events (no events at all)
+
+	// GET /api/sessions/live
+	resp, err := http.Get(server.URL + "/api/sessions/live")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var sessions []map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&sessions)
+	require.NoError(t, err)
+
+	// Find our agents by session_id
+	var agent1Count, agent2Count float64
+	var foundAgent1, foundAgent2 bool
+	for _, s := range sessions {
+		sid, _ := s["session_id"].(string)
+		fc, _ := s["changed_file_count"].(float64)
+		if sid == sessionID {
+			agent1Count = fc
+			foundAgent1 = true
+		}
+		if sid == sessionID2 {
+			agent2Count = fc
+			foundAgent2 = true
+		}
+	}
+
+	assert.True(t, foundAgent1, "agent with edits should appear in response")
+	assert.True(t, foundAgent2, "agent without edits should appear in response")
+	assert.Equal(t, float64(2), agent1Count, "agent with 2 distinct edited files should show count 2")
+	assert.Equal(t, float64(0), agent2Count, "agent with no edits should show count 0")
+}

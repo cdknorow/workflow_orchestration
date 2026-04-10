@@ -144,3 +144,65 @@ func TestAgentEventsCRUD(t *testing.T) {
 	assert.Empty(t, events)
 }
 
+func TestGetAllEditedFileCounts(t *testing.T) {
+	db := openTestDB(t)
+	s := NewTaskStore(db)
+	ctx := context.Background()
+
+	// Helper to create a Write/Edit event with single-encoded detail_json
+	// (matches production format after makeToolDetail root cause fix)
+	insertEditEvent := func(agent, sessionID, toolName, filePath string) {
+		detail := `{"file_path":"` + filePath + `"}`
+		ev := &AgentEvent{
+			AgentName:  agent,
+			SessionID:  &sessionID,
+			EventType:  "tool_use",
+			ToolName:   &toolName,
+			DetailJSON: &detail,
+		}
+		_, err := s.InsertAgentEvent(ctx, ev)
+		require.NoError(t, err)
+	}
+
+	// Session 1: agent edits 3 distinct files
+	insertEditEvent("agent-1", "sess-1", "Write", "/repo/main.go")
+	insertEditEvent("agent-1", "sess-1", "Edit", "/repo/config.go")
+	insertEditEvent("agent-1", "sess-1", "Write", "/repo/utils.go")
+
+	// Session 1: duplicate edit to same file — should not increase count
+	insertEditEvent("agent-1", "sess-1", "Edit", "/repo/main.go")
+
+	// Session 2: agent edits 1 file
+	insertEditEvent("agent-2", "sess-2", "Write", "/repo/server.go")
+
+	// Session 3: agent has events but no Write/Edit (insert a non-edit event)
+	readTool := "Read"
+	_, err := s.InsertAgentEvent(ctx, &AgentEvent{
+		AgentName: "agent-3",
+		SessionID: strPtr("sess-3"),
+		EventType: "tool_use",
+		ToolName:  &readTool,
+		Summary:   "Read a file",
+	})
+	require.NoError(t, err)
+
+	// Get counts
+	counts, err := s.GetAllEditedFileCounts(ctx)
+	require.NoError(t, err)
+
+	// Session 1: 3 distinct files (main.go edited twice, counted once)
+	assert.Equal(t, 3, counts["sess-1"])
+
+	// Session 2: 1 file
+	assert.Equal(t, 1, counts["sess-2"])
+
+	// Session 3: no Write/Edit events — should not appear in map
+	_, exists := counts["sess-3"]
+	assert.False(t, exists, "session with no Write/Edit events should not be in counts")
+
+	// Non-existent session should not appear
+	_, exists = counts["sess-999"]
+	assert.False(t, exists)
+}
+
+

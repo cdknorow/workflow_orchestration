@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"os"
@@ -62,7 +63,7 @@ type dirResponse struct {
 func callSearchFilesDir(t *testing.T, handler *SessionsHandler, workdir, dir, filter string) dirResponse {
 	t.Helper()
 	w := httptest.NewRecorder()
-	handler.searchFilesDir(w, nil, workdir, dir, filter)
+	handler.searchFilesDir(w, context.Background(), workdir, dir, filter, 10000)
 	require.Equal(t, 200, w.Code)
 	var resp dirResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))

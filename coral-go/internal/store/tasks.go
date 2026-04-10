@@ -507,6 +507,74 @@ func (s *TaskStore) GetFileEdits(ctx context.Context, sessionID, workingDir stri
 	return result, nil
 }
 
+// GetAllEditedFileCounts returns the count of distinct files each session has
+// edited via Write/Edit tool events. Used for the tooltip file count display.
+func (s *TaskStore) GetAllEditedFileCounts(ctx context.Context) (map[string]int, error) {
+	var rows []struct {
+		SessionID string `db:"session_id"`
+		Count     int    `db:"cnt"`
+	}
+	err := s.db.SelectContext(ctx, &rows,
+		`SELECT session_id, COUNT(DISTINCT json_extract(detail_json, '$.file_path')) AS cnt
+		 FROM agent_events
+		 WHERE event_type = 'tool_use'
+		   AND tool_name IN ('Write', 'Edit')
+		   AND detail_json IS NOT NULL
+		   AND session_id IS NOT NULL
+		 GROUP BY session_id`)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int, len(rows))
+	for _, r := range rows {
+		result[r.SessionID] = r.Count
+	}
+	return result, nil
+}
+
+// GetEditedFilesBySession returns the set of absolute file paths each session has
+// touched via Write/Edit tool events. Used by the git poller to build per-agent
+// file counts instead of sharing repo-wide git diff results across all agents.
+func (s *TaskStore) GetEditedFilesBySession(ctx context.Context, sessionIDs []string) (map[string]map[string]bool, error) {
+	if len(sessionIDs) == 0 {
+		return map[string]map[string]bool{}, nil
+	}
+
+	query, args, err := sqlx.In(
+		`SELECT session_id,
+		        json_extract(detail_json, '$.file_path') as file_path
+		 FROM agent_events
+		 WHERE session_id IN (?)
+		   AND event_type = 'tool_use'
+		   AND tool_name IN ('Write', 'Edit')
+		   AND detail_json IS NOT NULL`,
+		sessionIDs)
+	if err != nil {
+		return nil, err
+	}
+	query = s.db.Rebind(query)
+
+	var rows []struct {
+		SessionID string `db:"session_id"`
+		FilePath  string `db:"file_path"`
+	}
+	if err := s.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]map[string]bool, len(sessionIDs))
+	for _, r := range rows {
+		if r.FilePath == "" {
+			continue
+		}
+		if result[r.SessionID] == nil {
+			result[r.SessionID] = make(map[string]bool)
+		}
+		result[r.SessionID][r.FilePath] = true
+	}
+	return result, nil
+}
+
 // ── History queries (by session_id only) ────────────────────────────────
 
 // ListTasksBySession returns tasks for a historical session.

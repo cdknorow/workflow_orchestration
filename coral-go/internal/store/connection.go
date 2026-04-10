@@ -62,6 +62,13 @@ func (d *DB) ensureSchema(ctx context.Context) error {
 		d.ExecContext(ctx, sql) // Ignore error — column may already exist
 	}
 
+	// Fix double-encoded detail_json rows in agent_events (one-time fixup).
+	// Prior to the fix, makeToolDetail returned a JSON string which was then
+	// re-marshaled, producing '"{\"key\":\"val\"}"' instead of '{"key":"val"}'.
+	d.ExecContext(ctx, `UPDATE agent_events SET detail_json = json_extract(detail_json, '$')
+		WHERE detail_json IS NOT NULL AND typeof(json_extract(detail_json, '$')) = 'text'
+		AND json_valid(json_extract(detail_json, '$'))`)
+
 	return nil
 }
 

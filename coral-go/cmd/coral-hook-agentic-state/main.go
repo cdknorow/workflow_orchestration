@@ -145,7 +145,7 @@ func parseAgenticEvent(d map[string]any, hookType, sessionID string) map[string]
 	return nil
 }
 
-func makeToolDetail(tool string, inp map[string]any) string {
+func makeToolDetail(tool string, inp map[string]any) map[string]any {
 	detail := map[string]any{}
 	switch tool {
 	case "Bash":
@@ -161,9 +161,8 @@ func makeToolDetail(tool string, inp map[string]any) string {
 	case "Glob":
 		detail["pattern"], _ = inp["pattern"].(string)
 	default:
-		return ""
+		return nil
 	}
-	b, _ := json.Marshal(detail)
-	return string(b)
+	return detail
 }
 
