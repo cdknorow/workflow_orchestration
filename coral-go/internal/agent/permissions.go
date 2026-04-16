@@ -270,7 +270,7 @@ var Presets = map[string]*Capabilities{
 		Allow: []string{CapFileRead, CapFileWrite, "shell:npm *", "shell:npx *", CapWebAccess},
 	},
 	"orchestrator": {
-		Allow: []string{CapFileRead, CapAgentSpawn, CapWebAccess},
+		Allow: []string{CapFileRead, CapFileWrite, CapShell, CapGitWrite, CapAgentSpawn, CapWebAccess, CapNotebook},
 	},
 	"devops": {
 		Allow: []string{CapFileRead, CapFileWrite, CapShell, CapGitWrite},
