@@ -257,6 +257,10 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 	settingsFile := writeTempFile("settings", effectiveID, "json", append(data, '\n'))
 	parts = append(parts, "--settings", settingsFile)
 
+	if params.PermissionMode != "" && params.PermissionMode != "default" {
+		parts = append(parts, "--permission-mode", params.PermissionMode)
+	}
+
 	if len(params.Flags) > 0 {
 		parts = append(parts, params.Flags...)
 	}
@@ -269,7 +273,7 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 		parts = append(parts, FormatPromptFileArg(promptFile))
 	}
 
-	return strings.Join(parts, " ")
+	return strings.Join(ShellQuoteParts(parts), " ")
 }
 
 func (a *ClaudeAgent) PrepareResume(sessionID, workingDir string) {

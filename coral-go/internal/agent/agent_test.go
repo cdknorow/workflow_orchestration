@@ -149,6 +149,55 @@ func TestClaude_Resume(t *testing.T) {
 	}
 }
 
+func TestClaude_PermissionModeAllValues(t *testing.T) {
+	tests := []struct {
+		mode     string
+		expectFlag bool
+	}{
+		{"plan", true},
+		{"acceptEdits", true},
+		{"auto", true},
+		{"bypassPermissions", true},
+		{"dontAsk", true},
+		{"default", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run("mode="+tt.mode, func(t *testing.T) {
+			a := &ClaudeAgent{}
+			cmd := a.BuildLaunchCommand(LaunchParams{
+				SessionID:      "perm-test",
+				PermissionMode: tt.mode,
+			})
+			hasFlag := strings.Contains(cmd, "--permission-mode")
+			if tt.expectFlag && !hasFlag {
+				t.Errorf("expected --permission-mode flag for mode %q, got %q", tt.mode, cmd)
+			}
+			if !tt.expectFlag && hasFlag {
+				t.Errorf("did not expect --permission-mode flag for mode %q, got %q", tt.mode, cmd)
+			}
+			if tt.expectFlag && !strings.Contains(cmd, "--permission-mode "+tt.mode) {
+				t.Errorf("expected '--permission-mode %s', got %q", tt.mode, cmd)
+			}
+		})
+	}
+}
+
+func TestClaude_PermissionModeWithOtherFlags(t *testing.T) {
+	a := &ClaudeAgent{}
+	cmd := a.BuildLaunchCommand(LaunchParams{
+		SessionID:      "s1",
+		PermissionMode: "auto",
+		Flags:          []string{"--verbose"},
+	})
+	if !strings.Contains(cmd, "--permission-mode auto") {
+		t.Errorf("expected --permission-mode auto, got %q", cmd)
+	}
+	if !strings.Contains(cmd, "--verbose") {
+		t.Errorf("expected --verbose flag, got %q", cmd)
+	}
+}
+
 func TestClaude_WithFlags(t *testing.T) {
 	a := &ClaudeAgent{}
 	cmd := a.BuildLaunchCommand(LaunchParams{

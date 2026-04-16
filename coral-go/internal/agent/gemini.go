@@ -210,5 +210,5 @@ func (a *GeminiAgent) BuildLaunchCommand(params LaunchParams) string {
 		parts = append(parts, FormatPromptFileArg(promptFile))
 	}
 
-	return strings.Join(parts, " ")
+	return strings.Join(ShellQuoteParts(parts), " ")
 }

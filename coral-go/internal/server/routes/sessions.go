@@ -1719,6 +1719,7 @@ func (h *SessionsHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		Tools:           storedTools,
 		MCPServers:      storedMCPServers,
 		ProxyBaseURL:    restartProxyURL,
+		PermissionMode:  userSettings["default_permission_mode"],
 	}))
 	log.Printf("[launch] restart session=%s cmd=%s", target, cmd)
 	h.terminal.SendToTarget(ctx, target, cmd)
@@ -1860,6 +1861,7 @@ func (h *SessionsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		BoardType:       storedBoardType,
 		Tools:           storedTools,
 		MCPServers:      storedMCPServers,
+		PermissionMode:  userSettings["default_permission_mode"],
 	}))
 	h.terminal.SendToTarget(ctx, target, cmd)
 
@@ -2758,6 +2760,7 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		MCPServers:      mcpServers,
 		Hooks:           hooks,
 		CLIPath:         cliPath,
+		PermissionMode:  userSettings["default_permission_mode"],
 		ProxyBaseURL:    proxyBaseURL,
 	}
 	if cliPath != "" {
@@ -3611,6 +3614,7 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 		Tools:           store.UnmarshalFlags(ls.Tools),
 		MCPServers:      store.UnmarshalMCPServers(ls.MCPServers),
 		CLIPath:         cliPath,
+		PermissionMode:  userSettings["default_permission_mode"],
 		ProxyBaseURL:    proxyBaseURL,
 	}
 

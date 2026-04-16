@@ -109,8 +109,11 @@ export function showLaunchModal() {
     document.getElementById("team-board-name").value = "";
     const teamFlagsEl = document.getElementById("team-flags");
     if (teamFlagsEl) teamFlagsEl.value = "";
-    const teamAutoPermsEl = document.getElementById("team-auto-permissions");
-    if (teamAutoPermsEl) teamAutoPermsEl.checked = true;
+    const teamPermModeEl = document.getElementById("team-permission-mode");
+    if (teamPermModeEl) {
+        teamPermModeEl.value = (state.settings && state.settings.default_permission_mode) || 'bypassPermissions';
+        _updatePermModeDescription(teamPermModeEl);
+    }
 
     // Pre-fill from global settings
     const s = state.settings || {};
@@ -491,7 +494,7 @@ function showTeamAgentModal(row = null) {
         : 'Configure a team member, then add it to the team draft.';
 
     const acfValue = row?.dataset.acfId ? getAgentConfig(row.dataset.acfId) : _defaultTeamAgentModalConfig();
-    renderAgentConfigForm('team-agent-modal-acf', { showPreset: true, showName: true, showAutoPermissions: false, value: acfValue });
+    renderAgentConfigForm('team-agent-modal-acf', { showPreset: true, showName: true, showAutoPermissions: true, value: acfValue });
     modal.style.display = 'flex';
 }
 window.showTeamAgentModal = showTeamAgentModal;
@@ -562,13 +565,33 @@ const PERM_FLAGS = {
     gemini: '--yolo',
 };
 
+const PERMISSION_MODE_DESCRIPTIONS = {
+    default: 'Reads only — best for getting started and sensitive work',
+    acceptEdits: 'Reads, file edits, and common filesystem commands (mkdir, touch, mv, cp, etc.) — best for iterating on code you\'re reviewing',
+    plan: 'Reads only — best for exploring a codebase before changing it',
+    auto: 'Everything, with background safety checks — best for long tasks and reducing prompt fatigue',
+    dontAsk: 'Only pre-approved tools — best for locked-down CI and scripts',
+    bypassPermissions: 'Everything except protected paths — isolated containers and VMs only',
+};
+
+function _updatePermModeDescription(selectEl) {
+    const hint = selectEl.parentElement?.querySelector('.perm-mode-desc');
+    if (hint) hint.textContent = PERMISSION_MODE_DESCRIPTIONS[selectEl.value] || '';
+}
+
 function _getPermFlagForAgent(agentType) {
+    if (agentType === 'claude') {
+        const mode = (state.settings && state.settings.default_permission_mode) || 'bypassPermissions';
+        return `--permission-mode ${mode}`;
+    }
     return PERM_FLAGS[agentType] || PERM_FLAGS.claude;
 }
 
 function _stripPermFlags(flagsStr) {
     const known = new Set(Object.values(PERM_FLAGS));
-    return (flagsStr || '')
+    // Also strip --permission-mode <value> pairs
+    const stripped = (flagsStr || '').replace(/--permission-mode\s+\S+/g, '');
+    return stripped
         .split(/\s+/)
         .filter(Boolean)
         .filter(flag => !known.has(flag))
@@ -578,13 +601,17 @@ function _stripPermFlags(flagsStr) {
 function _getPermFlagHelp(agentType) {
     const flag = _getPermFlagForAgent(agentType);
     const agentLabel = getEngineName(agentType || 'claude');
+    if (agentType === 'claude') {
+        const mode = (state.settings && state.settings.default_permission_mode) || 'bypassPermissions';
+        return `High-autonomy launch for ${agentLabel}. Coral adds --permission-mode ${mode} so the agent can run without interactive permission prompts.`;
+    }
     return `High-autonomy launch for ${agentLabel}. Coral adds ${flag} so the agent can run without interactive permission prompts.`;
 }
 
 /** Update permission flag shortcut buttons in the same modal as the agent type select. */
 function _updatePermFlagButtons(selectEl) {
     const agentType = selectEl.value || 'claude';
-    const flag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+    const flag = _getPermFlagForAgent(agentType);
 
     // Find the enclosing modal content and update all flag-shortcut-btn that reference skip-permissions/full-auto
     const modal = selectEl.closest('.modal-content') || selectEl.closest('.modal');
@@ -617,6 +644,7 @@ function _updatePermFlagButtons(selectEl) {
     });
 }
 window._updatePermFlagButtons = _updatePermFlagButtons;
+window._updatePermModeDescription = _updatePermModeDescription;
 
 /** Get the permission flag for a given agent type select element ID. */
 function _getPermFlag(selectId) {
@@ -627,7 +655,7 @@ function _getPermFlag(selectId) {
 
 /** Check if a flags string contains ANY known permission flag. */
 function _hasPermFlag(flagsStr) {
-    return Object.values(PERM_FLAGS).some(f => flagsStr.includes(f));
+    return Object.values(PERM_FLAGS).some(f => flagsStr.includes(f)) || /--permission-mode\s+\S+/.test(flagsStr);
 }
 
 function _syncACFAutoPermissions(container) {
@@ -775,7 +803,7 @@ async function _showDemoLimitModal(message) {
 }
 
 function _checkPermissionFlag(flagsStr, agentType) {
-    const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+    const permFlag = _getPermFlagForAgent(agentType);
     return new Promise((resolve) => {
         if (flagsStr && _hasPermFlag(flagsStr)) {
             resolve('skip');
@@ -839,7 +867,7 @@ export async function launchSession() {
         const permResult = await _checkPermissionFlag(flagsStr, type);
         if (permResult === null) return;
         if (permResult === 'enable') {
-            const permFlag = PERM_FLAGS[type] || PERM_FLAGS.claude;
+            const permFlag = _getPermFlagForAgent(type);
             flagsStr = (flagsStr ? flagsStr + ' ' : '') + permFlag;
         }
     }
@@ -1187,7 +1215,7 @@ export async function launchAgentToBoard() {
     const permResult = await _checkPermissionFlag(flagsStr, config.agentType);
     if (permResult === null) return;
     if (permResult === 'enable') {
-        const permFlag = PERM_FLAGS[config.agentType] || PERM_FLAGS.claude;
+        const permFlag = _getPermFlagForAgent(config.agentType);
         flagsStr = (flagsStr ? flagsStr + ' ' : '') + permFlag;
     }
 
@@ -1505,19 +1533,20 @@ function renderAgentConfigForm(containerId, opts = {}) {
 
     let autoPermissionsHTML = '';
     if (showAutoPermissions) {
-        const permFlag = _getPermFlagForAgent(agentTypeVal || 'claude');
+        const defaultMode = (state.settings && state.settings.default_permission_mode) || 'bypassPermissions';
+        const permModeVal = autoPermsVal ? (typeof autoPermsVal === 'string' ? autoPermsVal : defaultMode) : 'default';
+        const permModeDesc = PERMISSION_MODE_DESCRIPTIONS[permModeVal] || '';
         autoPermissionsHTML = `
-            <label class="settings-toggle acf-auto-permissions-toggle">
-                <input type="checkbox" class="acf-auto-permissions"${autoPermsVal ? ' checked' : ''}>
-                <span>
-                    <strong>Run without permission prompts</strong>
-                    <div class="acf-auto-permissions-note">
-                        ${escapeHtml(_getPermFlagHelp(agentTypeVal || 'claude'))}
-                    </div>
-                    <div class="acf-auto-permissions-flag-wrap">
-                        <code class="acf-auto-permissions-flag">${escapeHtml(permFlag)}</code>
-                    </div>
-                </span>
+            <label>Permission Mode:
+                <select class="acf-permission-mode" onchange="window._updatePermModeDescription(this)">
+                    <option value="default"${permModeVal === 'default' ? ' selected' : ''}>Default</option>
+                    <option value="plan"${permModeVal === 'plan' ? ' selected' : ''}>Plan</option>
+                    <option value="acceptEdits"${permModeVal === 'acceptEdits' ? ' selected' : ''}>Accept Edits</option>
+                    <option value="auto"${permModeVal === 'auto' ? ' selected' : ''}>Auto Edit + Bash</option>
+                    <option value="bypassPermissions"${permModeVal === 'bypassPermissions' ? ' selected' : ''}>Bypass Permissions</option>
+                    <option value="dontAsk"${permModeVal === 'dontAsk' ? ' selected' : ''}>Don't Ask</option>
+                </select>
+                <span class="settings-hint perm-mode-desc">${escapeHtml(permModeDesc)}</span>
             </label>`;
     }
 
@@ -1580,8 +1609,6 @@ function renderAgentConfigForm(containerId, opts = {}) {
     }
 
     container.querySelector('.acf-agent-type')?.addEventListener('change', () => _syncACFAutoPermissions(container));
-    container.querySelector('.acf-auto-permissions')?.addEventListener('change', () => _syncACFAutoPermissions(container));
-    _syncACFAutoPermissions(container);
 }
 window.renderAgentConfigForm = renderAgentConfigForm;
 
@@ -1595,10 +1622,10 @@ function getAgentConfig(containerId) {
     if (!container) return {};
     const uid = container.dataset.acfUid;
     const agentType = container.querySelector('.acf-agent-type')?.value || 'claude';
-    const autoPerms = !!container.querySelector('.acf-auto-permissions')?.checked;
+    const permMode = container.querySelector('.acf-permission-mode')?.value || 'default';
     let flags = _stripPermFlags(container.querySelector('.acf-flags')?.value.trim() || '');
-    if (autoPerms) {
-        const permFlag = _getPermFlagForAgent(agentType);
+    if (permMode && permMode !== 'default') {
+        const permFlag = `--permission-mode ${permMode}`;
         flags = flags ? `${flags} ${permFlag}` : permFlag;
     }
 
@@ -1634,15 +1661,24 @@ function setAgentConfig(containerId, values) {
     if (promptEl) promptEl.value = v.prompt || '';
     const flagsEl = container.querySelector('.acf-flags');
     if (flagsEl) flagsEl.value = _stripPermFlags(v.flags || '');
-    const autoPermsEl = container.querySelector('.acf-auto-permissions');
-    if (autoPermsEl) {
-        autoPermsEl.checked = Object.prototype.hasOwnProperty.call(v, 'autoPermissions')
-            ? !!v.autoPermissions
-            : (Object.prototype.hasOwnProperty.call(v, 'flags') ? _hasPermFlag(v.flags || '') : true);
+    const permModeEl = container.querySelector('.acf-permission-mode');
+    if (permModeEl) {
+        // Extract permission mode from flags if present, otherwise use default from settings
+        const modeMatch = (v.flags || '').match(/--permission-mode\s+(\S+)/);
+        const defaultMode = (state.settings && state.settings.default_permission_mode) || 'bypassPermissions';
+        if (modeMatch) {
+            permModeEl.value = modeMatch[1];
+        } else if (_hasPermFlag(v.flags || '')) {
+            // Legacy --dangerously-skip-permissions flag → map to bypassPermissions
+            permModeEl.value = 'bypassPermissions';
+        } else if (Object.prototype.hasOwnProperty.call(v, 'flags')) {
+            permModeEl.value = 'default';
+        } else {
+            permModeEl.value = defaultMode;
+        }
     }
 
     if (uid) _setPermissions(`${uid}-perms`, v.capabilities || null);
-    _syncACFAutoPermissions(container);
 }
 window.setAgentConfig = setAgentConfig;
 
@@ -1676,8 +1712,11 @@ async function _initTeamForm() {
     _validateTeamName();
     const tfEl = document.getElementById("team-flags");
     if (tfEl) tfEl.value = _getPermFlag('team-agent-type');
-    const tapEl = document.getElementById("team-auto-permissions");
-    if (tapEl) tapEl.checked = true;
+    const tapEl = document.getElementById("team-permission-mode");
+    if (tapEl) {
+        tapEl.value = (state.settings && state.settings.default_permission_mode) || 'bypassPermissions';
+        _updatePermModeDescription(tapEl);
+    }
     _teamAgentCounter = 0;
     const list = document.getElementById("team-agents-list");
     list.innerHTML = "";
@@ -1829,7 +1868,7 @@ window._quickLaunchTeam = async function() {
     if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = 'Launching...'; }
 
     const agentType = 'claude';
-    const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
+    const permFlag = _getPermFlagForAgent(agentType);
 
     try {
         const resp = await fetch('/api/sessions/launch-team', {
@@ -2013,7 +2052,7 @@ function _addTeamAgent(defaultName, defaultPrompt, defaultCapabilities, defaultA
     renderAgentConfigForm(acfId, {
         showPreset: false,
         showName: true,
-        showAutoPermissions: false,
+        showAutoPermissions: true,
         value: {
             name: defaultName || '',
             prompt: defaultPrompt || '',
@@ -2176,13 +2215,12 @@ async function launchTeam() {
     }
 
     const agentType = document.getElementById("team-agent-type").value;
-    const autoPerms = document.getElementById("team-auto-permissions")?.checked;
+    const teamPermMode = document.getElementById("team-permission-mode")?.value || 'default';
 
-    // Build flags from checkbox
+    // Build flags from permission mode dropdown
     const flags = [];
-    if (autoPerms) {
-        const permFlag = PERM_FLAGS[agentType] || PERM_FLAGS.claude;
-        flags.push(permFlag);
+    if (teamPermMode && teamPermMode !== 'default') {
+        flags.push(`--permission-mode ${teamPermMode}`);
     }
 
     // Collect agent definitions
@@ -2718,6 +2756,14 @@ export async function showSettingsModal() {
     const agentTypeSelect = document.getElementById("settings-agent-type");
     if (agentTypeSelect) agentTypeSelect.value = currentAgentType;
 
+    // Default Permission Mode
+    const currentPermMode = s.default_permission_mode || "bypassPermissions";
+    const permModeSelect = document.getElementById("settings-permission-mode");
+    if (permModeSelect) {
+        permModeSelect.value = currentPermMode;
+        _updatePermModeDescription(permModeSelect);
+    }
+
     // Default Working Directory
     const dirInput = document.getElementById("settings-working-dir");
     if (dirInput) {
@@ -2905,6 +2951,7 @@ export async function applySettings() {
     const themeValue = document.getElementById("settings-theme")?.value || "dark";
     const engineName = document.getElementById("settings-renderer-select").value;
     const agentType = document.getElementById("settings-agent-type")?.value || "claude";
+    const permissionMode = document.getElementById("settings-permission-mode")?.value || "bypassPermissions";
     const workingDir = document.getElementById("settings-working-dir")?.value.trim() || "";
     const cliPathClaude = document.getElementById("settings-cli-path-claude")?.value.trim() || "";
     const cliPathCodex = document.getElementById("settings-cli-path-codex")?.value.trim() || "";
@@ -2937,6 +2984,7 @@ export async function applySettings() {
         custom_theme: customTheme,
         default_renderer: engineName,
         default_agent_type: agentType,
+        default_permission_mode: permissionMode,
         default_working_dir: workingDir,
         fit_pane_width: fitPaneWidth,
         notify_needs_input: notifyNeedsInput,

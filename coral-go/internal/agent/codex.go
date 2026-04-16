@@ -261,7 +261,7 @@ func (a *CodexAgent) BuildLaunchCommand(params LaunchParams) string {
 		parts = append(parts, FormatPromptFileArg(promptFile))
 	}
 
-	return strings.Join(parts, " ")
+	return strings.Join(ShellQuoteParts(parts), " ")
 }
 
 // isCodexOAuthMode checks if the Codex CLI is configured to use ChatGPT OAuth

@@ -42,7 +42,8 @@ type LaunchParams struct {
 	Tools           []string              // allowed tools (e.g. ["TodoWrite", "Bash(npm *)"])
 	MCPServers      map[string]any        // MCP server configs keyed by name
 	Hooks           map[string]interface{} // per-agent hooks to merge into settings (Claude-native) or fire via runner (Gemini/Codex)
-	CLIPath      string // custom path to agent binary (empty = default from PATH)
+	CLIPath         string // custom path to agent binary (empty = default from PATH)
+	PermissionMode  string // --permission-mode value (empty or "default" means omit the flag)
 	ProxyBaseURL    string // proxy base URL (e.g. "http://127.0.0.1:8420/proxy/{session_id}")
 	UpstreamBaseURL string // detected upstream URL before proxy override (e.g. "https://api.anthropic.com")
 	UpstreamProvider string // detected upstream provider (e.g. "anthropic", "bedrock", "vertex", "openai")
@@ -162,6 +163,34 @@ func readProtocolFile(path string) string {
 	return string(content)
 }
 
+// shellQuote wraps a string in single quotes if it contains shell metacharacters
+// (e.g. [, ], *, ?, spaces) that zsh/bash would interpret. Single quotes inside
+// the string are escaped as '\''.
+func shellQuote(s string) string {
+	if s == "" {
+		return s
+	}
+	if !strings.ContainsAny(s, " \t[]*?{}$`\"\\!#&|;()<>~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// ShellQuoteParts applies shellQuote to each part in a command parts slice,
+// skipping parts that are already compound shell expressions (e.g. "$(cat ...)",
+// "export VAR=... &&") which are already properly formatted.
+func ShellQuoteParts(parts []string) []string {
+	quoted := make([]string, len(parts))
+	for i, p := range parts {
+		if strings.Contains(p, "$(") || strings.HasPrefix(p, "export ") {
+			quoted[i] = p
+		} else {
+			quoted[i] = shellQuote(p)
+		}
+	}
+	return quoted
+}
+
 // writeTempFile creates a temp file with an unpredictable name using os.CreateTemp
 // (O_CREATE|O_EXCL) to prevent symlink attacks. The file name includes the session
 // ID for later cleanup via CleanupTempFiles. Returns the file path.
@@ -211,10 +240,18 @@ const DefaultOrchestratorSystemPrompt = "Post a message with coral-board post \"
 	"You can peek at any agent's terminal to check their progress without waiting for them to post:\n" +
 	"  coral-board peek \"Agent Name\"           — see the last 30 lines of their terminal\n" +
 	"  coral-board peek \"Agent Name\" --lines 50 — see more lines\n" +
-	"Use this to monitor progress, diagnose stuck agents, or verify work before asking for a status update."
+	"Use this to monitor progress, diagnose stuck agents, or verify work before asking for a status update.\n\n" +
+	"Use coral-board post for general conversation, discussion, status updates, and questions. " +
+	"Use coral-board task for specific, defined work assignments. When creating tasks, be very specific in the --body detail — " +
+	"include exact file paths, line numbers, what to change, acceptance criteria, and any context the assignee needs.\n" +
+	"  coral-board task add \"title\" --body \"detailed description\" --assignee \"Agent Name\" — create and assign a task\n" +
+	"  coral-board task list — see all tasks and their status\n" +
+	"  coral-board task complete <id> --message \"summary of what was done\" — agents should do this when done"
 
 const DefaultWorkerSystemPrompt = "Post a message with coral-board post \"<your introduction>\" that introduces yourself, " +
-	"then STOP and wait. Do NOT poll the message board in a loop. Coral will notify you when there are new messages."
+	"then STOP and wait. Do NOT poll the message board in a loop. Coral will notify you when there are new messages.\n\n" +
+	"You can check for assigned tasks with coral-board task list or coral-board task claim. " +
+	"When you finish a task, mark it complete: coral-board task complete <id> --message \"what was done\""
 
 // Default action prompts (appended to user prompt as CLI positional arg).
 const DefaultOrchestratorActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Post a message with coral-board post "<your introduction>" that introduces yourself, then discuss your proposed plan with the operator (the human user) before posting assignments.
@@ -223,11 +260,18 @@ CRITICAL: Do NOT poll or loop on 'coral-board read'. After posting your introduc
 
 When posting messages to specific agents, you MUST @mention them by name (e.g. @Lead Developer) so they receive a notification. You can also use the --to flag: coral-board post --to "Agent1,Agent2" "message" which auto-prepends @mentions. Messages without @mentions will NOT notify agents.
 
-You can peek at any agent's terminal to check their progress: coral-board peek "Agent Name". Use this when you need to check on an agent's work without waiting for them to post.`
+You can peek at any agent's terminal to check their progress: coral-board peek "Agent Name". Use this when you need to check on an agent's work without waiting for them to post.
+
+Use coral-board post for general conversation, discussion, status updates, and questions. Use coral-board task for specific, defined work assignments. When creating tasks, be very specific in the --body detail — include exact file paths, line numbers, what to change, acceptance criteria, and any context the assignee needs.
+  coral-board task add "title" --body "detailed description" --assignee "Agent Name" — create and assign a task
+  coral-board task list — see all tasks and their status
+  coral-board task complete <id> --message "summary of what was done" — agents should do this when done`
 
 const DefaultWorkerActionPrompt = `IMPORTANT: You were automatically joined to message board "{board_name}". Do NOT run coral-board join. Do not start any actions until you receive instructions from the Orchestrator on the message board. Post a message with coral-board post "<your introduction>" that introduces yourself, then STOP.
 
-CRITICAL: Do NOT poll or loop on 'coral-board read'. Coral will automatically notify you (as a user message) when new messages arrive — only run 'coral-board read' after receiving a notification. Between notifications, do nothing and wait.`
+CRITICAL: Do NOT poll or loop on 'coral-board read'. Coral will automatically notify you (as a user message) when new messages arrive — only run 'coral-board read' after receiving a notification. Between notifications, do nothing and wait.
+
+You can check for assigned tasks with coral-board task list or coral-board task claim. When you finish a task, mark it complete: coral-board task complete <id> --message "what was done"`
 
 // isOrchestratorRole returns true if the role string indicates an orchestrator.
 func isOrchestratorRole(role string) bool {
