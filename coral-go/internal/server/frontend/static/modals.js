@@ -2345,7 +2345,7 @@ async function launchTeam() {
     // Build flags from permission mode dropdown
     const flags = [];
     if (teamPermMode && teamPermMode !== 'default') {
-        flags.push(`--permission-mode ${teamPermMode}`);
+        flags.push('--permission-mode', teamPermMode);
     }
 
     // Collect agent definitions

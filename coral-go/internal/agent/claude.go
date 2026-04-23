@@ -257,12 +257,22 @@ func (a *ClaudeAgent) BuildLaunchCommand(params LaunchParams) string {
 	settingsFile := writeTempFile("settings", effectiveID, "json", append(data, '\n'))
 	parts = append(parts, "--settings", settingsFile)
 
-	if params.PermissionMode != "" && params.PermissionMode != "default" {
-		parts = append(parts, "--permission-mode", params.PermissionMode)
-	}
-
 	if len(params.Flags) > 0 {
 		parts = append(parts, params.Flags...)
+	}
+
+	// Add --permission-mode from settings only if Flags didn't already include it
+	if params.PermissionMode != "" && params.PermissionMode != "default" {
+		hasPermMode := false
+		for _, f := range params.Flags {
+			if f == "--permission-mode" {
+				hasPermMode = true
+				break
+			}
+		}
+		if !hasPermMode {
+			parts = append(parts, "--permission-mode", params.PermissionMode)
+		}
 	}
 
 	// Pass the prompt as a CLI positional argument so the agent starts immediately
