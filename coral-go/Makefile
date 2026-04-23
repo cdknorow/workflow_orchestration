@@ -29,3 +29,8 @@ test-server: dev
 .PHONY: test
 test: sync-docs
 	go test ./...
+
+# End-to-end frontend tests (headless Chrome + CDP). Requires node + Chrome.
+.PHONY: test-frontend
+test-frontend:
+	@bash ../tests/frontend/run.sh

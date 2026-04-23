@@ -1,0 +1,12 @@
+{
+  "name": "coral-frontend-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end tests for Coral frontend JS via headless Chrome + CDP",
+  "scripts": {
+    "test": "node acf_model_field.test.js"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.0"
+  }
+}
