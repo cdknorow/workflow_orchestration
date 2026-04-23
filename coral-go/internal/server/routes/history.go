@@ -94,6 +94,7 @@ func (h *HistoryHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		DateTo:         q.Get("date_to"),
 		MinDurationSec: minDur,
 		MaxDurationSec: maxDur,
+		AgentName:      q.Get("agent_name"),
 	}
 
 	// Chat type filter: all, agent, group
@@ -105,7 +106,8 @@ func (h *HistoryHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	// Check if any filters are active (used for cold-start fast path)
 	hasAnyFilter := params.Search != "" || len(params.TagIDs) > 0 ||
 		len(params.SourceTypes) > 0 || params.DateFrom != "" || params.DateTo != "" ||
-		params.MinDurationSec != nil || params.MaxDurationSec != nil
+		params.MinDurationSec != nil || params.MaxDurationSec != nil ||
+		params.AgentName != ""
 
 	// ── Agent sessions ──
 	agentSessions := make([]map[string]any, 0)
@@ -143,6 +145,8 @@ func (h *HistoryHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 				"tags":            s.Tags,
 				"branch":          s.Branch,
 				"duration_sec":    s.DurationSec,
+				"agent_name":      s.AgentName,
+				"display_name":    s.DisplayName,
 				"type":            "agent",
 			}
 			agentSessions = append(agentSessions, m)

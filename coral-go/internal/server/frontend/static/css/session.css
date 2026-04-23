@@ -809,6 +809,11 @@
     display: none;
 }
 
+#history-session-view .session-header {
+    display: block;
+    padding: 12px 20px;
+}
+
 .session-title {
     display: flex;
     align-items: center;

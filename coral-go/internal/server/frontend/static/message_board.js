@@ -270,6 +270,19 @@ function formatTime(iso) {
 
 // ── Subscribers ──────────────────────────────────────────────────────────
 
+async function navigateToAgentHistory(displayName) {
+    const resp = await fetch(`/api/sessions/history?page_size=50`);
+    const data = await resp.json();
+    const sessions = data.sessions || [];
+    const match = sessions.find(s => s.display_name === displayName || s.agent_name === displayName);
+    if (match) {
+        window.selectHistorySession(match.session_id);
+    } else {
+        showToast(`No history found for ${displayName}`);
+    }
+}
+window.navigateToAgentHistory = navigateToAgentHistory;
+
 async function loadBoardSubscribers(project) {
     try {
         const subs = await fetchSubscribers(project);
@@ -279,10 +292,10 @@ async function loadBoardSubscribers(project) {
             return;
         }
         list.innerHTML = subs.map(s => {
-            const sid = escapeAttr(s.subscriber_id);
+            const displayName = escapeAttr(s.job_title || s.subscriber_id);
             const icon = s.icon ? `<span class="agent-icon">${escapeHtml(s.icon)}</span> ` : '';
             return `<li style="padding:6px 0;border-bottom:1px solid var(--border)">
-                <div style="font-weight:600;font-size:12px">${icon}<a href="javascript:void(0)" class="subscriber-history-link" onclick="selectHistorySession('${sid}')" title="View chat history">${escapeHtml(s.job_title)}</a></div>
+                <div style="font-weight:600;font-size:12px">${icon}<a href="javascript:void(0)" class="subscriber-history-link" onclick="navigateToAgentHistory('${displayName}')" title="View chat history">${escapeHtml(s.job_title)}</a></div>
                 <div style="font-size:10px;color:var(--text-muted)">${escapeHtml(s.subscriber_id)}</div>
             </li>`;
         }).join('');

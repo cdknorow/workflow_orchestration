@@ -469,6 +469,7 @@ type SessionListParams struct {
 	DateTo         string
 	MinDurationSec *int
 	MaxDurationSec *int
+	AgentName      string
 }
 
 // SessionListResult holds paginated session results.
@@ -564,6 +565,12 @@ func (s *SessionStore) ListSessionsPaged(ctx context.Context, params SessionList
 	if len(params.SourceTypes) > 0 {
 		whereClauses = append(whereClauses, "si.source_type IN (?)")
 		args = append(args, params.SourceTypes)
+	}
+
+	// Agent name filter
+	if params.AgentName != "" {
+		whereClauses = append(whereClauses, "si.agent_name = ?")
+		args = append(args, params.AgentName)
 	}
 
 	whereSQL := ""
