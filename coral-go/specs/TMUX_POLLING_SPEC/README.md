@@ -1,3 +1,5 @@
+**Status: Superseded** — this spec has been replaced by TERMINAL_UNIFIED_STREAM (merged to main).
+
 # Tmux Terminal Polling Optimization Spec
 
 ## Background

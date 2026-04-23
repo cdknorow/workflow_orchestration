@@ -1,6 +1,6 @@
 # Unified Terminal Streaming Spec
 
-**Status:** Research
+**Status:** Shipped (merged to main 2026-04-23 — commit 9526729, merge 19361b1)
 **Owner:** —
 **Depends on:** none
 **Supersedes:** `TMUX_POLLING_SPEC`, partially `XTERM_FLICKER`

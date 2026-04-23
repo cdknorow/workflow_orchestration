@@ -51,9 +51,10 @@ Design specifications for Coral features. Each subdirectory contains a `README.m
 
 | Spec | Status | Summary |
 |------|--------|---------|
-| [Tmux Polling Optimization](TMUX_POLLING_SPEC/) | Shipped | Optimizing WebSocket terminal polling for agent session output |
+| [Terminal Unified Stream](TERMINAL_UNIFIED_STREAM/) | Shipped | Single raw-byte streaming protocol for both PTY and tmux backends (replaces polling + capture-pane with pipe-pane tail and binary WebSocket frames) |
+| [Tmux Polling Optimization](TMUX_POLLING_SPEC/) | Superseded | Superseded by TERMINAL_UNIFIED_STREAM |
 | [Tmux Native Scroll](TMUX_NATIVE_SCROLL/) | Shipped | Replacing xterm.js scrollback with tmux copy-mode to eliminate flicker |
-| [Xterm Flicker Fix](XTERM_FLICKER/) | Shipped | Fixing terminal display flicker caused by tmux-backed sessions |
+| [Xterm Flicker Fix](XTERM_FLICKER/) | Superseded | Flicker root cause eliminated by TERMINAL_UNIFIED_STREAM; retained for historical cursor-positioning notes |
 
 ### Mobile
 
