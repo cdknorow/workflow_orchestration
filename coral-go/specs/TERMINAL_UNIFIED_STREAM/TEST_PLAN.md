@@ -215,7 +215,9 @@ Unless otherwise stated, a failed step invalidates the case.
 
 ---
 
-## 5. Binary Safety
+## 5. Binary Safety & Wire Format
+
+**Wire format (Phase A decision, pending final operator approval):** stream data is sent as **binary WebSocket frames** (`websocket.MessageBinary` server-side; `event.data instanceof ArrayBuffer` client-side, written via `terminal.write(new Uint8Array(event.data))`). Control messages (`terminal_closed`, `resize_ack`, `mode`) remain **JSON text frames**. This eliminates the `string(data)` UTF-8 sanitization path in today's code that silently replaces invalid bytes with U+FFFD.
 
 ### 5.1 High-byte echo (integration)
 **Preconditions:** Go test spawns a session and injects bytes via `SendInput` / reads via `Attach`.
@@ -224,7 +226,7 @@ Unless otherwise stated, a failed step invalidates the case.
 
 **Pass:**
 - Every byte written to the session input reaches the subscriber channel (echo via `cat` or a local loopback pipe).
-- ANSI-escape sequences arrive byte-identical — no re-encoding, no JSON-escaping damage.
+- ANSI-escape sequences arrive byte-identical — no re-encoding, no UTF-8 sanitization damage (bytes must NOT be coerced through `string(data)` on the Go side before hitting the wire).
 - No panic on `0x00` or on partial UTF-8 sequences.
 
 **Fail:** any byte dropped; bytes substituted (e.g. `\xff` → `\xef\xbf\xbd` replacement char); sequence split across messages corrupts a multi-byte codepoint.
@@ -259,6 +261,43 @@ Unless otherwise stated, a failed step invalidates the case.
 
 **Pass:** gauges and braille characters render correctly; colors stable; resize redraws cleanly; on quit, scrollback unchanged.
 **Fail:** wrong Unicode codepoints rendered; colors stuck; tearing.
+
+### 5.5 Stream data arrives as binary WebSocket frames (manual-browser)
+**Preconditions:** Chrome/Firefox DevTools → Network → WS frames open on a live terminal session.
+
+**Steps:**
+1. Trigger any terminal output (`echo hi`, `seq 1 20`, `htop`).
+2. Inspect each inbound WS frame in DevTools.
+3. In the DevTools console: `ws = /* get the terminal socket */; ws.binaryType` — verify it reads `"arraybuffer"`.
+4. In the renderer source, confirm the `onmessage` handler routes `event.data instanceof ArrayBuffer` → `terminal.write(new Uint8Array(event.data))` and only runs `JSON.parse` for string frames.
+
+**Pass:**
+- Inbound frames carrying terminal bytes show as **Binary** (not **Text**) in the DevTools WS view.
+- `binaryType` is `"arraybuffer"`.
+- Renderer has a binary fast-path; no `JSON.parse` of payload bytes.
+- Content-wise: full ANSI byte stream reaches xterm unchanged (spot-check by running `printf '\xff\xfe\xfd'` and confirming those three bytes arrive — xterm may render them as replacement glyphs, but the wire bytes must be preserved).
+
+**Fail:** stream data arrives as text frame; binary-frame branch missing from renderer; `binaryType` default (`"blob"`) still set; visible mojibake from silent re-encoding.
+
+### 5.6 Control messages remain JSON text frames (manual-browser + integration)
+**Preconditions:** as 5.5.
+
+**Steps (manual-browser):**
+1. Trigger a resize by dragging the browser window.
+2. In DevTools → Network → WS, look for `resize_ack` (if implemented) — must be a **Text** frame with valid JSON.
+3. Kill the session server-side (e.g. `tmux kill-session -t <name>`).
+4. Observe the `terminal_closed` frame — must be **Text** / JSON.
+5. If the backend emits an advisory `{"type":"mode", ...}` (per spec §Wire protocol), confirm it too is a Text frame.
+
+**Steps (integration):**
+- Add `tmux_backend_test.go` coverage that asserts the server writes `MessageBinary` for stream payloads and `MessageText` (via `wsjson.Write`) for all control messages.
+
+**Pass:**
+- `terminal_closed`, `resize_ack`, `mode` all arrive as text frames with parseable JSON.
+- Client handles mixed frame types without error (binary fast-path for bytes, JSON parse for text).
+- No "unexpected end of JSON input" errors in the browser console.
+
+**Fail:** control message sent as binary; client tries to `JSON.parse` an ArrayBuffer; any silent handler swallowing errors.
 
 ---
 
@@ -436,8 +475,8 @@ Per spec §Tradeoffs:
 | Type | Count |
 | --- | --- |
 | Unit (Go `go test`) | 6 (2.2, 3.3, 5.1, 5.2, 6.3, 10.1–10.3) |
-| Integration (Go against live backend) | 3 (3.3, 5.1, 5.2, 7.2) |
-| Manual browser | ~22 across §1–§9 |
+| Integration (Go against live backend) | 4 (3.3, 5.1, 5.2, 5.6, 7.2) |
+| Manual browser | ~24 across §1–§9 (adds §5.5 binary-frame, §5.6 control-frame) |
 
 Execution order: run unit + integration first (fast-fail gate), then manual browser walks in the order §1 → §9. §10 is a post-merge audit. §11 is reference only.
 
