@@ -21,6 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cdknorow/coral/internal/agent"
+	"github.com/cdknorow/coral/internal/agenttypes"
 	"github.com/cdknorow/coral/internal/config"
 	"github.com/cdknorow/coral/internal/executil"
 	"github.com/cdknorow/coral/internal/store"
@@ -146,6 +147,22 @@ func (h *SystemHandler) GetDefaultPrompts(w http.ResponseWriter, r *http.Request
 		"team_reminder_orchestrator":         "Remember to coordinate with your team and check the message board for updates",
 		"team_reminder_worker":               "Remember to work with your team",
 	})
+}
+
+// GetAgentModels returns the canonical per-agent-type model list used to
+// populate the Model dropdown in the UI. The frontend still accepts free-form
+// model strings — this list is only the curated suggestions.
+// GET /api/agent-models
+func (h *SystemHandler) GetAgentModels(w http.ResponseWriter, r *http.Request) {
+	out := make(map[string][]string, len(agenttypes.AgentTypeModels))
+	for k, v := range agenttypes.AgentTypeModels {
+		if v == nil {
+			out[k] = []string{}
+		} else {
+			out[k] = v
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // Status returns server status.

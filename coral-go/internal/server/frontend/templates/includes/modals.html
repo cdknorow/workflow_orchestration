@@ -585,6 +585,25 @@
                     </div>
                     <span class="settings-hint">Full path to agent CLI binary. Leave empty to use default from PATH.</span>
                 </dd>
+                <dt>Default Models</dt>
+                <dd class="settings-cli-paths">
+                    <label class="settings-cli-row">
+                        <span class="settings-cli-label">Claude</span>
+                        <input type="text" id="settings-default-model-claude" class="settings-input settings-mono-input" list="settings-models-claude" placeholder="Leave blank for none" autocomplete="off">
+                        <datalist id="settings-models-claude"></datalist>
+                    </label>
+                    <label class="settings-cli-row">
+                        <span class="settings-cli-label">Codex</span>
+                        <input type="text" id="settings-default-model-codex" class="settings-input settings-mono-input" list="settings-models-codex" placeholder="Leave blank for none" autocomplete="off">
+                        <datalist id="settings-models-codex"></datalist>
+                    </label>
+                    <label class="settings-cli-row">
+                        <span class="settings-cli-label">Gemini</span>
+                        <input type="text" id="settings-default-model-gemini" class="settings-input settings-mono-input" list="settings-models-gemini" placeholder="Leave blank for none" autocomplete="off">
+                        <datalist id="settings-models-gemini"></datalist>
+                    </label>
+                    <span id="settings-default-models-notice" class="settings-hint">Used when launching an agent without a model specified. Pick from the dropdown or type any model id.</span>
+                </dd>
                 <dt>Group by Team</dt>
                 <dd>
                     <label class="settings-toggle">

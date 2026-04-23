@@ -358,6 +358,7 @@ func (s *Server) buildRouter() chi.Router {
 	r.Get("/api/settings", sysHandler.GetSettings)
 	r.Put("/api/settings", sysHandler.PutSettings)
 	r.Get("/api/settings/default-prompts", sysHandler.GetDefaultPrompts)
+	r.Get("/api/agent-models", sysHandler.GetAgentModels)
 	r.Get("/api/system/status", sysHandler.Status)
 	r.Get("/api/system/update-check", sysHandler.UpdateCheck)
 	r.Get("/api/system/cli-check", sysHandler.CLICheck)

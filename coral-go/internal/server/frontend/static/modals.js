@@ -29,6 +29,59 @@ let _launchMode = null;
 let _existingTeamBoardNames = new Set();
 let _teamAgentModalRow = null;
 
+// ── Canonical per-agent-type model list ────────────────────────────────
+// Fetched once from GET /api/agent-models and cached for the tab lifetime.
+// Shape: { claude: [...], codex: [], gemini: [], terminal: [] }
+let _agentModelsPromise = null;
+function _getAgentModels() {
+    if (!_agentModelsPromise) {
+        _agentModelsPromise = fetch('/api/agent-models')
+            .then(r => r.ok ? r.json() : {})
+            .catch(() => ({}));
+    }
+    return _agentModelsPromise;
+}
+window._getAgentModels = _getAgentModels;
+
+// _fillModelDatalist replaces <option>s in the given <datalist> element with
+// the canonical list for the agent type. Unknown types or an empty list
+// result in an empty datalist (the input still accepts free-form text).
+function _fillModelDatalist(datalistEl, agentType, modelsByType) {
+    if (!datalistEl) return;
+    const list = (modelsByType && modelsByType[agentType]) || [];
+    datalistEl.innerHTML = list
+        .map(m => `<option value="${escapeAttr(m)}"></option>`)
+        .join('');
+}
+window._fillModelDatalist = _fillModelDatalist;
+
+// ── User's per-type default model (for ACF pre-fill) ───────────────────
+// Pulled from the same /api/settings payload the Settings modal uses, but
+// cached separately with its own invalidation (triggered after a Settings
+// save so the next form open sees the new default).
+// Shape: { claude: "<id>", codex: "<id>", gemini: "<id>" }
+let _defaultModelsPromise = null;
+function _getDefaultModels() {
+    if (!_defaultModelsPromise) {
+        _defaultModelsPromise = fetch('/api/settings')
+            .then(r => r.ok ? r.json() : { settings: {} })
+            .then(data => {
+                const s = data.settings || {};
+                return {
+                    claude: (s.default_model_claude || '').trim(),
+                    codex: (s.default_model_codex || '').trim(),
+                    gemini: (s.default_model_gemini || '').trim(),
+                };
+            })
+            .catch(() => ({ claude: '', codex: '', gemini: '' }));
+    }
+    return _defaultModelsPromise;
+}
+function _invalidateDefaultModels() {
+    _defaultModelsPromise = null;
+}
+window._invalidateDefaultModels = _invalidateDefaultModels;
+
 function _syncMobileLaunchSections(step) {
     const isMobile = window.innerWidth <= 767;
     const root = step ? document.getElementById(`launch-step-${step}`) : document.getElementById("launch-modal");
@@ -1562,8 +1615,9 @@ function renderAgentConfigForm(containerId, opts = {}) {
                     <option value="terminal"${agentTypeVal === 'terminal' ? ' selected' : ''}>Terminal</option>
                 </select>
             </label>
-            <label>Model <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
-                <input type="text" class="acf-model" placeholder="e.g. opus, sonnet" value="${escapeAttr(modelVal)}">
+            <label class="acf-model-wrap">Model <span style="color:var(--text-muted);font-weight:normal">(optional)</span>:
+                <input type="text" class="acf-model" list="acf-models-${uid}" placeholder="Leave blank to use default" autocomplete="off" value="${escapeAttr(modelVal)}">
+                <datalist id="acf-models-${uid}"></datalist>
             </label>
         </div>
         <label>Behavior Prompt:
@@ -1608,7 +1662,65 @@ function renderAgentConfigForm(containerId, opts = {}) {
         _renderPresetButtons(`${uid}-presets`, `(function(v){ window._applyACFPresetFor('${containerId}', v) })`);
     }
 
-    container.querySelector('.acf-agent-type')?.addEventListener('change', () => _syncACFAutoPermissions(container));
+    // Seed the 'dirty' flag: an explicit modelVal from the caller (restart,
+    // preset, saved team config) means the user already has a choice we must
+    // preserve across agent-type changes. An empty modelVal lets pre-fill run.
+    container.dataset.acfModelDirty = modelVal ? 'true' : 'false';
+
+    // Any user keystroke / paste / clear marks the field dirty so subsequent
+    // agent-type changes won't clobber it. Guard with e.isTrusted so our
+    // programmatic assignments (pre-fill, setAgentConfig) don't trip it.
+    const modelInput = container.querySelector('.acf-model');
+    if (modelInput) {
+        modelInput.addEventListener('input', (e) => {
+            if (e.isTrusted) container.dataset.acfModelDirty = 'true';
+        });
+    }
+
+    // Populate datalist + apply visibility + pre-fill for the initial agent type.
+    _syncACFModelField(container);
+    container.querySelector('.acf-agent-type')?.addEventListener('change', () => {
+        _syncACFAutoPermissions(container);
+        _syncACFModelField(container);
+    });
+}
+
+// _syncACFModelField reconciles the Model input with the currently selected
+// agent type:
+//   • fills the <datalist> with the canonical options for that type,
+//   • hides the field entirely for the terminal agent,
+//   • pre-fills the input with the user's default for that type, but only
+//     when the user hasn't touched the field (dirty flag off).
+function _syncACFModelField(container) {
+    if (!container) return;
+    const typeSel = container.querySelector('.acf-agent-type');
+    const modelWrap = container.querySelector('.acf-model-wrap');
+    const modelInput = container.querySelector('.acf-model');
+    const datalist = container.querySelector('datalist[id^="acf-models-"]');
+    const agentType = typeSel?.value || 'claude';
+    if (modelWrap) {
+        modelWrap.style.display = (agentType === 'terminal') ? 'none' : '';
+    }
+    if (datalist) {
+        _getAgentModels().then(models => _fillModelDatalist(datalist, agentType, models));
+    }
+    if (!modelInput) return;
+    if (container.dataset.acfModelDirty === 'true') return; // user owns the value
+    if (agentType === 'terminal') {
+        modelInput.value = '';
+        return;
+    }
+    _getDefaultModels().then(defaults => {
+        // If the user started typing during the fetch, don't clobber their input.
+        if (container.dataset.acfModelDirty === 'true') return;
+        // Re-check the agent type — the user may have switched again mid-fetch.
+        const currentType = typeSel?.value || 'claude';
+        if (currentType === 'terminal') {
+            modelInput.value = '';
+            return;
+        }
+        modelInput.value = defaults[currentType] || '';
+    });
 }
 window.renderAgentConfigForm = renderAgentConfigForm;
 
@@ -1629,10 +1741,14 @@ function getAgentConfig(containerId) {
         flags = flags ? `${flags} ${permFlag}` : permFlag;
     }
 
+    // Terminal agents never carry a model — the field is hidden in the UI.
+    const rawModel = container.querySelector('.acf-model')?.value.trim() || '';
+    const model = agentType === 'terminal' ? '' : rawModel;
+
     return {
         name: container.querySelector('.acf-name')?.value.trim() || '',
         agentType,
-        model: container.querySelector('.acf-model')?.value.trim() || '',
+        model,
         prompt: container.querySelector('.acf-prompt')?.value.trim() || '',
         flags,
         capabilities: uid ? _getPermissions(`${uid}-perms`) : null,
@@ -1656,7 +1772,13 @@ function setAgentConfig(containerId, values) {
     const typeEl = container.querySelector('.acf-agent-type');
     if (typeEl) typeEl.value = v.agentType || v.agent_type || 'claude';
     const modelEl = container.querySelector('.acf-model');
-    if (modelEl) modelEl.value = v.model || '';
+    if (modelEl) {
+        modelEl.value = v.model || '';
+        // Explicit non-empty model from the caller (restart, saved config)
+        // means "user owns this value" — protect it from pre-fill on subsequent
+        // type changes. Otherwise clear the flag so pre-fill runs below.
+        container.dataset.acfModelDirty = v.model ? 'true' : 'false';
+    }
     const promptEl = container.querySelector('.acf-prompt');
     if (promptEl) promptEl.value = v.prompt || '';
     const flagsEl = container.querySelector('.acf-flags');
@@ -1679,6 +1801,9 @@ function setAgentConfig(containerId, values) {
     }
 
     if (uid) _setPermissions(`${uid}-perms`, v.capabilities || null);
+
+    // Re-sync Model combo after programmatic agent-type change.
+    _syncACFModelField(container);
 }
 window.setAgentConfig = setAgentConfig;
 
@@ -2788,6 +2913,26 @@ export async function showSettingsModal() {
     if (cliCodex) cliCodex.value = s.cli_path_codex || "";
     if (cliGemini) cliGemini.value = s.cli_path_gemini || "";
 
+    // Default Models — populate combo inputs + datalists from /api/agent-models
+    const defClaude = document.getElementById("settings-default-model-claude");
+    const defCodex = document.getElementById("settings-default-model-codex");
+    const defGemini = document.getElementById("settings-default-model-gemini");
+    if (defClaude) defClaude.value = s.default_model_claude || "";
+    if (defCodex) defCodex.value = s.default_model_codex || "";
+    if (defGemini) defGemini.value = s.default_model_gemini || "";
+    _getAgentModels().then(models => {
+        // _getAgentModels swallows errors and resolves with {} on failure; on
+        // success it returns the canonical map with an array for each agent type.
+        if (!models || !Array.isArray(models.claude)) {
+            const notice = document.getElementById("settings-default-models-notice");
+            if (notice) notice.textContent = "Could not load model list — you can still type a custom model id.";
+            return;
+        }
+        _fillModelDatalist(document.getElementById("settings-models-claude"), "claude", models);
+        _fillModelDatalist(document.getElementById("settings-models-codex"), "codex", models);
+        _fillModelDatalist(document.getElementById("settings-models-gemini"), "gemini", models);
+    });
+
     // Group by Team
     const groupByTeamCheck = document.getElementById("settings-group-by-team");
     if (groupByTeamCheck) {
@@ -2956,6 +3101,9 @@ export async function applySettings() {
     const cliPathClaude = document.getElementById("settings-cli-path-claude")?.value.trim() || "";
     const cliPathCodex = document.getElementById("settings-cli-path-codex")?.value.trim() || "";
     const cliPathGemini = document.getElementById("settings-cli-path-gemini")?.value.trim() || "";
+    const defaultModelClaude = document.getElementById("settings-default-model-claude")?.value.trim() || "";
+    const defaultModelCodex = document.getElementById("settings-default-model-codex")?.value.trim() || "";
+    const defaultModelGemini = document.getElementById("settings-default-model-gemini")?.value.trim() || "";
     const fitPaneWidth = document.getElementById("settings-fit-pane-width")?.checked || false;
     const notifyNeedsInput = document.getElementById("settings-notify-needs-input")?.checked || false;
     const terminalFontSize = document.getElementById("settings-terminal-font-size")?.value || "13";
@@ -2994,6 +3142,9 @@ export async function applySettings() {
         cli_path_claude: cliPathClaude,
         cli_path_codex: cliPathCodex,
         cli_path_gemini: cliPathGemini,
+        default_model_claude: defaultModelClaude,
+        default_model_codex: defaultModelCodex,
+        default_model_gemini: defaultModelGemini,
         proxy_enabled: proxyEnabled,
         proxy_enabled_claude: proxyEnabled,
         proxy_enabled_codex: proxyEnabledCodex,
@@ -3011,6 +3162,8 @@ export async function applySettings() {
             body: JSON.stringify(payload),
         });
         state.settings = { ...state.settings, ...payload };
+        // Defaults may have changed — force next ACF open to re-fetch.
+        _invalidateDefaultModels();
 
         // Clear any previously applied custom CSS variables
         clearCustomThemeVars();

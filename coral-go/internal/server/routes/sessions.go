@@ -118,6 +118,43 @@ func (h *SessionsHandler) getDiffMode(ctx context.Context) string {
 	return settings["git_diff_mode"]
 }
 
+// resolveModel returns the effective model for a launch. A non-empty
+// requestModel always wins (after trimming whitespace). Otherwise it falls
+// back to the user's default_model_<agentType> setting. Returns "" if
+// neither is set. Terminal agents never receive a model.
+func (h *SessionsHandler) resolveModel(ctx context.Context, agentType, requestModel string) string {
+	if agentType == at.Terminal {
+		return ""
+	}
+	if m := strings.TrimSpace(requestModel); m != "" {
+		return m
+	}
+	if agentType == "" {
+		return ""
+	}
+	settings, err := h.ss.GetSettings(ctx)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(settings["default_model_"+agentType])
+}
+
+// defaultModelFromSettings looks up default_model_<agentType> in an already-loaded
+// settings map. Used by LaunchTeam to avoid re-reading settings per agent.
+// Terminal agents never receive a model.
+func defaultModelFromSettings(settings map[string]string, agentType, requestModel string) string {
+	if agentType == at.Terminal {
+		return ""
+	}
+	if m := strings.TrimSpace(requestModel); m != "" {
+		return m
+	}
+	if agentType == "" || settings == nil {
+		return ""
+	}
+	return strings.TrimSpace(settings["default_model_"+agentType])
+}
+
 // NewSessionsHandler creates a SessionsHandler with the given dependencies.
 func NewSessionsHandler(db *store.DB, cfg *config.Config, backend ptymanager.TerminalBackend, terminal ptymanager.SessionTerminal, bs *board.Store) *SessionsHandler {
 	return &SessionsHandler{
@@ -1984,13 +2021,16 @@ func (h *SessionsHandler) Launch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add model flag if specified
+	// Resolve model: request wins, else per-type default from settings.
+	effectiveModel := h.resolveModel(r.Context(), body.AgentType, body.Model)
+
+	// Add model flag if resolved to non-empty
 	launchFlags := body.Flags
-	if body.Model != "" {
-		launchFlags = append(append([]string{}, body.Flags...), "--model", body.Model)
+	if effectiveModel != "" {
+		launchFlags = append(append([]string{}, body.Flags...), "--model", effectiveModel)
 	}
 	result, err := h.launchSession(r.Context(), body.WorkingDir, body.AgentType, body.DisplayName,
-		"", launchFlags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, body.Model, body.Capabilities,
+		"", launchFlags, body.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, effectiveModel, body.Capabilities,
 		body.Tools, body.MCPServers, body.Hooks)
 	if err != nil {
 		errInternalServer(w, err.Error())
@@ -2113,6 +2153,9 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 
 	var launched []map[string]any
 
+	// Load settings once so we can fall back to per-type default_model_<type>.
+	userSettings, _ := h.ss.GetSettings(ctx)
+
 	for _, agentDef := range body.Agents {
 		if agentDef.Name == "" {
 			continue
@@ -2124,15 +2167,18 @@ func (h *SessionsHandler) LaunchTeam(w http.ResponseWriter, r *http.Request) {
 			agentType = agentDef.AgentType
 		}
 
-		// Build per-agent flags: start with team-level, add model if specified
+		// Resolve model: per-agent request wins, else user's default_model_<type>.
+		effectiveModel := defaultModelFromSettings(userSettings, agentType, agentDef.Model)
+
+		// Build per-agent flags: start with team-level, add model if resolved
 		agentFlags := make([]string, len(body.Flags))
 		copy(agentFlags, body.Flags)
-		if agentDef.Model != "" {
-			agentFlags = append(agentFlags, "--model", agentDef.Model)
+		if effectiveModel != "" {
+			agentFlags = append(agentFlags, "--model", effectiveModel)
 		}
 
 		result, err := h.launchSession(ctx, workingDir, agentType, agentDef.Name,
-			"", agentFlags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, agentDef.Model, agentDef.Capabilities,
+			"", agentFlags, agentDef.Prompt, body.BoardName, body.BoardServer, body.Backend, body.BoardType, effectiveModel, agentDef.Capabilities,
 			agentDef.Tools, agentDef.MCPServers, agentDef.Hooks)
 		if err != nil {
 			log.Printf("[launch-team] failed to launch agent %s: %v", agentDef.Name, err)
