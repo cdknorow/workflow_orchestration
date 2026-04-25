@@ -302,6 +302,13 @@ export function connectTerminalWs(name, agentType, sessionId) {
     terminalWs.onopen = () => {
         dbg('terminalWs OPEN', { sessionId, url: terminalWs.url });
         _setDisconnectedBadge(false);
+        if (terminal) {
+            terminalWs.send(JSON.stringify({
+                type: 'terminal_resize',
+                cols: terminal.cols,
+                rows: terminal.rows,
+            }));
+        }
         // Flush any input queued while disconnected
         if (_inputQueue.length > 0) {
             const queued = _inputQueue.join("");
@@ -327,7 +334,13 @@ export function connectTerminalWs(name, agentType, sessionId) {
                 _paneClosed = false;
                 _restarting = false;
                 _setSessionEndedOverlay(false);
-                terminal.write(new Uint8Array(event.data));
+                if (_msgCount === 1) {
+                    terminal.write(new Uint8Array(event.data), () => {
+                        terminal.scrollToBottom();
+                    });
+                } else {
+                    terminal.write(new Uint8Array(event.data));
+                }
             }
             return;
         }

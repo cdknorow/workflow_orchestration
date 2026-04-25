@@ -197,7 +197,15 @@ func (b *TmuxBackend) Resize(name string, cols, rows uint16) error {
 		agentType = sess.info.AgentType
 		sessionID = sess.info.SessionID
 	}
-	return b.client.ResizePane(ctx, name, int(cols), agentType, sessionID)
+
+	target, err := b.client.FindPaneTarget(ctx, name, agentType, sessionID)
+	if err != nil {
+		return err
+	}
+	if target == "" {
+		return fmt.Errorf("pane %q not found", name)
+	}
+	return b.client.ResizePaneTarget(ctx, target, int(cols), int(rows))
 }
 
 // recoverSession discovers a session from live tmux panes and registers it
