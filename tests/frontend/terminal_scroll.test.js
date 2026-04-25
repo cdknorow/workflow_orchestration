@@ -160,41 +160,44 @@ async function run() {
             bufferCheck && bufferCheck.hasLine199);
     }
 
-    // ── S3: Session switch preserves scroll-to-bottom ────────────────
+    // ── S3: Session switch — replay seed scrolls to bottom ─────────
+    // The real bug: after switching sessions, the replay seed (which starts
+    // with \x1b[2J\x1b[3J\x1b[H = clear + cursor home) leaves the viewport
+    // at the TOP of the replayed content instead of the bottom. To reproduce:
+    // 1. Switch away from the terminal (hide xterm container, show capture)
+    // 2. Switch back via selectLiveSession (the real UI flow)
+    // 3. Check that viewport is at the bottom of the replayed content
     if (hasTerminal) {
-        console.log('Simulating session switch (scroll up + reselect)...');
+        console.log('Simulating session switch (away + back via selectLiveSession)...');
 
-        // Scroll to top to simulate user scrolled away
+        // Switch away: hide xterm, show capture pane (simulates clicking a non-xterm session)
         await evalInPage(`
             (function() {
-                const term = window.getTerminal();
-                if (term) term.scrollToTop();
+                window.disconnectTerminalWs();
+                document.getElementById("xterm-container").style.display = "none";
+                document.getElementById("pane-capture").style.display = "";
             })()
         `);
-        await sleep(300);
+        await sleep(500);
 
-        const scrolledUp = await evalInPage(`
-            (function() {
-                const term = window.getTerminal();
-                return term ? term.buffer.active.viewportY : null;
-            })()
-        `);
-        check('S3 scrollToTop moved viewport up',
-            scrolledUp !== null && scrolledUp === 0,
-            `viewportY after scrollToTop=${scrolledUp}`);
-
-        // Re-select the session (triggers new WS connect + replay + scrollToBottom)
+        // Switch back via the real selectLiveSession flow (createTerminal + connectTerminalWs + fitTerminal)
         await evalInPage(`window.selectLiveSession('${sessionName}', 'terminal', '${sessionId}')`);
-        await sleep(2000);
+        await sleep(3000);
 
         const s3 = await getScrollState();
         if (s3) {
-            check('S3 viewport at bottom after session re-select',
+            check('S3 replay produced scrollback after session switch',
+                s3.baseY > 0,
+                `baseY=${s3.baseY} (should be > 0 if replay has enough content)`);
+
+            check('S3 viewport at bottom after session switch',
                 s3.viewportY >= s3.baseY,
                 `viewportY=${s3.viewportY} baseY=${s3.baseY}`);
         } else {
-            check('S3 viewport at bottom after session re-select', false,
-                'terminal not accessible after re-select');
+            check('S3 replay produced scrollback after session switch', false,
+                'terminal not accessible after switch');
+            check('S3 viewport at bottom after session switch', false,
+                'terminal not accessible after switch');
         }
     }
 

@@ -57,6 +57,8 @@ let _connectedSessionId = null;
 let _wsGeneration = 0;
 let _paneClosed = false;  // true when server reports pane is gone
 let _restarting = false;  // true when a restart is in progress
+let _needsScrollToBottom = false;  // set on connect, cleared after settling
+let _scrollSettleTimer = null;
 
 export function setRestarting(value) {
     _restarting = value;
@@ -286,6 +288,7 @@ export function connectTerminalWs(name, agentType, sessionId) {
     const myGeneration = ++_wsGeneration;
     _connectedSessionId = sessionId;
     _paneClosed = false;
+    _needsScrollToBottom = true;
     _setSessionEndedOverlay(false);
 
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -334,12 +337,15 @@ export function connectTerminalWs(name, agentType, sessionId) {
                 _paneClosed = false;
                 _restarting = false;
                 _setSessionEndedOverlay(false);
-                if (_msgCount === 1) {
-                    terminal.write(new Uint8Array(event.data), () => {
-                        terminal.scrollToBottom();
-                    });
-                } else {
-                    terminal.write(new Uint8Array(event.data));
+                terminal.write(new Uint8Array(event.data));
+                if (_needsScrollToBottom) {
+                    terminal.scrollToBottom();
+                    // Keep scrolling to bottom for 500ms after connect
+                    // to cover replay seed + any follow-up chunks
+                    clearTimeout(_scrollSettleTimer);
+                    _scrollSettleTimer = setTimeout(() => {
+                        _needsScrollToBottom = false;
+                    }, 500);
                 }
             }
             return;
