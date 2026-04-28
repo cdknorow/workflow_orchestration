@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -585,12 +586,14 @@ func (h *BoardHandler) RemoveGroupMember(w http.ResponseWriter, r *http.Request)
 func (h *BoardHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	var body struct {
-		Title        string `json:"title"`
-		Body         string `json:"body"`
-		Priority     string `json:"priority"`
-		CreatedBy    string `json:"created_by"`
-		SubscriberID string `json:"subscriber_id"`
-		AssignedTo   string `json:"assigned_to"`
+		Title        string          `json:"title"`
+		Body         string          `json:"body"`
+		Priority     string          `json:"priority"`
+		CreatedBy    string          `json:"created_by"`
+		SubscriberID string          `json:"subscriber_id"`
+		AssignedTo   string          `json:"assigned_to"`
+		BlockedBy    json.RawMessage `json:"blocked_by,omitempty"`
+		Draft        bool            `json:"draft,omitempty"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		errBadRequest(w, "invalid JSON")
@@ -611,48 +614,106 @@ func (h *BoardHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	if body.Priority == "" {
 		body.Priority = "medium"
 	}
-	task, err := h.bs.CreateTask(r.Context(), project, body.Title, body.Body, body.Priority, createdBy, body.AssignedTo)
+
+	var opts *board.CreateTaskOpts
+	if len(body.BlockedBy) > 0 {
+		deps, err := parseBlockedBy(body.BlockedBy, project)
+		if err != nil {
+			errBadRequest(w, err.Error())
+			return
+		}
+		opts = &board.CreateTaskOpts{BlockedBy: deps, MaxDepth: 3, Draft: body.Draft}
+	} else if body.Draft {
+		opts = &board.CreateTaskOpts{Draft: true}
+	}
+
+	task, err := h.bs.CreateTaskWithOpts(r.Context(), project, body.Title, body.Body, body.Priority, createdBy, opts, body.AssignedTo)
 	if err != nil {
-		errInternalServer(w, err.Error())
+		errBadRequest(w, err.Error())
 		return
 	}
-	// Notify agents about the new task — board audit + direct terminal nudge
+
 	assignee := ""
 	if task.AssignedTo != nil {
 		assignee = *task.AssignedTo
 	}
-	go func() {
-		ctx := context.Background()
-		notification := h.buildAssignmentNotification(ctx, project, task, assignee, false)
-		h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
+	if task.Status == "draft" {
+		go func() {
+			notification := fmt.Sprintf("[Task #%d (draft)] %s", task.ID, task.Title)
+			h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
+		}()
+	} else if task.Status == "blocked" {
+		go func() {
+			deps, _ := h.bs.GetTaskDependencies(context.Background(), task.ID)
+			blockerList := formatBlockerList(deps)
+			notification := fmt.Sprintf("[Task #%d (blocked)] %s — blocked by %s", task.ID, task.Title, blockerList)
+			h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
+		}()
+	} else {
+		go func() {
+			ctx := context.Background()
+			notification := h.buildAssignmentNotification(ctx, project, task, assignee, false)
+			h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
 
-		// Send direct terminal nudge
-		if h.terminal != nil {
-			if assignee != "" {
-				// Nudge the assigned agent (if they have no active task)
-				hasActive, _ := h.bs.HasActiveTaskForAssignee(ctx, project, assignee, task.ID)
-				if !hasActive {
-					sub, err := h.bs.GetSubscription(ctx, assignee)
-					if err == nil && sub != nil && sub.SessionName != "" {
-						nudge := taskNudge
-						if err := h.terminal.SendInput(ctx, sub.SessionName, nudge, "", ""); err != nil {
-							slog.Warn("failed to nudge agent", "subscriber", assignee, "session", sub.SessionName, "error", err)
+			// Send direct terminal nudge
+			if h.terminal != nil {
+				if assignee != "" {
+					hasActive, _ := h.bs.HasActiveTaskForAssignee(ctx, project, assignee, task.ID)
+					if !hasActive {
+						sub, err := h.bs.GetSubscription(ctx, assignee)
+						if err == nil && sub != nil && sub.SessionName != "" {
+							if err := h.terminal.SendInput(ctx, sub.SessionName, taskNudge, "", ""); err != nil {
+								slog.Warn("failed to nudge agent", "subscriber", assignee, "session", sub.SessionName, "error", err)
+							}
+						}
+					}
+				} else {
+					idle := h.bs.FindIdleSubscriber(ctx, project)
+					if idle != nil && idle.SessionName != "" {
+						if err := h.terminal.SendInput(ctx, idle.SessionName, taskNudge, "", ""); err != nil {
+							slog.Warn("failed to nudge agent", "subscriber", idle.SubscriberID, "session", idle.SessionName, "error", err)
 						}
 					}
 				}
-			} else {
-				// Unassigned task — nudge a random idle agent
-				idle := h.bs.FindIdleSubscriber(ctx, project)
-				if idle != nil && idle.SessionName != "" {
-					nudge := taskNudge
-					if err := h.terminal.SendInput(ctx, idle.SessionName, nudge, "", ""); err != nil {
-						slog.Warn("failed to nudge agent", "subscriber", idle.SubscriberID, "session", idle.SessionName, "error", err)
-					}
-				}
 			}
-		}
-	}()
+		}()
+	}
 	writeJSON(w, http.StatusCreated, task)
+}
+
+// parseBlockedBy handles both shorthand [1, 2, 3] and full [{task_id: 1, board_id: "x"}] formats.
+func parseBlockedBy(raw json.RawMessage, defaultBoard string) ([]board.TaskDep, error) {
+	// Try shorthand: array of integers
+	var ids []int64
+	if err := json.Unmarshal(raw, &ids); err == nil {
+		deps := make([]board.TaskDep, len(ids))
+		for i, id := range ids {
+			deps[i] = board.TaskDep{TaskID: id, BoardID: defaultBoard}
+		}
+		return deps, nil
+	}
+	// Try full format: array of TaskDep objects
+	var deps []board.TaskDep
+	if err := json.Unmarshal(raw, &deps); err != nil {
+		return nil, fmt.Errorf("invalid blocked_by format")
+	}
+	for i := range deps {
+		if deps[i].BoardID == "" {
+			deps[i].BoardID = defaultBoard
+		}
+	}
+	return deps, nil
+}
+
+func formatBlockerList(deps []board.TaskDep) string {
+	if len(deps) == 0 {
+		return "unknown"
+	}
+	parts := make([]string, len(deps))
+	for i, d := range deps {
+		parts[i] = fmt.Sprintf("#%d", d.TaskID)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ListTasks returns all tasks for a board.
@@ -764,7 +825,7 @@ func (h *BoardHandler) CompleteTaskByID(w http.ResponseWriter, r *http.Request) 
 	}
 	task, err := h.bs.CompleteTask(r.Context(), project, taskID, body.SubscriberID, body.Message)
 	if err != nil {
-		errInternalServer(w, err.Error())
+		errBadRequest(w, err.Error())
 		return
 	}
 	// Copy values for goroutine closure safety
@@ -788,20 +849,20 @@ func (h *BoardHandler) CompleteTaskByID(w http.ResponseWriter, r *http.Request) 
 		notification := fmt.Sprintf("[Task #%d completed by %s] %s", completedTask.ID, subscriberID, msg)
 		h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
 
+		// Resolve downstream blocked tasks
+		h.notifyUnblockedTasks(ctx, project, completedTask.ID)
+
 		// Check if the agent has more pending tasks
 		nextTask := h.bs.NextPendingTaskForSubscriber(ctx, project, subscriberID)
 		if nextTask != nil {
-			// Post audit message to board (won't trigger unread notification)
 			auditMsg := fmt.Sprintf("@%s You have tasks available — run 'coral-board task claim' to start",
 				subscriberID)
 			h.bs.PostMessage(ctx, project, "Coral Task Queue", auditMsg, nil)
 
-			// Send direct terminal nudge for immediate delivery
 			if h.terminal != nil {
 				sub, err := h.bs.GetSubscription(ctx, subscriberID)
 				if err == nil && sub != nil && sub.SessionName != "" {
-					nudge := taskNudge
-					if err := h.terminal.SendInput(ctx, sub.SessionName, nudge, "", ""); err != nil {
+					if err := h.terminal.SendInput(ctx, sub.SessionName, taskNudge, "", ""); err != nil {
 						slog.Warn("failed to nudge agent", "subscriber", subscriberID, "session", sub.SessionName, "error", err)
 					}
 				}
@@ -834,12 +895,95 @@ func (h *BoardHandler) CancelTaskByID(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := h.bs.CancelTask(r.Context(), project, taskID, body.SubscriberID, body.Message)
 	if err != nil {
-		errInternalServer(w, err.Error())
+		errBadRequest(w, err.Error())
 		return
 	}
 	go func() {
+		ctx := context.Background()
 		notification := fmt.Sprintf("[Task #%d cancelled by %s] %s", task.ID, body.SubscriberID, task.Title)
-		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
+		h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
+
+		// Cancelled tasks resolve dependencies (nothing left to wait for)
+		h.notifyUnblockedTasks(ctx, project, task.ID)
+	}()
+	writeJSON(w, http.StatusOK, task)
+}
+
+// UpdateTask applies partial edits to a pending, in_progress, or blocked task.
+// PATCH /api/board/{project}/tasks/{taskID}
+func (h *BoardHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	taskID, err := strconv.ParseInt(chi.URLParam(r, "taskID"), 10, 64)
+	if err != nil {
+		errBadRequest(w, "invalid task ID")
+		return
+	}
+	var raw struct {
+		Title      *string         `json:"title,omitempty"`
+		Body       *string         `json:"body,omitempty"`
+		Priority   *string         `json:"priority,omitempty"`
+		AssignedTo *string         `json:"assigned_to,omitempty"`
+		BlockedBy  json.RawMessage `json:"blocked_by,omitempty"`
+	}
+	if err := decodeJSON(r, &raw); err != nil {
+		errBadRequest(w, "invalid JSON")
+		return
+	}
+
+	update := board.TaskUpdate{
+		Title:      raw.Title,
+		Body:       raw.Body,
+		Priority:   raw.Priority,
+		AssignedTo: raw.AssignedTo,
+	}
+
+	if len(raw.BlockedBy) > 0 {
+		deps, err := parseBlockedBy(raw.BlockedBy, project)
+		if err != nil {
+			errBadRequest(w, err.Error())
+			return
+		}
+		update.BlockedBy = &deps
+	}
+
+	task, prevStatus, err := h.bs.UpdateTask(r.Context(), project, taskID, update, 3)
+	if err != nil {
+		errBadRequest(w, err.Error())
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		notification := fmt.Sprintf("[Task #%d edited] %s", task.ID, task.Title)
+		h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
+
+		// Notify on status transitions from dependency changes
+		if prevStatus == "pending" && task.Status == "blocked" {
+			assignee := ""
+			if task.AssignedTo != nil {
+				assignee = *task.AssignedTo
+			}
+			if assignee != "" {
+				msg := fmt.Sprintf("[Task #%d blocked] %s — @%s task is now blocked, please pause work", task.ID, task.Title, assignee)
+				h.bs.PostMessage(ctx, project, "Coral Task Queue", msg, nil)
+			}
+		} else if prevStatus == "blocked" && task.Status == "pending" {
+			assignee := ""
+			if task.AssignedTo != nil {
+				assignee = *task.AssignedTo
+			}
+			msg := fmt.Sprintf("[Task #%d unblocked] %s", task.ID, task.Title)
+			if assignee != "" {
+				msg += fmt.Sprintf(" — @%s your task is now ready", assignee)
+			}
+			h.bs.PostMessage(ctx, project, "Coral Task Queue", msg, nil)
+
+			if h.terminal != nil && assignee != "" {
+				sub, err := h.bs.GetSubscription(ctx, assignee)
+				if err == nil && sub != nil && sub.SessionName != "" {
+					h.terminal.SendInput(ctx, sub.SessionName, taskNudge, "", "")
+				}
+			}
+		}
 	}()
 	writeJSON(w, http.StatusOK, task)
 }
@@ -867,10 +1011,103 @@ func (h *BoardHandler) ReassignTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() {
-		notification := h.buildAssignmentNotification(context.Background(), project, task, body.Assignee, true)
-		h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
+		ctx := context.Background()
+		notification := h.buildAssignmentNotification(ctx, project, task, body.Assignee, true)
+		h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
+
+		// Reassigning resets to pending — re-block downstream tasks that depended on this one
+		reblocked, _ := h.bs.ReblockDownstreamTasks(ctx, project, task.ID)
+		for _, t := range reblocked {
+			assignee := ""
+			if t.AssignedTo != nil {
+				assignee = *t.AssignedTo
+			}
+			msg := fmt.Sprintf("[Task #%d blocked] %s", t.ID, t.Title)
+			if assignee != "" {
+				msg += fmt.Sprintf(" — @%s task is blocked again, please pause work", assignee)
+			}
+			h.bs.PostMessage(ctx, t.BoardID, "Coral Task Queue", msg, nil)
+		}
 	}()
 	writeJSON(w, http.StatusOK, task)
+}
+
+// PublishTask transitions a draft task to pending or blocked.
+// POST /api/board/{project}/tasks/{taskID}/publish
+func (h *BoardHandler) PublishTask(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	taskID, err := strconv.ParseInt(chi.URLParam(r, "taskID"), 10, 64)
+	if err != nil {
+		errBadRequest(w, "invalid task ID")
+		return
+	}
+	task, err := h.bs.PublishTask(r.Context(), project, taskID)
+	if err != nil {
+		errBadRequest(w, err.Error())
+		return
+	}
+
+	assignee := ""
+	if task.AssignedTo != nil {
+		assignee = *task.AssignedTo
+	}
+	if task.Status == "blocked" {
+		go func() {
+			deps, _ := h.bs.GetTaskDependencies(context.Background(), task.ID)
+			blockerList := formatBlockerList(deps)
+			notification := fmt.Sprintf("[Task #%d published (blocked)] %s — blocked by %s", task.ID, task.Title, blockerList)
+			h.bs.PostMessage(context.Background(), project, "Coral Task Queue", notification, nil)
+		}()
+	} else {
+		go func() {
+			ctx := context.Background()
+			notification := fmt.Sprintf("[Task #%d published] %s", task.ID, task.Title)
+			if assignee != "" {
+				notification += fmt.Sprintf(" — @%s", assignee)
+			}
+			h.bs.PostMessage(ctx, project, "Coral Task Queue", notification, nil)
+
+			if h.terminal != nil && assignee != "" {
+				hasActive, _ := h.bs.HasActiveTaskForAssignee(ctx, project, assignee, task.ID)
+				if !hasActive {
+					sub, err := h.bs.GetSubscription(ctx, assignee)
+					if err == nil && sub != nil && sub.SessionName != "" {
+						h.terminal.SendInput(ctx, sub.SessionName, taskNudge, "", "")
+					}
+				}
+			}
+		}()
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+// notifyUnblockedTasks resolves downstream tasks and sends notifications + nudges.
+func (h *BoardHandler) notifyUnblockedTasks(ctx context.Context, project string, completedTaskID int64) {
+	unblocked, err := h.bs.ResolveDownstreamTasks(ctx, project, completedTaskID)
+	if err != nil || len(unblocked) == 0 {
+		return
+	}
+	for _, t := range unblocked {
+		assignee := ""
+		if t.AssignedTo != nil {
+			assignee = *t.AssignedTo
+		}
+		msg := fmt.Sprintf("[Task #%d unblocked] %s", t.ID, t.Title)
+		if assignee != "" {
+			msg += fmt.Sprintf(" — @%s your task is now ready", assignee)
+		}
+		h.bs.PostMessage(ctx, t.BoardID, "Coral Task Queue", msg, nil)
+
+		// Send terminal nudge to assignee
+		if h.terminal != nil && assignee != "" {
+			sub, err := h.bs.GetSubscription(ctx, assignee)
+			if err == nil && sub != nil && sub.SessionName != "" {
+				if err := h.terminal.SendInput(ctx, sub.SessionName, taskNudge, "", ""); err != nil {
+					slog.Warn("failed to nudge unblocked agent", "subscriber", assignee, "session", sub.SessionName, "error", err)
+				}
+			}
+		}
+	}
 }
 
 // TaskLiveCost returns real-time cost for a task by querying proxy_requests

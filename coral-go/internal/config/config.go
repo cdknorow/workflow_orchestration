@@ -51,6 +51,9 @@ type Config struct {
 	// Edition limits (0 = unlimited)
 	MaxLiveTeams  int
 	MaxLiveAgents int
+
+	// Task dependencies
+	MaxTaskDependencyDepth int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -95,6 +98,7 @@ func Load(dataDir ...string) *Config {
 
 		WSPollIntervalS: 5,
 
+		MaxTaskDependencyDepth: 3,
 	}
 
 	// Demo limits from build tier (beta) or runtime LS plan (prod)

@@ -425,6 +425,629 @@ func TestTaskLifecycle_EndToEnd(t *testing.T) {
 	assert.Nil(t, task)
 }
 
+func TestUpdateTask_PendingTask(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, err := s.CreateTask(ctx, "proj", "Original title", "Original body", "medium", "alice")
+	require.NoError(t, err)
+
+	// Update title only
+	newTitle := "Updated title"
+	updated, _, err := s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{Title: &newTitle}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated title", updated.Title)
+	require.NotNil(t, updated.Body)
+	assert.Equal(t, "Original body", *updated.Body)
+	assert.Equal(t, "medium", updated.Priority)
+
+	// Update multiple fields
+	newBody := "New body"
+	newPriority := "high"
+	updated, _, err = s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{Body: &newBody, Priority: &newPriority}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated title", updated.Title)
+	require.NotNil(t, updated.Body)
+	assert.Equal(t, "New body", *updated.Body)
+	assert.Equal(t, "high", updated.Priority)
+
+	// No-op update returns task unchanged
+	updated, _, err = s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated title", updated.Title)
+}
+
+func TestUpdateTask_AssignedTo(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, err := s.CreateTask(ctx, "proj", "Task", "", "medium", "alice", "bob")
+	require.NoError(t, err)
+
+	// Reassign pending task — should stay pending
+	newAssignee := "charlie"
+	updated, _, err := s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{AssignedTo: &newAssignee}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", updated.Status)
+	require.NotNil(t, updated.AssignedTo)
+	assert.Equal(t, "charlie", *updated.AssignedTo)
+
+	// Unassign via empty string
+	empty := ""
+	updated, _, err = s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{AssignedTo: &empty}, 3)
+	require.NoError(t, err)
+	assert.Nil(t, updated.AssignedTo)
+}
+
+func TestUpdateTask_InProgressReassignResetsToPending(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTask(ctx, "proj", "Task", "", "medium", "alice", "bob")
+	claimed, err := s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, "in_progress", claimed.Status)
+
+	// Reassigning an in_progress task should reset to pending
+	newAssignee := "charlie"
+	updated, _, err := s.UpdateTask(ctx, "proj", claimed.ID, TaskUpdate{AssignedTo: &newAssignee}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", updated.Status)
+	require.NotNil(t, updated.AssignedTo)
+	assert.Equal(t, "charlie", *updated.AssignedTo)
+	assert.Nil(t, updated.ClaimedAt)
+}
+
+func TestUpdateTask_CompletedTaskRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTask(ctx, "proj", "Task", "", "medium", "alice")
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+
+	newTitle := "Should fail"
+	_, _, err := s.UpdateTask(ctx, "proj", claimed.ID, TaskUpdate{Title: &newTitle}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be edited")
+}
+
+func TestUpdateTask_SkippedTaskRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTask(ctx, "proj", "Task", "", "medium", "alice")
+	s.CancelTask(ctx, "proj", task.ID, "alice", nil)
+
+	newTitle := "Should fail"
+	_, _, err := s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{Title: &newTitle}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be edited")
+}
+
+func TestUpdateTask_EmptyTitleRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, err := s.CreateTask(ctx, "proj", "Has title", "", "medium", "alice")
+	require.NoError(t, err)
+
+	empty := ""
+	_, _, err = s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{Title: &empty}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "title cannot be empty")
+
+	// Verify title unchanged
+	updated, err := s.getTaskByID(ctx, "proj", task.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Has title", updated.Title)
+}
+
+func TestUpdateTask_InvalidPriorityRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, err := s.CreateTask(ctx, "proj", "Task", "", "medium", "alice")
+	require.NoError(t, err)
+
+	bad := "banana"
+	_, _, err = s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{Priority: &bad}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid priority")
+
+	// Verify priority unchanged
+	updated, err := s.getTaskByID(ctx, "proj", task.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "medium", updated.Priority)
+}
+
+func TestUpdateTask_NonexistentTaskReturnsError(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	newTitle := "Nope"
+	_, _, err := s.UpdateTask(ctx, "proj", 99999, TaskUpdate{Title: &newTitle}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+// ── Task Dependency Tests ──────────────────────────────────────────
+
+func TestCreateTaskWithDeps_BlockedStatus(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, err := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	require.NoError(t, err)
+
+	// Task B blocked by A — should start as blocked
+	taskB, err := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Verify dependencies stored
+	deps, err := s.GetTaskDependencies(ctx, taskB.ID)
+	require.NoError(t, err)
+	require.Len(t, deps, 1)
+	assert.Equal(t, taskA.ID, deps[0].TaskID)
+}
+
+func TestCreateTaskWithDeps_AlreadyResolved(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+
+	// Task B blocked by completed A — should start as pending
+	taskB, err := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NoError(t, err)
+	assert.Equal(t, "pending", taskB.Status)
+}
+
+func TestCreateTaskWithDeps_MultipleBlockers(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTask(ctx, "proj", "Task B", "", "medium", "alice")
+
+	// Task C blocked by both A and B
+	taskC, err := s.CreateTaskWithOpts(ctx, "proj", "Task C", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{
+			{TaskID: taskA.ID, BoardID: "proj"},
+			{TaskID: taskB.ID, BoardID: "proj"},
+		}, MaxDepth: 3})
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", taskC.Status)
+
+	deps, _ := s.GetTaskDependencies(ctx, taskC.ID)
+	assert.Len(t, deps, 2)
+}
+
+func TestResolveDownstreamTasks_SingleBlocker(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, err := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Complete A — B should unblock
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+
+	unblocked, err := s.ResolveDownstreamTasks(ctx, "proj", taskA.ID)
+	require.NoError(t, err)
+	require.Len(t, unblocked, 1)
+	assert.Equal(t, taskB.ID, unblocked[0].ID)
+	assert.Equal(t, "pending", unblocked[0].Status)
+}
+
+func TestResolveDownstreamTasks_MultipleBlockers(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTask(ctx, "proj", "Task B", "", "medium", "alice")
+	taskC, _ := s.CreateTaskWithOpts(ctx, "proj", "Task C", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{
+			{TaskID: taskA.ID, BoardID: "proj"},
+			{TaskID: taskB.ID, BoardID: "proj"},
+		}, MaxDepth: 3})
+	assert.Equal(t, "blocked", taskC.Status)
+
+	// Complete A — C should still be blocked (B unresolved)
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	assert.Equal(t, "Task A", claimed.Title)
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+
+	unblocked, err := s.ResolveDownstreamTasks(ctx, "proj", taskA.ID)
+	require.NoError(t, err)
+	assert.Empty(t, unblocked)
+
+	// Verify C is still blocked
+	tasks, _ := s.ListTasks(ctx, "proj")
+	for _, t2 := range tasks {
+		if t2.ID == taskC.ID {
+			assert.Equal(t, "blocked", t2.Status)
+		}
+	}
+
+	// Complete B — now C should unblock
+	claimed, _ = s.ClaimTask(ctx, "proj", "bob")
+	assert.Equal(t, "Task B", claimed.Title)
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+
+	unblocked, err = s.ResolveDownstreamTasks(ctx, "proj", taskB.ID)
+	require.NoError(t, err)
+	require.Len(t, unblocked, 1)
+	assert.Equal(t, taskC.ID, unblocked[0].ID)
+	assert.Equal(t, "pending", unblocked[0].Status)
+}
+
+func TestResolveDownstreamTasks_CancelledBlockerUnblocks(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Cancel A — B should unblock (skipped counts as resolved)
+	s.CancelTask(ctx, "proj", taskA.ID, "alice", nil)
+
+	unblocked, err := s.ResolveDownstreamTasks(ctx, "proj", taskA.ID)
+	require.NoError(t, err)
+	require.Len(t, unblocked, 1)
+	assert.Equal(t, taskB.ID, unblocked[0].ID)
+	assert.Equal(t, "pending", unblocked[0].Status)
+}
+
+func TestReblockDownstreamTasks(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// A is assigned to bob, B is blocked by A
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice", "bob")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Claim A (in_progress), then reassign (resets to pending) → B stays blocked
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	require.Equal(t, taskA.ID, claimed.ID)
+
+	// Reassign in_progress task → resets to pending
+	_, err := s.ReassignTask(ctx, "proj", taskA.ID, "charlie")
+	require.NoError(t, err)
+
+	// A is now pending again — B should remain blocked (A never resolved)
+	reblocked, err := s.ReblockDownstreamTasks(ctx, "proj", taskA.ID)
+	require.NoError(t, err)
+	// B was already blocked so ReblockDownstreamTasks only transitions pending→blocked.
+	// B never left blocked, so nothing to re-block.
+	assert.Empty(t, reblocked)
+
+	// Verify B is still blocked
+	task, _ := s.getTaskByID(ctx, "proj", taskB.ID)
+	assert.Equal(t, "blocked", task.Status)
+}
+
+func TestReblockDownstreamTasks_AfterUnblock(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// A and C are independent tasks. B is blocked by both A and C.
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice", "bob")
+	taskC, _ := s.CreateTask(ctx, "proj", "Task C", "", "medium", "alice", "charlie")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{
+			{TaskID: taskA.ID, BoardID: "proj"},
+			{TaskID: taskC.ID, BoardID: "proj"},
+		}, MaxDepth: 3})
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Complete both A and C → B unblocks
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+	s.ResolveDownstreamTasks(ctx, "proj", taskA.ID)
+
+	claimed, _ = s.ClaimTask(ctx, "proj", "charlie")
+	s.CompleteTask(ctx, "proj", claimed.ID, "charlie", nil)
+	unblocked, _ := s.ResolveDownstreamTasks(ctx, "proj", taskC.ID)
+	require.Len(t, unblocked, 1)
+	assert.Equal(t, "pending", unblocked[0].Status)
+
+	// Now add a NEW unresolved dep to B via UpdateTask → B should go back to blocked
+	newBlocker, _ := s.CreateTask(ctx, "proj", "Task D", "", "medium", "alice")
+	deps := []TaskDep{{TaskID: newBlocker.ID, BoardID: "proj"}}
+	updated, prevStatus, err := s.UpdateTask(ctx, "proj", taskB.ID, TaskUpdate{BlockedBy: &deps}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", prevStatus)
+	assert.Equal(t, "blocked", updated.Status)
+}
+
+func TestCircularDependencyRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NotNil(t, taskB)
+
+	// Try to make A blocked by B (circular: A→B→A)
+	err := s.AddTaskDependencies(ctx, "proj", taskA.ID, []TaskDep{{TaskID: taskB.ID, BoardID: "proj"}}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+}
+
+func TestSelfDependencyRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTask(ctx, "proj", "Task", "", "medium", "alice")
+
+	err := s.AddTaskDependencies(ctx, "proj", task.ID, []TaskDep{{TaskID: task.ID, BoardID: "proj"}}, 3)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot depend on itself")
+}
+
+func TestDepthLimitEnforced(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// Create chain: A → B → C → D (depth 3)
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NotNil(t, taskB)
+	taskC, _ := s.CreateTaskWithOpts(ctx, "proj", "Task C", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskB.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NotNil(t, taskC)
+
+	// Depth 3 chain: D → C → B → A — should succeed at maxDepth=3
+	taskD, err := s.CreateTaskWithOpts(ctx, "proj", "Task D", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskC.ID, BoardID: "proj"}}, MaxDepth: 3})
+	require.NoError(t, err)
+	require.NotNil(t, taskD)
+
+	// Depth 4 chain: E → D → C → B → A — should fail at maxDepth=3
+	_, err = s.CreateTaskWithOpts(ctx, "proj", "Task E", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskD.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "exceed maximum depth")
+}
+
+func TestBlockedTaskCannotBeClaimed(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	s.CreateTaskWithOpts(ctx, "proj", "Task B (blocked)", "", "high", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+
+	// Claim should pick A (pending), not B (blocked, even though higher priority)
+	claimed, err := s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	assert.Equal(t, "Task A", claimed.Title)
+}
+
+func TestBlockedTaskCanBeCancelled(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Cancel blocked task should work
+	cancelled, err := s.CancelTask(ctx, "proj", taskB.ID, "alice", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "skipped", cancelled.Status)
+}
+
+func TestUpdateTask_AddBlockedBy(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTask(ctx, "proj", "Task B", "", "medium", "alice")
+	assert.Equal(t, "pending", taskB.Status)
+
+	// Add dependency: B blocked by A → should transition to blocked
+	deps := []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}
+	updated, prevStatus, err := s.UpdateTask(ctx, "proj", taskB.ID, TaskUpdate{BlockedBy: &deps}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", prevStatus)
+	assert.Equal(t, "blocked", updated.Status)
+}
+
+func TestUpdateTask_ClearBlockedBy(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	taskB, _ := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Equal(t, "blocked", taskB.Status)
+
+	// Clear dependencies → should unblock
+	emptyDeps := []TaskDep{}
+	updated, prevStatus, err := s.UpdateTask(ctx, "proj", taskB.ID, TaskUpdate{BlockedBy: &emptyDeps}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", prevStatus)
+	assert.Equal(t, "pending", updated.Status)
+
+	// Verify no deps remain
+	deps, _ := s.GetTaskDependencies(ctx, taskB.ID)
+	assert.Empty(t, deps)
+}
+
+func TestListTasks_PopulatesDeps(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	taskA, _ := s.CreateTask(ctx, "proj", "Task A", "", "medium", "alice")
+	s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: taskA.ID, BoardID: "proj"}}, MaxDepth: 3})
+
+	tasks, err := s.ListTasks(ctx, "proj")
+	require.NoError(t, err)
+
+	var foundB *Task
+	for i := range tasks {
+		if tasks[i].Title == "Task B" {
+			foundB = &tasks[i]
+			break
+		}
+	}
+	require.NotNil(t, foundB)
+	require.Len(t, foundB.BlockedBy, 1)
+	assert.Equal(t, taskA.ID, foundB.BlockedBy[0].TaskID)
+	assert.Equal(t, "Task A", foundB.BlockedBy[0].Title)
+}
+
+func TestNonexistentBlockerRejected(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	_, err := s.CreateTaskWithOpts(ctx, "proj", "Task B", "", "medium", "alice",
+		&CreateTaskOpts{BlockedBy: []TaskDep{{TaskID: 99999, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+// ── Draft Task Tests ──────────────────────────────────────────────
+
+func TestCreateDraftTask(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, err := s.CreateTaskWithOpts(ctx, "proj", "Draft task", "body", "medium", "alice",
+		&CreateTaskOpts{Draft: true})
+	require.NoError(t, err)
+	assert.Equal(t, "draft", task.Status)
+}
+
+func TestDraftTaskCannotBeClaimed(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	s.CreateTaskWithOpts(ctx, "proj", "Draft", "", "high", "alice",
+		&CreateTaskOpts{Draft: true})
+	s.CreateTask(ctx, "proj", "Pending", "", "low", "alice")
+
+	// Claim should pick the pending task, not the draft
+	claimed, err := s.ClaimTask(ctx, "proj", "bob")
+	require.NoError(t, err)
+	require.NotNil(t, claimed)
+	assert.Equal(t, "Pending", claimed.Title)
+}
+
+func TestPublishDraft_NoDeps(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTaskWithOpts(ctx, "proj", "Draft", "", "medium", "alice",
+		&CreateTaskOpts{Draft: true})
+	assert.Equal(t, "draft", task.Status)
+
+	published, err := s.PublishTask(ctx, "proj", task.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", published.Status)
+}
+
+func TestPublishDraft_WithUnresolvedDeps(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	blocker, _ := s.CreateTask(ctx, "proj", "Blocker", "", "medium", "alice")
+	draft, _ := s.CreateTaskWithOpts(ctx, "proj", "Draft with deps", "", "medium", "alice",
+		&CreateTaskOpts{Draft: true, BlockedBy: []TaskDep{{TaskID: blocker.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Equal(t, "draft", draft.Status)
+
+	published, err := s.PublishTask(ctx, "proj", draft.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "blocked", published.Status)
+}
+
+func TestPublishDraft_WithResolvedDeps(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	blocker, _ := s.CreateTask(ctx, "proj", "Blocker", "", "medium", "alice")
+	claimed, _ := s.ClaimTask(ctx, "proj", "bob")
+	s.CompleteTask(ctx, "proj", claimed.ID, "bob", nil)
+
+	draft, _ := s.CreateTaskWithOpts(ctx, "proj", "Draft after blocker", "", "medium", "alice",
+		&CreateTaskOpts{Draft: true, BlockedBy: []TaskDep{{TaskID: blocker.ID, BoardID: "proj"}}, MaxDepth: 3})
+	assert.Equal(t, "draft", draft.Status)
+
+	published, err := s.PublishTask(ctx, "proj", draft.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", published.Status)
+}
+
+func TestPublishNonDraft_Fails(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTask(ctx, "proj", "Pending task", "", "medium", "alice")
+	assert.Equal(t, "pending", task.Status)
+
+	_, err := s.PublishTask(ctx, "proj", task.ID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a draft")
+}
+
+func TestDraftTaskEditable(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTaskWithOpts(ctx, "proj", "Draft", "body", "medium", "alice",
+		&CreateTaskOpts{Draft: true})
+
+	newTitle := "Updated draft"
+	updated, _, err := s.UpdateTask(ctx, "proj", task.ID, TaskUpdate{Title: &newTitle}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated draft", updated.Title)
+	assert.Equal(t, "draft", updated.Status)
+}
+
+func TestDraftTaskCanBeCancelled(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTaskWithOpts(ctx, "proj", "Draft to cancel", "", "medium", "alice",
+		&CreateTaskOpts{Draft: true})
+
+	cancelled, err := s.CancelTask(ctx, "proj", task.ID, "alice", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "skipped", cancelled.Status)
+}
+
+func TestDraftTaskCannotBeCompleted(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	task, _ := s.CreateTaskWithOpts(ctx, "proj", "Draft", "", "medium", "alice",
+		&CreateTaskOpts{Draft: true})
+
+	_, err := s.CompleteTask(ctx, "proj", task.ID, "alice", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be completed")
+}
+
 func TestDeleteProject(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

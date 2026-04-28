@@ -357,7 +357,9 @@ export function renderBoardTaskList() {
         const isAgent = t._source === 'agent';
         const statusClass = t.status === 'completed' ? 'completed'
             : t.status === 'in_progress' ? 'in-progress'
-            : t.status === 'skipped' ? 'completed' : '';
+            : t.status === 'skipped' ? 'completed'
+            : t.status === 'blocked' ? 'blocked'
+            : t.status === 'draft' ? 'draft' : '';
         const priorityClass = t.priority ? 'board-task-priority-' + t.priority : 'board-task-priority-none';
         const assignee = t.assigned_to || '\u2014';
         const title = escapeHtml(t.title || t.description || '');
@@ -369,6 +371,10 @@ export function renderBoardTaskList() {
             ? '<span class="task-spinner" title="In progress"></span>'
             : t.status === 'skipped'
             ? '<span class="material-icons board-task-status-icon skipped">block</span>'
+            : t.status === 'blocked'
+            ? '<span class="material-icons board-task-status-icon blocked" title="Blocked">lock</span>'
+            : t.status === 'draft'
+            ? '<span class="material-icons board-task-status-icon draft" title="Draft">edit_note</span>'
             : '<span class="material-icons board-task-status-icon pending">radio_button_unchecked</span>';
         let costText = '';
         let costClass = 'board-task-cost';
@@ -407,6 +413,175 @@ export function renderBoardTaskList() {
     }
 }
 
+/* ── Dependency Picker ─────────────────────────────────── */
+
+function _renderDepPicker(containerId, selectedIds = [], excludeTaskId = null) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const tasks = (state.currentBoardTasks || []).filter(t =>
+        t.status !== 'completed' && t.status !== 'skipped' && t.id !== excludeTaskId
+    );
+    const selected = new Set(selectedIds.map(Number));
+
+    let html = `<div class="dep-picker-selected" id="${containerId}-tags"></div>`;
+    html += `<div class="dep-picker-toggle"><a class="dep-picker-add-link" onclick="document.getElementById('${containerId}-list').style.display = document.getElementById('${containerId}-list').style.display === 'none' ? '' : 'none'">+ Add dependency</a></div>`;
+    html += `<div class="dep-picker-list" id="${containerId}-list" style="display:none">`;
+    if (tasks.length === 0) {
+        html += `<div class="dep-picker-empty">No eligible tasks</div>`;
+    } else {
+        tasks.forEach(t => {
+            const checked = selected.has(t.id) ? ' checked' : '';
+            html += `<label class="dep-picker-item"><input type="checkbox" value="${t.id}"${checked} onchange="window._updateDepTags('${containerId}')"> #${t.id} — ${escapeHtml(t.title || '')}</label>`;
+        });
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+    window._updateDepTags(containerId);
+}
+
+window._updateDepTags = function(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const tagsEl = document.getElementById(`${containerId}-tags`);
+    if (!tagsEl) return;
+    const checked = container.querySelectorAll('input[type="checkbox"]:checked');
+    if (checked.length === 0) {
+        tagsEl.innerHTML = '';
+        return;
+    }
+    const tags = Array.from(checked).map(cb => {
+        const label = cb.parentElement.textContent.trim();
+        return `<span class="dep-tag">${escapeHtml(label)} <a onclick="document.querySelector('#${containerId} input[value=\\'${cb.value}\\']').click()">&times;</a></span>`;
+    }).join('');
+    tagsEl.innerHTML = tags;
+};
+
+function _getSelectedDeps(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
+}
+
+/* ── Create Task Modal ─────────────────────────────────── */
+
+export async function showCreateTaskModal() {
+    const modal = document.getElementById('create-task-modal');
+    if (!modal) return;
+
+    // Reset form
+    document.getElementById('create-task-title').value = '';
+    document.getElementById('create-task-body').value = '';
+    document.getElementById('create-task-priority').value = 'medium';
+    const draftCheck = document.getElementById('create-task-draft');
+    if (draftCheck) draftCheck.checked = false;
+    const errEl = document.getElementById('create-task-error');
+    if (errEl) errEl.style.display = 'none';
+
+    // Populate assignee dropdown from board subscribers
+    const assigneeSelect = document.getElementById('create-task-assignee');
+    assigneeSelect.innerHTML = '<option value="">Unassigned</option>';
+    const boardProject = _getBoardProject();
+    if (boardProject) {
+        try {
+            const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/subscribers`);
+            if (resp.ok) {
+                const subs = await resp.json();
+                (subs || []).forEach(s => {
+                    const name = s.subscriber_id || s.name;
+                    if (name) {
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = name;
+                        assigneeSelect.appendChild(opt);
+                    }
+                });
+            }
+        } catch { /* ignore */ }
+    }
+
+    // Populate dependency picker
+    _renderDepPicker('create-task-deps');
+
+    modal.style.display = '';
+    document.getElementById('create-task-title').focus();
+
+    modal.onclick = (e) => { if (e.target === modal) hideCreateTaskModal(); };
+    modal._escHandler = (e) => { if (e.key === 'Escape') hideCreateTaskModal(); };
+    document.addEventListener('keydown', modal._escHandler);
+}
+
+export function hideCreateTaskModal() {
+    const modal = document.getElementById('create-task-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    if (modal._escHandler) {
+        document.removeEventListener('keydown', modal._escHandler);
+        modal._escHandler = null;
+    }
+}
+
+export async function submitCreateTask() {
+    const title = document.getElementById('create-task-title').value.trim();
+    const errEl = document.getElementById('create-task-error');
+
+    if (!title) {
+        if (errEl) {
+            errEl.textContent = 'Title is required';
+            errEl.style.display = '';
+        }
+        return;
+    }
+
+    const body = document.getElementById('create-task-body').value.trim();
+    const priority = document.getElementById('create-task-priority').value;
+    const assignedTo = document.getElementById('create-task-assignee').value;
+    const boardProject = _getBoardProject();
+    if (!boardProject) {
+        if (errEl) {
+            errEl.textContent = 'No board project found';
+            errEl.style.display = '';
+        }
+        return;
+    }
+
+    const blockedBy = _getSelectedDeps('create-task-deps');
+    const isDraft = document.getElementById('create-task-draft')?.checked || false;
+
+    try {
+        const payload = {
+            title,
+            body,
+            priority,
+            assigned_to: assignedTo,
+            created_by: 'Operator',
+        };
+        if (blockedBy.length > 0) payload.blocked_by = blockedBy;
+        if (isDraft) payload.draft = true;
+        const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        hideCreateTaskModal();
+        await loadBoardTasks(boardProject);
+        showToast('Task created');
+    } catch (e) {
+        if (errEl) {
+            errEl.textContent = e.message || 'Failed to create task';
+            errEl.style.display = '';
+        }
+    }
+}
+
+function _getBoardProject() {
+    if (!state.currentSession) return null;
+    return state.currentSession.board_project || state.currentSession.name;
+}
+
 /* ── Task Detail Modal ─────────────────────────────────── */
 
 export function showTaskDetailModal(taskId) {
@@ -424,10 +599,14 @@ export function showTaskDetailModal(taskId) {
     const statusLabel = task.status === 'completed' ? 'Completed'
         : task.status === 'in_progress' ? 'In Progress'
         : task.status === 'skipped' ? 'Cancelled'
+        : task.status === 'blocked' ? 'Blocked'
+        : task.status === 'draft' ? 'Draft'
         : 'Pending';
     const statusClass = task.status === 'completed' ? 'task-detail-status-completed'
         : task.status === 'in_progress' ? 'task-detail-status-inprogress'
         : task.status === 'skipped' ? 'task-detail-status-cancelled'
+        : task.status === 'blocked' ? 'task-detail-status-blocked'
+        : task.status === 'draft' ? 'task-detail-status-draft'
         : 'task-detail-status-pending';
     const priorityClass = 'board-task-priority-' + (task.priority || 'medium');
 
@@ -493,6 +672,37 @@ export function showTaskDetailModal(taskId) {
 
     html += `</div>`;
 
+    // Blocked by dependencies
+    if (task.blocked_by && task.blocked_by.length > 0) {
+        const boardProject = _getBoardProject();
+        const depsHtml = task.blocked_by.map(dep => {
+            const depStatusClass = dep.status === 'completed' ? 'task-dep-status-completed'
+                : dep.status === 'in_progress' ? 'task-dep-status-inprogress'
+                : dep.status === 'skipped' ? 'task-dep-status-cancelled'
+                : dep.status === 'blocked' ? 'task-dep-status-blocked'
+                : dep.status === 'draft' ? 'task-dep-status-draft'
+                : 'task-dep-status-pending';
+            const depStatusLabel = dep.status === 'completed' ? 'completed'
+                : dep.status === 'in_progress' ? 'in progress'
+                : dep.status === 'skipped' ? 'cancelled'
+                : dep.status === 'blocked' ? 'blocked'
+                : dep.status === 'draft' ? 'draft'
+                : 'pending';
+            const isCrossBoard = dep.board_id && dep.board_id !== boardProject;
+            const boardPrefix = isCrossBoard ? `${escapeHtml(dep.board_id)} ` : '';
+            const depTitle = dep.title ? ` — ${escapeHtml(dep.title)}` : '';
+            const clickable = !isCrossBoard ? ` onclick="showTaskDetailModal(${dep.task_id})" style="cursor:pointer"` : '';
+            return `<div class="task-dep-item">
+                <span class="task-dep-status ${depStatusClass}">${depStatusLabel}</span>
+                <a class="task-dep-link"${clickable}>${boardPrefix}#${dep.task_id}${depTitle}</a>
+            </div>`;
+        }).join('');
+        html += `<div class="task-detail-section">
+            <div class="task-detail-label">Blocked By</div>
+            <div class="task-deps-list">${depsHtml}</div>
+        </div>`;
+    }
+
     // Cost & token breakdown for completed tasks with cost data
     if (task.cost_usd != null) {
         const warningClass = task.cost_usd >= 1.0 ? ' board-task-cost-warning' : '';
@@ -551,6 +761,26 @@ export function showTaskDetailModal(taskId) {
         </div>`;
     }
     content.innerHTML = html;
+
+    // Update footer with action buttons for editable tasks
+    const footer = document.getElementById('task-detail-modal-footer');
+    if (footer) {
+        const isEditable = task.status === 'pending' || task.status === 'in_progress' || task.status === 'blocked' || task.status === 'draft';
+        if (isEditable) {
+            const canComplete = task.status !== 'blocked' && task.status !== 'draft';
+            const showPublish = task.status === 'draft';
+            footer.innerHTML = `
+                <button class="btn btn-danger-text" onclick="window.cancelBoardTask(${task.id})">Cancel Task</button>
+                <span style="flex:1"></span>
+                <button class="btn" onclick="window.hideTaskDetailModal()">Close</button>
+                <button class="btn" onclick="window.enableTaskEditMode(${task.id})">Edit</button>
+                ${showPublish ? `<button class="btn btn-primary" onclick="window.publishBoardTask(${task.id})">Publish</button>` : ''}
+                ${canComplete ? `<button class="btn btn-success" onclick="window.completeBoardTask(${task.id})">Complete</button>` : ''}`;
+        } else {
+            footer.innerHTML = `<button class="btn" onclick="window.hideTaskDetailModal()">Close</button>`;
+        }
+    }
+
     modal.style.display = '';
 
     // Close on backdrop click
@@ -558,6 +788,230 @@ export function showTaskDetailModal(taskId) {
     // Close on Escape
     modal._escHandler = (e) => { if (e.key === 'Escape') hideTaskDetailModal(); };
     document.addEventListener('keydown', modal._escHandler);
+}
+
+let _editOriginalTask = null;
+
+export async function enableTaskEditMode(taskId) {
+    const tasks = state.currentBoardTasks || [];
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    _editOriginalTask = task;
+
+    const content = document.getElementById('task-detail-content');
+    if (!content) return;
+
+    // Build assignee options
+    let assigneeOptions = '<option value="">Unassigned</option>';
+    const boardProject = _getBoardProject();
+    if (boardProject) {
+        try {
+            const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/subscribers`);
+            if (resp.ok) {
+                const subs = await resp.json();
+                (subs || []).forEach(s => {
+                    const name = s.subscriber_id || s.name;
+                    if (name) {
+                        const selected = name === task.assigned_to ? ' selected' : '';
+                        assigneeOptions += `<option value="${escapeAttr(name)}"${selected}>${escapeHtml(name)}</option>`;
+                    }
+                });
+            }
+        } catch { /* ignore */ }
+    }
+
+    const priorityOptions = ['critical', 'high', 'medium', 'low'].map(p =>
+        `<option value="${p}"${p === task.priority ? ' selected' : ''}>${p}</option>`
+    ).join('');
+
+    const showDepPicker = task.status === 'blocked' || task.status === 'pending' || task.status === 'draft';
+    content.innerHTML = `
+        <div id="task-edit-error" class="modal-error" style="display:none"></div>
+        <label for="task-edit-title">Title
+            <input type="text" id="task-edit-title" value="${escapeAttr(task.title)}">
+        </label>
+        <label for="task-edit-body">Description
+            <textarea id="task-edit-body" rows="3">${escapeHtml(task.body || '')}</textarea>
+        </label>
+        <label for="task-edit-priority">Priority
+            <select id="task-edit-priority">${priorityOptions}</select>
+        </label>
+        <label for="task-edit-assignee">Assigned To
+            <select id="task-edit-assignee">${assigneeOptions}</select>
+        </label>
+        ${showDepPicker ? '<label>Blocked By <span class="text-muted-sm">(optional)</span></label><div id="task-edit-deps" class="dep-picker"></div>' : ''}`;
+
+    if (showDepPicker) {
+        const currentDepIds = (task.blocked_by || []).map(d => d.task_id);
+        _renderDepPicker('task-edit-deps', currentDepIds, taskId);
+    }
+
+    const footer = document.getElementById('task-detail-modal-footer');
+    if (footer) {
+        footer.innerHTML = `
+            <button class="btn" onclick="window.cancelTaskEdit()">Cancel</button>
+            <button class="btn btn-primary" onclick="window.saveTaskEdit(${taskId})">Save</button>`;
+    }
+}
+
+export async function saveTaskEdit(taskId) {
+    const task = _editOriginalTask;
+    if (!task) return;
+
+    const title = document.getElementById('task-edit-title').value.trim();
+    const errEl = document.getElementById('task-edit-error');
+    if (!title) {
+        if (errEl) { errEl.textContent = 'Title is required'; errEl.style.display = ''; }
+        return;
+    }
+
+    const body = document.getElementById('task-edit-body').value.trim();
+    const priority = document.getElementById('task-edit-priority').value;
+    const assignedTo = document.getElementById('task-edit-assignee').value;
+
+    const updates = {};
+    if (title !== task.title) updates.title = title;
+    if (body !== (task.body || '')) updates.body = body;
+    if (priority !== task.priority) updates.priority = priority;
+    if (assignedTo !== (task.assigned_to || '')) updates.assigned_to = assignedTo;
+
+    const depPickerEl = document.getElementById('task-edit-deps');
+    if (depPickerEl) {
+        const newDeps = _getSelectedDeps('task-edit-deps');
+        const oldDeps = (task.blocked_by || []).map(d => d.task_id).sort();
+        const sortedNew = [...newDeps].sort();
+        if (JSON.stringify(oldDeps) !== JSON.stringify(sortedNew)) {
+            updates.blocked_by = newDeps;
+        }
+    }
+
+    if (Object.keys(updates).length === 0) {
+        cancelTaskEdit();
+        return;
+    }
+
+    const boardProject = _getBoardProject();
+    if (!boardProject) return;
+
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates),
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        _editOriginalTask = null;
+        await loadBoardTasks(boardProject);
+        showTaskDetailModal(taskId);
+        showToast('Task updated');
+    } catch (e) {
+        if (errEl) { errEl.textContent = e.message || 'Failed to save'; errEl.style.display = ''; }
+    }
+}
+
+export function cancelTaskEdit() {
+    if (_editOriginalTask) {
+        showTaskDetailModal(_editOriginalTask.id);
+        _editOriginalTask = null;
+    }
+}
+
+export function completeBoardTask(taskId) {
+    const footer = document.getElementById('task-detail-modal-footer');
+    if (!footer) return;
+    footer.innerHTML = `
+        <div class="task-confirm-inline">
+            <input type="text" id="task-complete-message" placeholder="Completion message (optional)" class="task-confirm-input">
+            <div class="task-confirm-buttons">
+                <button class="btn" onclick="window._restoreTaskFooter(${taskId})">Back</button>
+                <button class="btn btn-success" onclick="window._doCompleteTask(${taskId})">Complete</button>
+            </div>
+        </div>`;
+    document.getElementById('task-complete-message').focus();
+}
+
+export async function _doCompleteTask(taskId) {
+    const boardProject = _getBoardProject();
+    if (!boardProject) return;
+    const msgEl = document.getElementById('task-complete-message');
+    const message = msgEl ? msgEl.value.trim() : '';
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/tasks/${taskId}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscriber_id: 'Operator', message: message || undefined }),
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        hideTaskDetailModal();
+        await loadBoardTasks(boardProject);
+        showToast('Task completed');
+    } catch (e) {
+        showToast(e.message || 'Failed to complete task', true);
+    }
+}
+
+export function cancelBoardTask(taskId) {
+    const footer = document.getElementById('task-detail-modal-footer');
+    if (!footer) return;
+    footer.innerHTML = `
+        <div class="task-confirm-inline">
+            <span class="task-confirm-text">Cancel this task? This cannot be undone.</span>
+            <div class="task-confirm-buttons">
+                <button class="btn" onclick="window._restoreTaskFooter(${taskId})">No, Go Back</button>
+                <button class="btn btn-danger" onclick="window._doCancelTask(${taskId})">Yes, Cancel</button>
+            </div>
+        </div>`;
+}
+
+export async function _doCancelTask(taskId) {
+    const boardProject = _getBoardProject();
+    if (!boardProject) return;
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/tasks/${taskId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscriber_id: 'Operator' }),
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        hideTaskDetailModal();
+        await loadBoardTasks(boardProject);
+        showToast('Task cancelled');
+    } catch (e) {
+        showToast(e.message || 'Failed to cancel task', true);
+    }
+}
+
+export async function publishBoardTask(taskId) {
+    const boardProject = _getBoardProject();
+    if (!boardProject) return;
+    try {
+        const resp = await fetch(`/api/board/${encodeURIComponent(boardProject)}/tasks/${taskId}/publish`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        await loadBoardTasks(boardProject);
+        showTaskDetailModal(taskId);
+        showToast('Task published');
+    } catch (e) {
+        showToast(e.message || 'Failed to publish task', true);
+    }
+}
+
+export function _restoreTaskFooter(taskId) {
+    showTaskDetailModal(taskId);
 }
 
 export function hideTaskDetailModal() {

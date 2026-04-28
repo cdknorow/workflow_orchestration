@@ -65,6 +65,14 @@ type Task struct {
 	OutputTokens      *int     `db:"output_tokens" json:"output_tokens,omitempty"`
 	CacheReadTokens   *int     `db:"cache_read_tokens" json:"cache_read_tokens,omitempty"`
 	CacheWriteTokens  *int     `db:"cache_write_tokens" json:"cache_write_tokens,omitempty"`
+	BlockedBy         []TaskDep `db:"-" json:"blocked_by,omitempty"`
+}
+
+type TaskDep struct {
+	TaskID  int64  `json:"task_id"`
+	BoardID string `json:"board_id"`
+	Title   string `json:"title,omitempty"`
+	Status  string `json:"status,omitempty"`
 }
 
 // Message represents a board message.
@@ -168,7 +176,7 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 			title TEXT NOT NULL,
 			body TEXT,
 			status TEXT NOT NULL DEFAULT 'pending'
-				CHECK (status IN ('pending', 'in_progress', 'completed', 'skipped')),
+				CHECK (status IN ('pending', 'in_progress', 'completed', 'skipped', 'blocked', 'draft')),
 			priority TEXT NOT NULL DEFAULT 'medium'
 				CHECK (priority IN ('critical', 'high', 'medium', 'low')),
 			created_by TEXT NOT NULL,
@@ -181,6 +189,22 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_board_tasks_board_status ON board_tasks(board_id, status);
 		CREATE INDEX IF NOT EXISTS idx_board_tasks_assigned ON board_tasks(board_id, assigned_to);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Task dependencies table
+	_, err = s.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS task_dependencies (
+			task_id INTEGER NOT NULL,
+			blocked_by_task_id INTEGER NOT NULL,
+			blocked_by_board_id TEXT NOT NULL,
+			PRIMARY KEY (task_id, blocked_by_task_id),
+			FOREIGN KEY (task_id) REFERENCES board_tasks(id),
+			FOREIGN KEY (blocked_by_task_id) REFERENCES board_tasks(id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_task_deps_blocked_by ON task_dependencies(blocked_by_task_id);
 	`)
 	if err != nil {
 		return err
@@ -242,7 +266,59 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 		}
 	}
 
+	// Migrate CHECK constraint to include 'blocked' status for existing databases.
+	// SQLite doesn't support ALTER CONSTRAINT, so we recreate the table.
+	s.migrateTasksCheckConstraint(ctx)
+
 	return nil
+}
+
+func (s *Store) migrateTasksCheckConstraint(ctx context.Context) {
+	var tableSQL string
+	err := s.db.GetContext(ctx, &tableSQL,
+		"SELECT sql FROM sqlite_master WHERE type='table' AND name='board_tasks'")
+	if err != nil || (strings.Contains(tableSQL, "'blocked'") && strings.Contains(tableSQL, "'draft'")) {
+		return // already migrated or new DB
+	}
+
+	log.Printf("[board] migrating board_tasks CHECK constraint to include 'blocked' and 'draft'")
+	migrations := []string{
+		`CREATE TABLE board_tasks_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			board_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT,
+			status TEXT NOT NULL DEFAULT 'pending'
+				CHECK (status IN ('pending', 'in_progress', 'completed', 'skipped', 'blocked', 'draft')),
+			priority TEXT NOT NULL DEFAULT 'medium'
+				CHECK (priority IN ('critical', 'high', 'medium', 'low')),
+			created_by TEXT NOT NULL,
+			assigned_to TEXT,
+			completed_by TEXT,
+			completion_message TEXT,
+			created_at TEXT NOT NULL,
+			claimed_at TEXT,
+			completed_at TEXT,
+			session_id TEXT,
+			cost_usd REAL,
+			input_tokens INTEGER,
+			output_tokens INTEGER,
+			cache_read_tokens INTEGER,
+			cache_write_tokens INTEGER
+		)`,
+		`INSERT INTO board_tasks_new SELECT id, board_id, title, body, status, priority, created_by, assigned_to, completed_by, completion_message, created_at, claimed_at, completed_at, session_id, cost_usd, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens FROM board_tasks`,
+		`DROP TABLE board_tasks`,
+		`ALTER TABLE board_tasks_new RENAME TO board_tasks`,
+		`CREATE INDEX IF NOT EXISTS idx_board_tasks_board_status ON board_tasks(board_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_board_tasks_assigned ON board_tasks(board_id, assigned_to)`,
+	}
+	for _, sql := range migrations {
+		if _, err := s.db.ExecContext(ctx, sql); err != nil {
+			log.Printf("[board] CHECK constraint migration failed: %v", err)
+			return
+		}
+	}
+	log.Printf("[board] CHECK constraint migration complete")
 }
 
 func nowUTC() string {
@@ -913,8 +989,20 @@ func (s *Store) getTaskByID(ctx context.Context, project string, taskID int64) (
 	return &t, nil
 }
 
+// CreateTaskOpts holds optional parameters for CreateTask.
+type CreateTaskOpts struct {
+	BlockedBy []TaskDep
+	MaxDepth  int
+	Draft     bool
+}
+
 // CreateTask inserts a task and returns it.
 func (s *Store) CreateTask(ctx context.Context, project, title, body, priority, createdBy string, assignedTo ...string) (*Task, error) {
+	return s.CreateTaskWithOpts(ctx, project, title, body, priority, createdBy, nil, assignedTo...)
+}
+
+// CreateTaskWithOpts inserts a task with optional dependency configuration.
+func (s *Store) CreateTaskWithOpts(ctx context.Context, project, title, body, priority, createdBy string, opts *CreateTaskOpts, assignedTo ...string) (*Task, error) {
 	if priority == "" {
 		priority = "medium"
 	}
@@ -929,14 +1017,40 @@ func (s *Store) CreateTask(ctx context.Context, project, title, body, priority, 
 		assignPtr = &assignedTo[0]
 	}
 
+	initialStatus := "pending"
+	if opts != nil && opts.Draft {
+		initialStatus = "draft"
+	}
+
 	result, err := s.db.ExecContext(ctx,
 		`INSERT INTO board_tasks (board_id, title, body, status, priority, created_by, assigned_to, created_at)
-		 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)`,
-		project, title, bodyPtr, priority, createdBy, assignPtr, now)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		project, title, bodyPtr, initialStatus, priority, createdBy, assignPtr, now)
 	if err != nil {
 		return nil, err
 	}
 	taskID, _ := result.LastInsertId()
+
+	if opts != nil && len(opts.BlockedBy) > 0 && !opts.Draft {
+		maxDepth := opts.MaxDepth
+		if maxDepth <= 0 {
+			maxDepth = 3
+		}
+		if err := s.AddTaskDependencies(ctx, project, taskID, opts.BlockedBy, maxDepth); err != nil {
+			return nil, err
+		}
+	} else if opts != nil && len(opts.BlockedBy) > 0 && opts.Draft {
+		// Store deps but don't evaluate status — draft stays draft
+		for _, d := range opts.BlockedBy {
+			boardID := d.BoardID
+			if boardID == "" {
+				boardID = project
+			}
+			s.db.ExecContext(ctx,
+				"INSERT INTO task_dependencies (task_id, blocked_by_task_id, blocked_by_board_id) VALUES (?, ?, ?)",
+				taskID, d.TaskID, boardID)
+		}
+	}
 
 	return s.getTaskByID(ctx, project, taskID)
 }
@@ -951,6 +1065,7 @@ func (s *Store) ListTasks(ctx context.Context, project string) ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.populateTaskDeps(ctx, tasks)
 	return tasks, nil
 }
 
@@ -966,7 +1081,59 @@ func (s *Store) ListAllTasks(ctx context.Context, limit int) ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.populateTaskDeps(ctx, tasks)
 	return tasks, nil
+}
+
+// populateTaskDeps batch-loads dependencies for a slice of tasks.
+func (s *Store) populateTaskDeps(ctx context.Context, tasks []Task) {
+	if len(tasks) == 0 {
+		return
+	}
+	ids := make([]int64, len(tasks))
+	idMap := make(map[int64]*Task, len(tasks))
+	for i := range tasks {
+		ids[i] = tasks[i].ID
+		idMap[tasks[i].ID] = &tasks[i]
+	}
+
+	// Build IN clause
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(
+		`SELECT td.task_id, td.blocked_by_task_id, td.blocked_by_board_id, bt.title, bt.status
+		 FROM task_dependencies td
+		 LEFT JOIN board_tasks bt ON bt.id = td.blocked_by_task_id
+		 WHERE td.task_id IN (%s)`, strings.Join(placeholders, ","))
+
+	var rows []struct {
+		TaskID           int64   `db:"task_id"`
+		BlockedByTaskID  int64   `db:"blocked_by_task_id"`
+		BlockedByBoardID string  `db:"blocked_by_board_id"`
+		Title            *string `db:"title"`
+		Status           *string `db:"status"`
+	}
+	if err := s.db.SelectContext(ctx, &rows, query, args...); err != nil {
+		return
+	}
+	for _, r := range rows {
+		t := idMap[r.TaskID]
+		if t == nil {
+			continue
+		}
+		dep := TaskDep{TaskID: r.BlockedByTaskID, BoardID: r.BlockedByBoardID}
+		if r.Title != nil {
+			dep.Title = *r.Title
+		}
+		if r.Status != nil {
+			dep.Status = *r.Status
+		}
+		t.BlockedBy = append(t.BlockedBy, dep)
+	}
 }
 
 // HasActiveTaskForAssignee returns true when the assignee already has another
@@ -1220,13 +1387,143 @@ func (s *Store) ReassignTask(ctx context.Context, project string, taskID int64, 
 	return s.getTaskByID(ctx, project, taskID)
 }
 
-// CancelTask marks a task as skipped. Can cancel pending or in_progress tasks.
+// TaskUpdate holds optional fields for updating a task.
+// TaskUpdate holds optional fields for updating a task.
+type TaskUpdate struct {
+	Title      *string    `json:"title,omitempty"`
+	Body       *string    `json:"body,omitempty"`
+	Priority   *string    `json:"priority,omitempty"`
+	AssignedTo *string    `json:"assigned_to,omitempty"`
+	BlockedBy  *[]TaskDep `json:"blocked_by,omitempty"`
+}
+
+// UpdateTask applies partial updates to a pending, in_progress, or blocked task.
+// If AssignedTo changes on an in_progress task, the task resets to pending.
+// Returns (updatedTask, previousStatus, error) so the handler can detect status transitions.
+func (s *Store) UpdateTask(ctx context.Context, project string, taskID int64, updates TaskUpdate, maxDepth int) (*Task, string, error) {
+	task, err := s.getTaskByID(ctx, project, taskID)
+	if err != nil {
+		return nil, "", fmt.Errorf("task #%d not found", taskID)
+	}
+	if task.Status == "completed" || task.Status == "skipped" {
+		return nil, "", fmt.Errorf("task #%d cannot be edited (status: %s)", taskID, task.Status)
+	}
+	prevStatus := task.Status
+
+	setClauses := []string{}
+	args := []any{}
+
+	if updates.Title != nil {
+		if *updates.Title == "" {
+			return nil, "", fmt.Errorf("title cannot be empty")
+		}
+		setClauses = append(setClauses, "title = ?")
+		args = append(args, *updates.Title)
+	}
+	if updates.Body != nil {
+		setClauses = append(setClauses, "body = ?")
+		args = append(args, *updates.Body)
+	}
+	if updates.Priority != nil {
+		switch *updates.Priority {
+		case "critical", "high", "medium", "low":
+		default:
+			return nil, "", fmt.Errorf("invalid priority: %s", *updates.Priority)
+		}
+		setClauses = append(setClauses, "priority = ?")
+		args = append(args, *updates.Priority)
+	}
+	if updates.AssignedTo != nil {
+		setClauses = append(setClauses, "assigned_to = ?")
+		if *updates.AssignedTo == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *updates.AssignedTo)
+		}
+		if task.Status == "in_progress" {
+			setClauses = append(setClauses, "status = 'pending'", "claimed_at = NULL", "session_id = NULL")
+		}
+	}
+
+	if len(setClauses) > 0 {
+		query := fmt.Sprintf("UPDATE board_tasks SET %s WHERE id = ? AND board_id = ?",
+			strings.Join(setClauses, ", "))
+		args = append(args, taskID, project)
+		if _, err = s.db.ExecContext(ctx, query, args...); err != nil {
+			return nil, "", err
+		}
+	}
+
+	// Handle blocked_by updates
+	if updates.BlockedBy != nil {
+		if maxDepth <= 0 {
+			maxDepth = 3
+		}
+		deps := *updates.BlockedBy
+		if len(deps) == 0 {
+			// Clear all dependencies
+			if _, err := s.db.ExecContext(ctx, "DELETE FROM task_dependencies WHERE task_id = ?", taskID); err != nil {
+				return nil, "", err
+			}
+			// Unblock if currently blocked
+			s.db.ExecContext(ctx,
+				"UPDATE board_tasks SET status = 'pending' WHERE id = ? AND board_id = ? AND status = 'blocked'",
+				taskID, project)
+		} else {
+			if err := s.AddTaskDependencies(ctx, project, taskID, deps, maxDepth); err != nil {
+				return nil, "", err
+			}
+		}
+	}
+
+	result, err := s.getTaskByID(ctx, project, taskID)
+	if err != nil {
+		return nil, "", err
+	}
+	return result, prevStatus, nil
+}
+
+// PublishTask transitions a draft task to pending or blocked based on its dependencies.
+func (s *Store) PublishTask(ctx context.Context, project string, taskID int64) (*Task, error) {
+	task, err := s.getTaskByID(ctx, project, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("task #%d not found", taskID)
+	}
+	if task.Status != "draft" {
+		return nil, fmt.Errorf("task #%d is not a draft (status: %s)", taskID, task.Status)
+	}
+
+	// Check if task has unresolved dependencies
+	deps, err := s.GetTaskDependencies(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	newStatus := "pending"
+	for _, d := range deps {
+		if d.Status != "completed" && d.Status != "skipped" {
+			newStatus = "blocked"
+			break
+		}
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		"UPDATE board_tasks SET status = ? WHERE id = ? AND board_id = ?",
+		newStatus, taskID, project)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.getTaskByID(ctx, project, taskID)
+}
+
+// CancelTask marks a task as skipped. Can cancel pending, in_progress, or blocked tasks.
 func (s *Store) CancelTask(ctx context.Context, project string, taskID int64, subscriberID string, message *string) (*Task, error) {
 	now := nowUTC()
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE board_tasks
 		 SET status = 'skipped', completed_by = ?, completion_message = ?, completed_at = ?
-		 WHERE id = ? AND board_id = ? AND status IN ('pending', 'in_progress')`,
+		 WHERE id = ? AND board_id = ? AND status IN ('pending', 'in_progress', 'blocked', 'draft')`,
 		subscriberID, message, now, taskID, project)
 	if err != nil {
 		return nil, err
@@ -1239,6 +1536,293 @@ func (s *Store) CancelTask(ctx context.Context, project string, taskID int64, su
 	s.computeAndStoreTaskCost(ctx, taskID)
 
 	return s.getTaskByID(ctx, project, taskID)
+}
+
+// ── Task Dependencies ────────────────────────────────────────────
+
+// GetTaskDependencies returns the blocked_by deps for a task with title/status populated.
+func (s *Store) GetTaskDependencies(ctx context.Context, taskID int64) ([]TaskDep, error) {
+	var deps []struct {
+		BlockedByTaskID int64  `db:"blocked_by_task_id"`
+		BlockedByBoardID string `db:"blocked_by_board_id"`
+		Title           *string `db:"title"`
+		Status          *string `db:"status"`
+	}
+	err := s.db.SelectContext(ctx, &deps,
+		`SELECT td.blocked_by_task_id, td.blocked_by_board_id, bt.title, bt.status
+		 FROM task_dependencies td
+		 LEFT JOIN board_tasks bt ON bt.id = td.blocked_by_task_id
+		 WHERE td.task_id = ?`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]TaskDep, len(deps))
+	for i, d := range deps {
+		result[i] = TaskDep{
+			TaskID:  d.BlockedByTaskID,
+			BoardID: d.BlockedByBoardID,
+		}
+		if d.Title != nil {
+			result[i].Title = *d.Title
+		}
+		if d.Status != nil {
+			result[i].Status = *d.Status
+		}
+	}
+	return result, nil
+}
+
+// AddTaskDependencies inserts dependency rows and sets status to 'blocked'
+// if any blockers are unresolved. Validates circular deps and depth limit.
+func (s *Store) AddTaskDependencies(ctx context.Context, project string, taskID int64, deps []TaskDep, maxDepth int) error {
+	if len(deps) == 0 {
+		return nil
+	}
+
+	// Fill in default board_id
+	for i := range deps {
+		if deps[i].BoardID == "" {
+			deps[i].BoardID = project
+		}
+	}
+
+	// Validate all blocked_by tasks exist
+	for _, d := range deps {
+		var exists int
+		err := s.db.GetContext(ctx, &exists,
+			"SELECT COUNT(*) FROM board_tasks WHERE id = ? AND board_id = ?", d.TaskID, d.BoardID)
+		if err != nil || exists == 0 {
+			return fmt.Errorf("blocker task #%d not found on board %s", d.TaskID, d.BoardID)
+		}
+	}
+
+	// Validate no circular dependencies
+	if err := s.validateNoCycles(ctx, taskID, deps); err != nil {
+		return err
+	}
+
+	// Validate depth limit
+	if err := s.ValidateDependencyDepth(ctx, taskID, deps, maxDepth); err != nil {
+		return err
+	}
+
+	// Delete existing deps and insert new ones
+	if _, err := s.db.ExecContext(ctx, "DELETE FROM task_dependencies WHERE task_id = ?", taskID); err != nil {
+		return err
+	}
+	for _, d := range deps {
+		if _, err := s.db.ExecContext(ctx,
+			"INSERT INTO task_dependencies (task_id, blocked_by_task_id, blocked_by_board_id) VALUES (?, ?, ?)",
+			taskID, d.TaskID, d.BoardID); err != nil {
+			return err
+		}
+	}
+
+	// Check if any blockers are unresolved → set status to blocked
+	hasUnresolved := false
+	for _, d := range deps {
+		var status string
+		if err := s.db.GetContext(ctx, &status,
+			"SELECT status FROM board_tasks WHERE id = ?", d.TaskID); err == nil {
+			if status != "completed" && status != "skipped" {
+				hasUnresolved = true
+				break
+			}
+		}
+	}
+
+	if hasUnresolved {
+		_, err := s.db.ExecContext(ctx,
+			"UPDATE board_tasks SET status = 'blocked' WHERE id = ? AND board_id = ? AND status IN ('pending', 'blocked')",
+			taskID, project)
+		if err != nil {
+			return err
+		}
+	} else {
+		// All resolved — ensure task is pending (not blocked)
+		_, err := s.db.ExecContext(ctx,
+			"UPDATE board_tasks SET status = 'pending' WHERE id = ? AND board_id = ? AND status = 'blocked'",
+			taskID, project)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Store) validateNoCycles(ctx context.Context, taskID int64, deps []TaskDep) error {
+	visited := map[int64]bool{taskID: true}
+	var walk func(id int64) error
+	walk = func(id int64) error {
+		var upstreamDeps []struct {
+			BlockedByTaskID int64 `db:"blocked_by_task_id"`
+		}
+		if err := s.db.SelectContext(ctx, &upstreamDeps,
+			"SELECT blocked_by_task_id FROM task_dependencies WHERE task_id = ?", id); err != nil {
+			return err
+		}
+		for _, u := range upstreamDeps {
+			if visited[u.BlockedByTaskID] {
+				return fmt.Errorf("circular dependency detected: task #%d appears in its own dependency chain", taskID)
+			}
+			visited[u.BlockedByTaskID] = true
+			if err := walk(u.BlockedByTaskID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for _, d := range deps {
+		if d.TaskID == taskID {
+			return fmt.Errorf("task cannot depend on itself")
+		}
+		visited[d.TaskID] = true
+		if err := walk(d.TaskID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ResolveDownstreamTasks checks all tasks blocked by completedTaskID.
+// If all their blockers are now resolved, transitions them from blocked → pending.
+func (s *Store) ResolveDownstreamTasks(ctx context.Context, project string, completedTaskID int64) ([]Task, error) {
+	var downstreamIDs []int64
+	if err := s.db.SelectContext(ctx, &downstreamIDs,
+		"SELECT DISTINCT task_id FROM task_dependencies WHERE blocked_by_task_id = ?", completedTaskID); err != nil {
+		return nil, err
+	}
+
+	var unblocked []Task
+	for _, tid := range downstreamIDs {
+		// Check if all blockers are now resolved
+		var unresolvedCount int
+		if err := s.db.GetContext(ctx, &unresolvedCount,
+			`SELECT COUNT(*) FROM task_dependencies td
+			 JOIN board_tasks bt ON bt.id = td.blocked_by_task_id
+			 WHERE td.task_id = ? AND bt.status NOT IN ('completed', 'skipped')`, tid); err != nil {
+			continue
+		}
+		if unresolvedCount > 0 {
+			continue
+		}
+
+		// All resolved — transition to pending
+		result, err := s.db.ExecContext(ctx,
+			"UPDATE board_tasks SET status = 'pending' WHERE id = ? AND status = 'blocked'", tid)
+		if err != nil {
+			continue
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			continue
+		}
+
+		// Get the task's board_id to look it up
+		var boardID string
+		if err := s.db.GetContext(ctx, &boardID,
+			"SELECT board_id FROM board_tasks WHERE id = ?", tid); err != nil {
+			continue
+		}
+		if t, err := s.getTaskByID(ctx, boardID, tid); err == nil {
+			unblocked = append(unblocked, *t)
+		}
+	}
+	return unblocked, nil
+}
+
+// ReblockDownstreamTasks checks all tasks that depend on regressedTaskID.
+// If the task is pending and has an unresolved blocker, sets it back to blocked.
+func (s *Store) ReblockDownstreamTasks(ctx context.Context, project string, regressedTaskID int64) ([]Task, error) {
+	var downstreamIDs []int64
+	if err := s.db.SelectContext(ctx, &downstreamIDs,
+		"SELECT DISTINCT task_id FROM task_dependencies WHERE blocked_by_task_id = ?", regressedTaskID); err != nil {
+		return nil, err
+	}
+
+	var reblocked []Task
+	for _, tid := range downstreamIDs {
+		// Check if this task has any unresolved blockers
+		var unresolvedCount int
+		if err := s.db.GetContext(ctx, &unresolvedCount,
+			`SELECT COUNT(*) FROM task_dependencies td
+			 JOIN board_tasks bt ON bt.id = td.blocked_by_task_id
+			 WHERE td.task_id = ? AND bt.status NOT IN ('completed', 'skipped')`, tid); err != nil {
+			continue
+		}
+		if unresolvedCount == 0 {
+			continue
+		}
+
+		// Has unresolved blockers — set back to blocked if currently pending
+		result, err := s.db.ExecContext(ctx,
+			"UPDATE board_tasks SET status = 'blocked' WHERE id = ? AND status = 'pending'", tid)
+		if err != nil {
+			continue
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			continue
+		}
+
+		var boardID string
+		if err := s.db.GetContext(ctx, &boardID,
+			"SELECT board_id FROM board_tasks WHERE id = ?", tid); err != nil {
+			continue
+		}
+		if t, err := s.getTaskByID(ctx, boardID, tid); err == nil {
+			reblocked = append(reblocked, *t)
+		}
+	}
+	return reblocked, nil
+}
+
+// ValidateDependencyDepth walks the dependency graph and returns an error
+// if adding the proposed deps would exceed maxDepth.
+func (s *Store) ValidateDependencyDepth(ctx context.Context, taskID int64, deps []TaskDep, maxDepth int) error {
+	if maxDepth <= 0 {
+		return nil
+	}
+
+	// Compute the max upstream depth from each proposed blocker
+	var maxUpstream func(id int64, depth int, visited map[int64]bool) (int, error)
+	maxUpstream = func(id int64, depth int, visited map[int64]bool) (int, error) {
+		if visited[id] {
+			return depth, nil
+		}
+		visited[id] = true
+
+		var upstreamIDs []int64
+		if err := s.db.SelectContext(ctx, &upstreamIDs,
+			"SELECT blocked_by_task_id FROM task_dependencies WHERE task_id = ?", id); err != nil {
+			return depth, err
+		}
+		best := depth
+		for _, uid := range upstreamIDs {
+			d, err := maxUpstream(uid, depth+1, visited)
+			if err != nil {
+				return 0, err
+			}
+			if d > best {
+				best = d
+			}
+		}
+		return best, nil
+	}
+
+	for _, d := range deps {
+		visited := map[int64]bool{taskID: true}
+		depth, err := maxUpstream(d.TaskID, 1, visited)
+		if err != nil {
+			return err
+		}
+		if depth > maxDepth {
+			return fmt.Errorf("dependency chain would exceed maximum depth of %d", maxDepth)
+		}
+	}
+	return nil
 }
 
 // TaskLiveCost holds real-time cost data for an in-progress task.

@@ -447,6 +447,452 @@ curl -s -m 10 -X PUT "${BASE_URL}/api/settings" \
     -H "Content-Type: application/json" \
     -d '{"cli_path_claude": ""}' >/dev/null
 
+# ── Test 12: Create task with blocked_by — starts as blocked ─────────
+
+DEP_BOARD="dep-test-$$"
+dep_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DEP_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+dep_api_status() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -o /dev/null -w "%{http_code}" -X "$method" "${BASE_URL}/api/board/${DEP_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+dep_api POST "/subscribe" -d '{"subscriber_id": "dep-agent", "job_title": "tester"}' >/dev/null
+
+# Create Task A (no deps)
+dep_a=$(dep_api POST "/tasks" -d '{"title": "Dep Task A", "priority": "high", "subscriber_id": "orchestrator"}')
+dep_a_id=$(echo "$dep_a" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+dep_a_status=$(echo "$dep_a" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$dep_a_status" == "pending" ]]; then
+    pass "Dep: Task A created as pending"
+else
+    fail "Dep: Task A status is '$dep_a_status', expected 'pending'"
+fi
+
+# Create Task B blocked by A
+dep_b=$(dep_api POST "/tasks" -d "{\"title\": \"Dep Task B\", \"priority\": \"medium\", \"subscriber_id\": \"orchestrator\", \"blocked_by\": [${dep_a_id}]}")
+dep_b_id=$(echo "$dep_b" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+dep_b_status=$(echo "$dep_b" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$dep_b_status" == "blocked" ]]; then
+    pass "Dep: Task B created as blocked (blocked_by Task A)"
+else
+    fail "Dep: Task B status is '$dep_b_status', expected 'blocked'"
+fi
+
+# ── Test 13: Blocked task cannot be claimed ──────────────────────────
+
+claim_result=$(dep_api POST "/tasks/claim" -d '{"subscriber_id": "dep-agent"}')
+claimed_title=$(echo "$claim_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))" 2>/dev/null || echo "")
+
+if [[ "$claimed_title" == "Dep Task A" ]]; then
+    pass "Dep: Claim skips blocked task, returns pending Task A"
+else
+    fail "Dep: Claim returned '$claimed_title', expected 'Dep Task A'"
+fi
+
+# ── Test 14: Completing blocker auto-unblocks downstream ─────────────
+
+dep_api POST "/tasks/${dep_a_id}/complete" -d '{"subscriber_id": "dep-agent", "message": "done"}' >/dev/null
+
+# Give async notification goroutine a moment
+sleep 0.5
+
+dep_b_new_status=$(dep_api GET "/tasks" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${dep_b_id}:
+        print(t['status']); break
+" 2>/dev/null || echo "")
+
+if [[ "$dep_b_new_status" == "pending" ]]; then
+    pass "Dep: Completing blocker auto-unblocks downstream (blocked → pending)"
+else
+    fail "Dep: Task B status is '$dep_b_new_status' after completing A, expected 'pending'"
+fi
+
+# Claim B — should succeed now
+claim_b=$(dep_api POST "/tasks/claim" -d '{"subscriber_id": "dep-agent"}')
+claim_b_title=$(echo "$claim_b" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))" 2>/dev/null || echo "")
+claim_b_id=$(echo "$claim_b" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+if [[ "$claim_b_title" == "Dep Task B" ]]; then
+    pass "Dep: Unblocked Task B can now be claimed"
+else
+    fail "Dep: Expected to claim 'Dep Task B', got '$claim_b_title'"
+fi
+
+dep_api POST "/tasks/${claim_b_id}/complete" -d '{"subscriber_id": "dep-agent", "message": "done"}' >/dev/null
+
+# ── Test 15: Cancelling blocker auto-unblocks downstream ─────────────
+
+DEP2_BOARD="dep2-test-$$"
+dep2_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DEP2_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+dep2_api POST "/subscribe" -d '{"subscriber_id": "dep2-agent", "job_title": "tester"}' >/dev/null
+
+dep_c=$(dep2_api POST "/tasks" -d '{"title": "Cancel Blocker", "subscriber_id": "orchestrator"}')
+dep_c_id=$(echo "$dep_c" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+dep_d=$(dep2_api POST "/tasks" -d "{\"title\": \"Blocked by cancel\", \"subscriber_id\": \"orchestrator\", \"blocked_by\": [${dep_c_id}]}")
+dep_d_id=$(echo "$dep_d" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+dep2_api POST "/tasks/${dep_c_id}/cancel" -d '{"subscriber_id": "orchestrator"}' >/dev/null
+sleep 0.5
+
+dep_d_status=$(dep2_api GET "/tasks" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${dep_d_id}:
+        print(t['status']); break
+" 2>/dev/null || echo "")
+
+if [[ "$dep_d_status" == "pending" ]]; then
+    pass "Dep: Cancelling blocker auto-unblocks downstream"
+else
+    fail "Dep: Task D status is '$dep_d_status' after cancelling blocker, expected 'pending'"
+fi
+
+# ── Test 16: Multi-dependency — all blockers must resolve ────────────
+
+DEP3_BOARD="dep3-test-$$"
+dep3_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DEP3_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+dep3_api POST "/subscribe" -d '{"subscriber_id": "dep3-agent", "job_title": "tester"}' >/dev/null
+
+dep_e=$(dep3_api POST "/tasks" -d '{"title": "Multi Blocker E", "subscriber_id": "orchestrator"}')
+dep_e_id=$(echo "$dep_e" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+dep_f=$(dep3_api POST "/tasks" -d '{"title": "Multi Blocker F", "subscriber_id": "orchestrator"}')
+dep_f_id=$(echo "$dep_f" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+dep_g=$(dep3_api POST "/tasks" -d "{\"title\": \"Multi Blocked G\", \"subscriber_id\": \"orchestrator\", \"blocked_by\": [${dep_e_id}, ${dep_f_id}]}")
+dep_g_id=$(echo "$dep_g" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+dep_g_status=$(echo "$dep_g" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$dep_g_status" == "blocked" ]]; then
+    pass "Dep: Task G blocked by multiple tasks (E and F)"
+else
+    fail "Dep: Task G status is '$dep_g_status', expected 'blocked'"
+fi
+
+# Complete E — G should stay blocked (F unresolved)
+claimed_e=$(dep3_api POST "/tasks/claim" -d '{"subscriber_id": "dep3-agent"}')
+claimed_e_id=$(echo "$claimed_e" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+dep3_api POST "/tasks/${claimed_e_id}/complete" -d '{"subscriber_id": "dep3-agent", "message": "done"}' >/dev/null
+sleep 0.3
+
+dep_g_mid=$(dep3_api GET "/tasks" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${dep_g_id}:
+        print(t['status']); break
+" 2>/dev/null || echo "")
+
+if [[ "$dep_g_mid" == "blocked" ]]; then
+    pass "Dep: Task G still blocked after completing only one of two blockers"
+else
+    fail "Dep: Task G status is '$dep_g_mid' after completing E, expected 'blocked'"
+fi
+
+# Complete F — G should now unblock
+claimed_f=$(dep3_api POST "/tasks/claim" -d '{"subscriber_id": "dep3-agent"}')
+claimed_f_id=$(echo "$claimed_f" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+dep3_api POST "/tasks/${claimed_f_id}/complete" -d '{"subscriber_id": "dep3-agent", "message": "done"}' >/dev/null
+sleep 0.3
+
+dep_g_final=$(dep3_api GET "/tasks" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${dep_g_id}:
+        print(t['status']); break
+" 2>/dev/null || echo "")
+
+if [[ "$dep_g_final" == "pending" ]]; then
+    pass "Dep: Task G unblocked after all blockers resolved"
+else
+    fail "Dep: Task G status is '$dep_g_final' after completing both blockers, expected 'pending'"
+fi
+
+# ── Test 17: Circular dependency rejection ───────────────────────────
+
+DEP4_BOARD="dep4-test-$$"
+dep4_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DEP4_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+dep4_api_status() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -o /dev/null -w "%{http_code}" -X "$method" "${BASE_URL}/api/board/${DEP4_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+dep_h=$(dep4_api POST "/tasks" -d '{"title": "Cycle H", "subscriber_id": "orchestrator"}')
+dep_h_id=$(echo "$dep_h" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+dep_i=$(dep4_api POST "/tasks" -d "{\"title\": \"Cycle I\", \"subscriber_id\": \"orchestrator\", \"blocked_by\": [${dep_h_id}]}")
+dep_i_id=$(echo "$dep_i" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+# Try to make H blocked by I (circular: H→I→H)
+cycle_status=$(dep4_api_status PATCH "/tasks/${dep_h_id}" -d "{\"blocked_by\": [${dep_i_id}]}")
+
+if [[ "$cycle_status" == "400" ]]; then
+    pass "Dep: Circular dependency rejected with 400"
+else
+    fail "Dep: Circular dependency returned HTTP $cycle_status, expected 400"
+fi
+
+# ── Test 18: blocked_by appears in ListTasks response ────────────────
+
+dep_list=$(dep4_api GET "/tasks")
+dep_i_blockers=$(echo "$dep_list" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${dep_i_id}:
+        deps = t.get('blocked_by', [])
+        if len(deps) == 1 and deps[0].get('task_id') == ${dep_h_id}:
+            print('ok')
+        else:
+            print('bad')
+        break
+" 2>/dev/null || echo "bad")
+
+if [[ "$dep_i_blockers" == "ok" ]]; then
+    pass "Dep: ListTasks includes blocked_by with task IDs"
+else
+    fail "Dep: ListTasks blocked_by not populated correctly"
+fi
+
+# ── Test 19: Cross-board dependency ──────────────────────────────────
+
+CROSS_BOARD1="cross-board1-$$"
+CROSS_BOARD2="cross-board2-$$"
+
+cross1_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${CROSS_BOARD1}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+cross2_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${CROSS_BOARD2}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+cross1_api POST "/subscribe" -d '{"subscriber_id": "cross-agent-1", "job_title": "tester"}' >/dev/null
+cross2_api POST "/subscribe" -d '{"subscriber_id": "cross-agent-2", "job_title": "tester"}' >/dev/null
+
+# Create task X on board-1
+cross_x=$(cross1_api POST "/tasks" -d '{"title": "Cross Board X", "subscriber_id": "orchestrator"}')
+cross_x_id=$(echo "$cross_x" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+# Create task Y on board-2, blocked by X on board-1
+cross_y=$(cross2_api POST "/tasks" -d "{\"title\": \"Cross Board Y\", \"subscriber_id\": \"orchestrator\", \"blocked_by\": [{\"task_id\": ${cross_x_id}, \"board_id\": \"${CROSS_BOARD1}\"}]}")
+cross_y_id=$(echo "$cross_y" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+cross_y_status=$(echo "$cross_y" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$cross_y_status" == "blocked" ]]; then
+    pass "Dep: Cross-board task Y blocked by task X on another board"
+else
+    fail "Dep: Cross-board task Y status is '$cross_y_status', expected 'blocked'"
+fi
+
+# Complete X on board-1 — Y on board-2 should unblock
+claimed_x=$(cross1_api POST "/tasks/claim" -d '{"subscriber_id": "cross-agent-1"}')
+claimed_x_id=$(echo "$claimed_x" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+cross1_api POST "/tasks/${claimed_x_id}/complete" -d '{"subscriber_id": "cross-agent-1", "message": "done"}' >/dev/null
+sleep 0.5
+
+cross_y_final=$(cross2_api GET "/tasks" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${cross_y_id}:
+        print(t['status']); break
+" 2>/dev/null || echo "")
+
+if [[ "$cross_y_final" == "pending" ]]; then
+    pass "Dep: Cross-board unblock works (completing X on board-1 unblocks Y on board-2)"
+else
+    fail "Dep: Cross-board task Y status is '$cross_y_final' after completing X, expected 'pending'"
+fi
+
+# ── Test 20: Draft task creation and publish ─────────────────────────
+
+DRAFT_BOARD="draft-test-$$"
+draft_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DRAFT_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+draft_api POST "/subscribe" -d '{"subscriber_id": "draft-agent", "job_title": "tester"}' >/dev/null
+
+# Create draft task
+draft_result=$(draft_api POST "/tasks" -d '{"title": "Draft Task", "priority": "high", "created_by": "orchestrator", "draft": true}')
+draft_id=$(echo "$draft_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+draft_status=$(echo "$draft_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$draft_status" == "draft" ]]; then
+    pass "Draft: task created with draft status"
+else
+    fail "Draft: task status is '$draft_status', expected 'draft'"
+fi
+
+# ── Test 21: Draft task cannot be claimed ────────────────────────────
+
+# Create a pending task too
+draft_api POST "/tasks" -d '{"title": "Pending Task", "priority": "low", "created_by": "orchestrator"}' >/dev/null
+
+# Claim should skip draft, pick pending
+claim_draft=$(draft_api POST "/tasks/claim" -d '{"subscriber_id": "draft-agent"}')
+claim_draft_title=$(echo "$claim_draft" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))" 2>/dev/null || echo "")
+
+if [[ "$claim_draft_title" == "Pending Task" ]]; then
+    pass "Draft: claim skips draft, returns pending task"
+else
+    fail "Draft: claim returned '$claim_draft_title', expected 'Pending Task'"
+fi
+
+# Complete the pending task
+claim_draft_id=$(echo "$claim_draft" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+draft_api POST "/tasks/${claim_draft_id}/complete" -d '{"subscriber_id": "draft-agent", "message": "done"}' >/dev/null
+
+# ── Test 22: Publish draft → pending ─────────────────────────────────
+
+publish_result=$(draft_api POST "/tasks/${draft_id}/publish" -d '{}')
+publish_status=$(echo "$publish_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$publish_status" == "pending" ]]; then
+    pass "Draft: publish transitions draft → pending"
+else
+    fail "Draft: publish result status is '$publish_status', expected 'pending'"
+fi
+
+# Verify published task can now be claimed
+claim_published=$(draft_api POST "/tasks/claim" -d '{"subscriber_id": "draft-agent"}')
+claim_pub_title=$(echo "$claim_published" | python3 -c "import sys,json; print(json.load(sys.stdin).get('title',''))" 2>/dev/null || echo "")
+
+if [[ "$claim_pub_title" == "Draft Task" ]]; then
+    pass "Draft: published task can be claimed"
+else
+    fail "Draft: expected to claim 'Draft Task', got '$claim_pub_title'"
+fi
+
+claim_pub_id=$(echo "$claim_published" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+draft_api POST "/tasks/${claim_pub_id}/complete" -d '{"subscriber_id": "draft-agent", "message": "done"}' >/dev/null
+
+# ── Test 23: Draft with deps → publish → blocked ────────────────────
+
+DRAFT2_BOARD="draft2-test-$$"
+draft2_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DRAFT2_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+draft2_api POST "/subscribe" -d '{"subscriber_id": "draft2-agent", "job_title": "tester"}' >/dev/null
+
+# Create blocker
+blocker=$(draft2_api POST "/tasks" -d '{"title": "Blocker", "created_by": "orchestrator"}')
+blocker_id=$(echo "$blocker" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+# Create draft with dep on blocker — should stay draft
+draft_dep=$(draft2_api POST "/tasks" -d "{\"title\": \"Draft with dep\", \"created_by\": \"orchestrator\", \"draft\": true, \"blocked_by\": [${blocker_id}]}")
+draft_dep_id=$(echo "$draft_dep" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+draft_dep_status=$(echo "$draft_dep" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$draft_dep_status" == "draft" ]]; then
+    pass "Draft: draft with deps stays in draft status"
+else
+    fail "Draft: draft with deps status is '$draft_dep_status', expected 'draft'"
+fi
+
+# Publish — should become blocked (blocker unresolved)
+pub_dep=$(draft2_api POST "/tasks/${draft_dep_id}/publish" -d '{}')
+pub_dep_status=$(echo "$pub_dep" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+
+if [[ "$pub_dep_status" == "blocked" ]]; then
+    pass "Draft: publish with unresolved dep → blocked"
+else
+    fail "Draft: publish with dep status is '$pub_dep_status', expected 'blocked'"
+fi
+
+# Complete blocker → draft task should unblock
+claimed_blocker=$(draft2_api POST "/tasks/claim" -d '{"subscriber_id": "draft2-agent"}')
+claimed_blocker_id=$(echo "$claimed_blocker" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+draft2_api POST "/tasks/${claimed_blocker_id}/complete" -d '{"subscriber_id": "draft2-agent", "message": "done"}' >/dev/null
+sleep 0.5
+
+draft_dep_final=$(draft2_api GET "/tasks" | python3 -c "
+import sys,json
+tasks = json.load(sys.stdin).get('tasks',[])
+for t in tasks:
+    if t['id'] == ${draft_dep_id}:
+        print(t['status']); break
+" 2>/dev/null || echo "")
+
+if [[ "$draft_dep_final" == "pending" ]]; then
+    pass "Draft: published blocked task unblocks after blocker completed"
+else
+    fail "Draft: task status is '$draft_dep_final' after completing blocker, expected 'pending'"
+fi
+
+# ── Test 24: Publish non-draft fails ─────────────────────────────────
+
+DRAFT3_BOARD="draft3-test-$$"
+draft3_api() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -X "$method" "${BASE_URL}/api/board/${DRAFT3_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+draft3_api_status() {
+    local method="$1" path="$2"
+    shift 2
+    curl -s -m 10 -o /dev/null -w "%{http_code}" -X "$method" "${BASE_URL}/api/board/${DRAFT3_BOARD}${path}" \
+        -H "Content-Type: application/json" "$@"
+}
+
+draft3_api POST "/tasks" -d '{"title": "Pending", "created_by": "orchestrator"}' >/dev/null
+
+pub_status=$(draft3_api_status POST "/tasks/1/publish" -d '{}')
+
+if [[ "$pub_status" == "400" ]]; then
+    pass "Draft: publish non-draft returns 400"
+else
+    fail "Draft: publish non-draft returned HTTP $pub_status, expected 400"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""

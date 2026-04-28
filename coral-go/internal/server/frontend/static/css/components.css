@@ -63,6 +63,27 @@
     color: var(--error);
 }
 
+.btn-success {
+    border-color: var(--success, #3fb950);
+    color: var(--success, #3fb950);
+    background: transparent;
+}
+
+.btn-success:hover {
+    background: rgba(63, 185, 80, 0.15);
+}
+
+.btn-danger-text {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 6px 12px;
+}
+
+.btn-danger-text:hover {
+    color: var(--error);
+}
+
 .btn-small {
     padding: 4px 10px;
     font-size: 12px;

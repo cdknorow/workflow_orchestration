@@ -1107,6 +1107,47 @@
     </div>
 
     <!-- Task Detail Modal -->
+    <div id="create-task-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
+        <div class="modal-content modal-content-wide">
+            <div class="modal-header">
+                <h3>Create Task</h3>
+                <button class="modal-close-btn" onclick="window.hideCreateTaskModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="create-task-error" class="modal-error" style="display:none"></div>
+                <label for="create-task-title">Title
+                    <input type="text" id="create-task-title" placeholder="Task title (required)">
+                </label>
+                <label for="create-task-body">Description
+                    <textarea id="create-task-body" rows="3" placeholder="Optional description"></textarea>
+                </label>
+                <label for="create-task-priority">Priority
+                    <select id="create-task-priority">
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </label>
+                <label for="create-task-assignee">Assigned To
+                    <select id="create-task-assignee">
+                        <option value="">Unassigned</option>
+                    </select>
+                </label>
+                <label>Blocked By <span class="text-muted-sm">(optional)</span></label>
+                <div id="create-task-deps" class="dep-picker"></div>
+                <label class="create-task-draft-toggle">
+                    <input type="checkbox" id="create-task-draft">
+                    <span>Create as draft <span class="text-muted-sm">— not visible to agents until published</span></span>
+                </label>
+            </div>
+            <div class="modal-actions modal-footer">
+                <button class="btn" onclick="window.hideCreateTaskModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.submitCreateTask()">Create</button>
+            </div>
+        </div>
+    </div>
+
     <div id="task-detail-modal" class="modal" role="dialog" aria-modal="true" style="display:none">
         <div class="modal-content modal-content-extra-wide">
             <div class="modal-header">
@@ -1116,7 +1157,7 @@
             <div class="modal-body">
                 <div id="task-detail-content"></div>
             </div>
-            <div class="modal-actions modal-footer">
+            <div id="task-detail-modal-footer" class="modal-actions modal-footer">
                 <button class="btn" onclick="window.hideTaskDetailModal()">Close</button>
             </div>
         </div>

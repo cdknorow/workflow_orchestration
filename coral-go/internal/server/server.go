@@ -539,7 +539,9 @@ func (s *Server) buildRouter() chi.Router {
 	r.Post("/api/board/{project}/tasks/current", boardHandler.ActiveTask)
 	r.Post("/api/board/{project}/tasks/{taskID}/complete", boardHandler.CompleteTaskByID)
 	r.Post("/api/board/{project}/tasks/{taskID}/cancel", boardHandler.CancelTaskByID)
+	r.Patch("/api/board/{project}/tasks/{taskID}", boardHandler.UpdateTask)
 	r.Post("/api/board/{project}/tasks/{taskID}/reassign", boardHandler.ReassignTask)
+	r.Post("/api/board/{project}/tasks/{taskID}/publish", boardHandler.PublishTask)
 	r.Get("/api/board/{project}/tasks/{taskID}/cost", boardHandler.TaskLiveCost)
 
 	// One-shot tasks
