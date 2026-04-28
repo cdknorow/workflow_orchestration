@@ -57,6 +57,17 @@ function _formatDuration(startStr, endStr) {
     } catch { return '\u2014'; }
 }
 
+function _formatPRLink(prNumber, remoteURL) {
+    if (!prNumber) return '—';
+    if (!remoteURL) return `#${prNumber}`;
+    let base = remoteURL.replace(/\.git$/, '');
+    if (base.startsWith('git@')) {
+        const parts = base.split(':');
+        if (parts.length === 2) base = 'https://' + parts[0].slice(4) + '/' + parts[1];
+    }
+    return `<a href="${escapeAttr(base)}/pull/${prNumber}" target="_blank" rel="noopener">#${prNumber}</a>`;
+}
+
 function _findSession(sessionId) {
     if (!sessionId || !state.liveSessions) return null;
     return state.liveSessions.find(s => s.session_id === sessionId) || null;
@@ -994,6 +1005,7 @@ function _renderBranchTable(branches) {
     let html = `<table class="cost-table">
         <thead><tr>
             ${_sortHeader('branch', 'branch', 'Branch', '', true)}
+            ${_sortHeader('branch', 'pr_number', 'PR', 'cost-col-right')}
             ${_sortHeader('branch', 'num_agents', 'Agents', 'cost-col-right')}
             ${_sortHeader('branch', 'input_tokens', 'Input', 'cost-col-right')}
             ${_sortHeader('branch', 'output_tokens', 'Output', 'cost-col-right')}
@@ -1007,10 +1019,12 @@ function _renderBranchTable(branches) {
 
     for (const b of sorted) {
         const name = b.branch || '(unknown)';
+        const prCell = _formatPRLink(b.pr_number, b.remote_url);
         const pct = ((b.cost_usd / totalCost) * 100).toFixed(1);
         const barWidth = Math.max(2, (b.cost_usd / totalCost) * 100);
         html += `<tr>
             <td class="cost-agent-name">${escapeHtml(name)}</td>
+            <td class="cost-col-right">${prCell}</td>
             <td class="cost-col-right">${b.num_agents || 0}</td>
             <td class="cost-col-right">${_formatTokens(b.input_tokens || 0)}</td>
             <td class="cost-col-right">${_formatTokens(b.output_tokens || 0)}</td>

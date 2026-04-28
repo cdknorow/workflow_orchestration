@@ -121,6 +121,7 @@ var columnMigrations = []struct {
 	{"agent_tasks", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"agent_tasks", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"agent_tasks", "display_name", "TEXT"},
+	{"git_snapshots", "pr_number", "INTEGER"},
 }
 
 const schemaSQL = `

@@ -23,6 +23,12 @@ type GitPoller struct {
 	interval   time.Duration
 	logger     *slog.Logger
 	discoverFn func(ctx context.Context) ([]AgentInfo, error)
+	prCache    map[string]prCacheEntry // keyed by "remote_url::branch"
+}
+
+type prCacheEntry struct {
+	prNumber  int
+	expiresAt time.Time
 }
 
 // AgentInfo holds minimal agent metadata needed by background services.
@@ -41,6 +47,7 @@ func NewGitPoller(gitStore *store.GitStore, runtime AgentRuntime, interval time.
 		runtime:  runtime,
 		interval: interval,
 		logger:   slog.Default().With("service", "git_poller"),
+		prCache:  make(map[string]prCacheEntry),
 	}
 }
 
@@ -115,6 +122,12 @@ func (p *GitPoller) PollOnce(ctx context.Context) error {
 			p.logger.Debug("git changed files", "workdir", workdir, "file_count", len(changedFiles), "duration_ms", filesDur.Milliseconds())
 		}
 
+		// Look up PR number for non-default branches
+		prNumber := 0
+		if gitInfo.RemoteURL != nil && gitInfo.Branch != "main" && gitInfo.Branch != "master" && gitInfo.Branch != "HEAD" {
+			prNumber = p.lookupPR(ctx, *gitInfo.RemoteURL, gitInfo.Branch, workdir)
+		}
+
 		dbStart := time.Now()
 		for _, agent := range dirAgents {
 			sessionID := agent.SessionID
@@ -133,6 +146,7 @@ func (p *GitPoller) PollOnce(ctx context.Context) error {
 				CommitTimestamp:  &gitInfo.CommitTimestamp,
 				SessionID:        sidPtr,
 				RemoteURL:        gitInfo.RemoteURL,
+				PRNumber:         prNumber,
 			}
 			if err := p.store.UpsertGitSnapshot(ctx, snap); err != nil {
 				p.logger.Warn("upsert snapshot failed", "agent", agent.AgentName, "error", err)
@@ -335,4 +349,81 @@ func getBaseTimestamp(ctx context.Context, workdir, baseRef string) float64 {
 		return 0
 	}
 	return ts
+}
+
+// lookupPR returns the PR number for the given remote+branch, using a cache
+// keyed by remote_url::branch. The cache TTL matches the poller interval so
+// each branch is looked up at most once per poll cycle.
+func (p *GitPoller) lookupPR(ctx context.Context, remoteURL, branch, workdir string) int {
+	cacheKey := remoteURL + "::" + branch
+	if entry, ok := p.prCache[cacheKey]; ok && time.Now().Before(entry.expiresAt) {
+		return entry.prNumber
+	}
+
+	prNumber := queryPRNumber(ctx, branch, workdir, p.logger)
+	p.prCache[cacheKey] = prCacheEntry{
+		prNumber:  prNumber,
+		expiresAt: time.Now().Add(p.interval),
+	}
+	return prNumber
+}
+
+// queryPRNumber shells out to `gh pr list` to find an open or merged PR for a branch.
+func queryPRNumber(ctx context.Context, branch, workdir string, logger *slog.Logger) int {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	out, err := executil.Command(ctx, "gh", "pr", "list",
+		"--head", branch,
+		"--state", "all",
+		"--json", "number",
+		"--limit", "1",
+		"--repo", getRepoFromWorkdir(ctx, workdir),
+	).Output()
+	if err != nil {
+		logger.Debug("gh pr list failed", "branch", branch, "error", err)
+		return 0
+	}
+
+	// Parse minimal JSON: [{"number":42}]
+	s := strings.TrimSpace(string(out))
+	if s == "" || s == "[]" || s == "null" {
+		return 0
+	}
+	// Quick parse without importing encoding/json for a single int field
+	idx := strings.Index(s, `"number":`)
+	if idx < 0 {
+		return 0
+	}
+	numStr := s[idx+len(`"number":`):]
+	numStr = strings.TrimLeft(numStr, " ")
+	end := strings.IndexAny(numStr, ",}")
+	if end > 0 {
+		numStr = numStr[:end]
+	}
+	n, _ := strconv.Atoi(strings.TrimSpace(numStr))
+	return n
+}
+
+func getRepoFromWorkdir(ctx context.Context, workdir string) string {
+	out, err := executil.Command(ctx, "git", "--no-optional-locks", "-C", workdir, "remote", "get-url", "origin").Output()
+	if err != nil {
+		return ""
+	}
+	remote := strings.TrimSpace(string(out))
+
+	// Convert git@github.com:org/repo.git or https://github.com/org/repo.git to org/repo
+	remote = strings.TrimSuffix(remote, ".git")
+	if strings.HasPrefix(remote, "git@") {
+		// git@github.com:org/repo
+		parts := strings.SplitN(remote, ":", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+	}
+	// https://github.com/org/repo
+	if idx := strings.Index(remote, "github.com/"); idx >= 0 {
+		return remote[idx+len("github.com/"):]
+	}
+	return remote
 }

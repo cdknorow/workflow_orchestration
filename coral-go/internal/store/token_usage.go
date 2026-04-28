@@ -412,6 +412,8 @@ type BoardUsageSummary struct {
 // BranchUsageSummary represents aggregated token usage for a git branch.
 type BranchUsageSummary struct {
 	Branch           string  `db:"branch" json:"branch"`
+	PRNumber         int     `db:"pr_number" json:"pr_number,omitempty"`
+	RemoteURL        string  `db:"remote_url" json:"remote_url,omitempty"`
 	InputTokens      int64   `db:"input_tokens" json:"input_tokens"`
 	OutputTokens     int64   `db:"output_tokens" json:"output_tokens"`
 	CacheReadTokens  int64   `db:"cache_read_tokens" json:"cache_read_tokens"`
@@ -427,6 +429,8 @@ type BranchUsageSummary struct {
 // its most recent branch.
 func (s *TokenUsageStore) GetUsageSummaryByBranch(ctx context.Context, since string, branch string) ([]BranchUsageSummary, error) {
 	query := `SELECT gs.branch,
+	          COALESCE(MAX(gs.pr_number), 0) as pr_number,
+	          COALESCE(MAX(gs.remote_url), '') as remote_url,
 	          COALESCE(SUM(t.input_tokens), 0) as input_tokens,
 	          COALESCE(SUM(t.output_tokens), 0) as output_tokens,
 	          COALESCE(SUM(t.cache_read_tokens), 0) as cache_read_tokens,
@@ -436,7 +440,7 @@ func (s *TokenUsageStore) GetUsageSummaryByBranch(ctx context.Context, since str
 	          COUNT(DISTINCT t.session_id) as num_agents
 	   FROM token_usage t
 	   INNER JOIN (
-	       SELECT session_id, branch
+	       SELECT session_id, branch, COALESCE(pr_number, 0) as pr_number, COALESCE(remote_url, '') as remote_url
 	       FROM git_snapshots
 	       WHERE session_id IS NOT NULL
 	       AND id IN (
