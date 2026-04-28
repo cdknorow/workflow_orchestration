@@ -68,83 +68,65 @@
                     <button class="launch-back-btn" onclick="window._selectLaunchType('back')" title="Back">&larr;</button>
                     Launch AI Agent
                 </h3>
-                <div class="agent-launch-layout">
-                    <div class="agent-launch-sidebar">
-                        <section class="agent-launch-card">
-                            <div class="agent-launch-card-header">
-                                <h4>Workspace</h4>
-                                <p>Pick the working directory and optional board context.</p>
-                            </div>
-                            <label>Working Directory:
-                                <div class="dir-input-row">
-                                    <input type="text" id="launch-dir" placeholder="/path/to/project" data-coral-root="{{ .CoralRoot }}" value="{{ .CoralRoot }}">
-                                    <button class="btn" id="btn-browse" onclick="toggleBrowser('launch-dir','dir-browser','browser-list','browser-current-path')">Browse</button>
-                                </div>
-                            </label>
-                            <div id="dir-browser" class="dir-browser" style="display:none">
-                                <div class="dir-browser-header">
-                                    <button class="btn btn-small dir-browser-up" onclick="browserNavigateUp()" title="Go up">..</button>
-                                    <span class="dir-browser-path" id="browser-current-path">~</span>
-                                </div>
-                                <ul class="dir-browser-list" id="browser-list">
-                                    <li class="empty-state">Loading...</li>
-                                </ul>
-                            </div>
-                            <details class="team-advanced">
-                                <summary>Advanced</summary>
-                                <div class="team-advanced-body">
-                                    <label>Message Board <span class="text-muted-sm">(optional)</span>:
-                                        <select id="launch-board-select" onchange="window._onAgentBoardChange()">
-                                            <option value="">None</option>
-                                            <option value="__new__">Create new board...</option>
-                                        </select>
-                                    </label>
-                                    <div id="launch-new-board-row" style="display:none">
-                                        <label>Board Name:
-                                            <input type="text" id="launch-board-name" placeholder="e.g. Auth Feature, Sprint 42">
-                                        </label>
-                                    </div>
-                                    <div id="launch-board-server-row" style="display:none">
-                                        <label>Remote Server <span class="text-muted-sm">(optional)</span>:
-                                            <input type="text" id="launch-board-server" placeholder="e.g. http://remote-machine:8420">
-                                        </label>
-                                    </div>
-                                    <label style="display:none">Backend:
-                                        <select id="launch-backend">
-                                            <option value="tmux">tmux</option>
-                                            <option value="pty">PTY</option>
-                                        </select>
-                                    </label>
-                                </div>
-                            </details>
-                        </section>
-                        <details class="agent-launch-card agent-col-presets mobile-launch-section" open>
-                            <summary>Persona</summary>
-                            <div class="mobile-launch-section-body">
-                                <div class="agent-launch-card-header">
-                                    <h4>Persona</h4>
-                                    <p>Start from a saved role or keep the setup custom.</p>
-                                </div>
-                                <div id="agent-preset-selector" class="agent-preset-selector agent-preset-vertical"></div>
-                                <div class="import-export-row agent-persona-actions">
-                                    <button class="btn btn-small btn-subtle" id="agent-save-persona-btn" onclick="window._saveCurrentPersona()" title="Save as reusable persona">Save Persona</button>
-                                    <button class="btn btn-small btn-subtle" onclick="exportPersonas()" title="Export saved personas">Export</button>
-                                    <button class="btn btn-small btn-subtle" onclick="importPersonas()" title="Import personas from file">Import</button>
-                                </div>
-                            </div>
-                        </details>
+                <label>Working Directory:
+                    <div class="dir-input-row">
+                        <input type="text" id="launch-dir" placeholder="/path/to/project" data-coral-root="{{ .CoralRoot }}" value="{{ .CoralRoot }}">
+                        <button class="btn" id="btn-browse" onclick="toggleBrowser('launch-dir','dir-browser','browser-list','browser-current-path')">Browse</button>
                     </div>
-                    <details class="agent-launch-card agent-launch-main agent-col-fields mobile-launch-section" open>
-                        <summary>Agent Config</summary>
-                        <div class="mobile-launch-section-body">
-                            <div class="agent-launch-card-header">
-                                <h4>Agent Configuration</h4>
-                                <p>Define the role, model, behavior, and autonomy before launch.</p>
-                            </div>
-                            <div id="launch-agent-acf"></div>
-                        </div>
-                    </details>
+                </label>
+                <div id="dir-browser" class="dir-browser" style="display:none">
+                    <div class="dir-browser-header">
+                        <button class="btn btn-small dir-browser-up" onclick="browserNavigateUp()" title="Go up">..</button>
+                        <span class="dir-browser-path" id="browser-current-path">~</span>
+                    </div>
+                    <ul class="dir-browser-list" id="browser-list">
+                        <li class="empty-state">Loading...</li>
+                    </ul>
                 </div>
+                <label>Name / Role <span class="text-muted-sm">(optional)</span>:
+                    <input type="text" id="launch-agent-name-input" placeholder="e.g. QA Engineer, Frontend Dev">
+                </label>
+                <label>Persona <span class="text-muted-sm">(optional)</span>:
+                    <div id="agent-preset-selector" class="agent-preset-selector"></div>
+                </label>
+                <details class="team-advanced">
+                    <summary>Agent Configuration</summary>
+                    <div class="team-advanced-body">
+                        <div id="launch-agent-acf"></div>
+                        <div class="import-export-row agent-persona-actions" style="margin-top:8px">
+                            <button class="btn btn-small btn-subtle" id="agent-save-persona-btn" onclick="window._saveCurrentPersona()" title="Save as reusable persona">Save Persona</button>
+                            <button class="btn btn-small btn-subtle" onclick="exportPersonas()" title="Export saved personas">Export</button>
+                            <button class="btn btn-small btn-subtle" onclick="importPersonas()" title="Import personas from file">Import</button>
+                        </div>
+                    </div>
+                </details>
+                <details class="team-advanced">
+                    <summary>Advanced</summary>
+                    <div class="team-advanced-body">
+                        <label>Message Board <span class="text-muted-sm">(optional)</span>:
+                            <select id="launch-board-select" onchange="window._onAgentBoardChange()">
+                                <option value="">None</option>
+                                <option value="__new__">Create new board...</option>
+                            </select>
+                        </label>
+                        <div id="launch-new-board-row" style="display:none">
+                            <label>Board Name:
+                                <input type="text" id="launch-board-name" placeholder="e.g. Auth Feature, Sprint 42">
+                            </label>
+                        </div>
+                        <div id="launch-board-server-row" style="display:none">
+                            <label>Remote Server <span class="text-muted-sm">(optional)</span>:
+                                <input type="text" id="launch-board-server" placeholder="e.g. http://remote-machine:8420">
+                            </label>
+                        </div>
+                        <label style="display:none">Backend:
+                            <select id="launch-backend">
+                                <option value="tmux">tmux</option>
+                                <option value="pty">PTY</option>
+                            </select>
+                        </label>
+                    </div>
+                </details>
                 <div class="modal-actions">
                     <button class="btn" onclick="hideLaunchModal()">Cancel</button>
                     <button class="btn btn-primary" onclick="launchSession()">Launch</button>

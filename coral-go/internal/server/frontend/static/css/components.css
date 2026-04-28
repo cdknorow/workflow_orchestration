@@ -506,6 +506,10 @@
     width: 520px;
 }
 
+.modal-content-agent-wide {
+    width: 640px;
+}
+
 .modal-content-extra-wide {
     width: 820px;
 }
@@ -633,6 +637,10 @@
     overflow-y: auto;
     padding-right: 4px;
     margin-right: -8px;
+}
+
+#launch-step-chooser {
+    overflow-y: hidden;
 }
 
 .launch-modal-step > h3 {
@@ -1845,8 +1853,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 24px 16px;
+    gap: 6px;
+    padding: 18px 14px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -2089,9 +2097,6 @@
     margin-top: 12px;
 }
 
-.modal-content-agent-wide {
-    width: 1120px;
-}
 
 /* Locked preset fields */
 .preset-locked {

@@ -119,7 +119,7 @@ function _selectLaunchType(type) {
         _loadAgentBoardProjects();
         _initAgentPresets();
         // Render agent config form
-        renderAgentConfigForm('launch-agent-acf', { showPreset: false, showName: true });
+        renderAgentConfigForm('launch-agent-acf', { showPreset: false, showName: false });
     } else if (type === "team") {
         _initTeamForm();
     } else {
@@ -134,26 +134,14 @@ export function showLaunchModal() {
     _showLaunchStep("chooser");
 
     // Reset agent form
-    document.getElementById("launch-agent-name").value = "";
-    document.getElementById("launch-flags").value = _getPermFlag('launch-type');
-    document.getElementById("launch-agent-prompt").value = "";
+    const agentNameInput = document.getElementById("launch-agent-name-input");
+    if (agentNameInput) agentNameInput.value = "";
     document.getElementById("launch-board-name").value = "";
     document.getElementById("launch-board-server").value = "";
     const agentBoardSelect = document.getElementById("launch-board-select");
     if (agentBoardSelect) agentBoardSelect.value = "";
     document.getElementById("launch-new-board-row").style.display = "none";
     document.getElementById("launch-board-server-row").style.display = "none";
-    _syncFlagButtons("launch-flags");
-    // Clear preset selection and unlock fields
-    document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => btn.classList.remove("active"));
-    const agentNameInput = document.getElementById("launch-agent-name");
-    const agentPromptInput = document.getElementById("launch-agent-prompt");
-    agentNameInput.readOnly = false;
-    agentPromptInput.readOnly = false;
-    agentNameInput.classList.remove("preset-locked");
-    agentPromptInput.classList.remove("preset-locked");
-    const savePersonaBtn = document.getElementById("agent-save-persona-btn");
-    if (savePersonaBtn) savePersonaBtn.style.display = "";
 
     // Reset terminal form
     document.getElementById("launch-terminal-name").value = "";
@@ -913,7 +901,7 @@ export async function launchSession() {
         dir = document.getElementById("launch-dir").value.trim();
         const config = getAgentConfig('launch-agent-acf');
         type = config.agentType || 'claude';
-        agentName = config.name;
+        agentName = document.getElementById("launch-agent-name-input")?.value.trim() || config.name;
         flagsStr = config.flags;
         backend = document.getElementById("launch-backend")?.value;
     }
@@ -1096,7 +1084,7 @@ async function _saveCurrentPersona(nameInputId, promptInputId, flagsInputId) {
     } else {
         // ACF path — read from the launch agent config form
         const config = getAgentConfig('launch-agent-acf');
-        name = config.name;
+        name = document.getElementById("launch-agent-name-input")?.value.trim() || config.name;
         prompt = config.prompt;
         flags = config.flags;
         capabilities = config.capabilities;
@@ -1227,19 +1215,18 @@ function _initAgentPresets() {
 
 function _selectAgentPreset(name) {
     const persona = name ? _findPersona(name) : null;
+    const nameInput = document.getElementById("launch-agent-name-input");
     if (persona) {
         setAgentConfig('launch-agent-acf', {
             name: persona.name,
             prompt: persona.prompt,
             capabilities: persona.capabilities,
         });
+        if (nameInput) nameInput.value = persona.name;
     } else {
         setAgentConfig('launch-agent-acf', {});
+        if (nameInput) nameInput.value = '';
     }
-
-    document.querySelectorAll("#agent-preset-selector .agent-preset-btn").forEach(btn => {
-        btn.classList.toggle("active", btn.dataset.preset === name);
-    });
 }
 window._selectAgentPreset = _selectAgentPreset;
 
