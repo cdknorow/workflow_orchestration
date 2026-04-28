@@ -1355,6 +1355,84 @@ export async function launchTerminalToBoard(boardName, workDir) {
     }
 }
 
+// ── Standalone Agent Launch (no board) ────────────────────────────────────
+
+export async function launchDefaultAgent(workDir) {
+    const s = state.settings || {};
+    const agentType = s.default_agent_type || 'claude';
+    const permFlag = _getPermFlagForAgent(agentType);
+    const flags = permFlag ? permFlag.split(/\s+/) : [];
+
+    const payload = {
+        working_dir: workDir,
+        agent_type: agentType,
+        flags,
+    };
+
+    try {
+        const resp = await fetch('/api/sessions/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
+        const result = await resp.json();
+        if (result.error) {
+            if (result.error.includes('not found') && result.error.includes('CLI')) {
+                _showCLINotFoundModal(agentType);
+            } else {
+                showToast(result.error, 'error');
+            }
+        } else {
+            showToast(`Launched ${agentType} agent`);
+        }
+    } catch (e) {
+        showToast('Failed to launch agent', 'error');
+    }
+}
+
+export function showAddStandaloneAgent(workDir) {
+    const modal = document.getElementById('add-agent-board-modal');
+    document.getElementById('add-agent-board-name').value = '';
+    document.getElementById('add-agent-board-workdir').value = workDir;
+    document.getElementById('add-agent-board-subtitle').textContent = `Directory: ${workDir}`;
+
+    renderAgentConfigForm('add-agent-board-acf', { showPreset: true, showName: true });
+
+    modal.style.display = 'flex';
+}
+
+export async function launchStandaloneTerminal(workDir) {
+    try {
+        const resp = await fetch('/api/sessions/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                working_dir: workDir,
+                agent_type: 'terminal',
+                display_name: 'Terminal',
+            }),
+        });
+        if (resp.status === 403) {
+            const err = await resp.json();
+            _showDemoLimitModal(err.error || 'Demo limit reached');
+            return;
+        }
+        const result = await resp.json();
+        if (result.error) {
+            showToast(result.error, 'error');
+        } else {
+            showToast('Launched Terminal');
+        }
+    } catch (e) {
+        showToast('Failed to launch terminal', 'error');
+    }
+}
+
 // ── Agent Team ────────────────────────────────────────────────────────────
 
 let _teamAgentCounter = 0;

@@ -1653,9 +1653,23 @@ export function renderLiveSessions(sessions) {
         const countBadge = isMulti ? ` <span class="session-group-count">${sorted.length}</span>` : "";
         const collapsed = _isGroupCollapsed(groupName);
         const chevron = collapsed ? '&#x25B8;' : '&#x25BE;';
+        const groupWorkDirEsc = escapeAttr(sorted[0]?.working_directory || '');
         const groupKebab = `<div class="sidebar-kebab-wrapper group-kebab">
             <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
             <div class="sidebar-kebab-menu" style="display:none">
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); launchDefaultAgent('${groupWorkDirEsc}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+                    Add Agent
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showAddStandaloneAgent('${groupWorkDirEsc}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/><line x1="12" y1="3" x2="12" y2="7"/><line x1="10" y1="5" x2="14" y2="5"/></svg>
+                    Add Custom Agent
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); launchStandaloneTerminal('${groupWorkDirEsc}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><polyline points="5 7 7 9 5 11"/><line x1="9" y1="11" x2="11" y2="11"/></svg>
+                    Add Terminal
+                </button>
+                <hr class="overflow-menu-divider">
                 <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showFolderTagDropdown('${escapeAttr(groupName)}', this.closest('.session-group-header'))">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5V3a1 1 0 0 1 1-1h5.5l5.5 5.5-5.5 5.5L2 8.5z"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg>
                     Manage Tags
@@ -1707,9 +1721,23 @@ export function renderLiveSessions(sessions) {
         const countBadge = isMulti ? ` <span class="session-group-count">${sorted.length}</span>` : "";
         const collapsed = _isGroupCollapsed(groupName);
         const chevron = collapsed ? '&#x25B8;' : '&#x25BE;';
+        const groupWorkDirEsc = escapeAttr(sorted[0]?.working_directory || '');
         const groupKebab = `<div class="sidebar-kebab-wrapper group-kebab">
             <button class="sidebar-kebab-btn group-kebab-btn" onclick="event.stopPropagation(); toggleSidebarKebab(this)" title="Group actions">&#x22EE;</button>
             <div class="sidebar-kebab-menu" style="display:none">
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); launchDefaultAgent('${groupWorkDirEsc}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+                    Add Agent
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showAddStandaloneAgent('${groupWorkDirEsc}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/><line x1="12" y1="3" x2="12" y2="7"/><line x1="10" y1="5" x2="14" y2="5"/></svg>
+                    Add Custom Agent
+                </button>
+                <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); launchStandaloneTerminal('${groupWorkDirEsc}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><polyline points="5 7 7 9 5 11"/><line x1="9" y1="11" x2="11" y2="11"/></svg>
+                    Add Terminal
+                </button>
+                <hr class="overflow-menu-divider">
                 <button class="overflow-menu-item" onclick="event.stopPropagation(); closeSidebarKebabs(); showFolderTagDropdown('${escapeAttr(groupName)}', this.closest('.session-group-header'))">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5V3a1 1 0 0 1 1-1h5.5l5.5 5.5-5.5 5.5L2 8.5z"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg>
                     Manage Tags

@@ -2841,8 +2841,19 @@ func (h *SessionsHandler) launchSession(ctx context.Context, workDir, agentType,
 		// Wait for shell to initialize, then send the launch command
 		if !isTerminal && cmd != "" {
 			log.Printf("[launch] pty session=%s agent=%s cmd=%s", sessionName, agentType, cmd)
-			time.Sleep(300 * time.Millisecond)
-			h.backend.SendInput(sessionName, []byte(cmd+"\n"))
+			if pb, ok := h.backend.(*ptymanager.PTYBackend); ok {
+				if !pb.WaitReady(sessionName, 5*time.Second) {
+					log.Printf("[launch] pty shell not ready after 5s, sending anyway: %s", sessionName)
+				}
+			} else {
+				time.Sleep(500 * time.Millisecond)
+			}
+			if err := h.backend.SendInput(sessionName, []byte(cmd)); err != nil {
+				log.Printf("[launch] pty SendInput (text) failed: %s: %v", sessionName, err)
+			}
+			if err := h.backend.SendInput(sessionName, []byte("\r")); err != nil {
+				log.Printf("[launch] pty SendInput (enter) failed: %s: %v", sessionName, err)
+			}
 		}
 	} else {
 		// Tmux backend: create session, pipe-pane, send keys
@@ -3684,8 +3695,15 @@ func (h *SessionsHandler) wakeExistingSession(ctx context.Context, ls *store.Liv
 				return fmt.Errorf("pty spawn failed: %w", err)
 			}
 			if cmd != "" {
-				time.Sleep(300 * time.Millisecond)
-				h.backend.SendInput(sessionName, []byte(cmd+"\n"))
+				if pb, ok := h.backend.(*ptymanager.PTYBackend); ok {
+					if !pb.WaitReady(sessionName, 5*time.Second) {
+						log.Printf("[launch] pty shell not ready after 5s, sending anyway: %s", sessionName)
+					}
+				} else {
+					time.Sleep(500 * time.Millisecond)
+				}
+				h.backend.SendInput(sessionName, []byte(cmd))
+				h.backend.SendInput(sessionName, []byte("\r"))
 			}
 		} else {
 			// tmux backend: create session with the EXISTING session name

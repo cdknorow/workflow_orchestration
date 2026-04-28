@@ -4,6 +4,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -221,24 +222,28 @@ func (c *Client) SendKeys(ctx context.Context, agentName, command, agentType, se
 // bracketed paste mode — if the shell has it enabled, tmux wraps the
 // paste in \e[200~...\e[201~; otherwise it sends raw text.
 func (c *Client) SendKeysToTarget(ctx context.Context, target, command string) error {
+	var sendErr error
 	if strings.Contains(command, "\n") {
-		if err := c.pasteToTarget(ctx, target, command); err != nil {
-			return err
-		}
+		sendErr = c.pasteToTarget(ctx, target, command)
 	} else {
-		if _, err := c.run(ctx, "send-keys", "-t", target, "-l", command); err != nil {
-			return fmt.Errorf("send-keys failed: %w", err)
-		}
+		_, sendErr = c.run(ctx, "send-keys", "-t", target, "-l", command)
+	}
+	if sendErr != nil {
+		log.Printf("[tmux] send-keys error (target=%s, cmd_len=%d): %v", target, len(command), sendErr)
 	}
 
 	// Brief pause for tmux to deliver keystrokes
 	time.Sleep(300 * time.Millisecond)
 
-	// Send Enter
+	// Always send Enter even if send-keys reported an error — the text
+	// may have been delivered despite a non-zero exit from tmux.
 	if _, err := c.run(ctx, "send-keys", "-t", target, "Enter"); err != nil {
+		if sendErr != nil {
+			return fmt.Errorf("send-keys failed: %w; enter also failed: %v", sendErr, err)
+		}
 		return fmt.Errorf("send Enter failed: %w", err)
 	}
-	return nil
+	return sendErr
 }
 
 // pasteToTarget loads text into a tmux buffer and pastes it into the target pane.
