@@ -109,7 +109,7 @@ Checks GitHub releases for available updates (5-second timeout).
   "available": true,
   "current": "1.0.0",
   "latest": "1.1.0",
-  "release_url": "https://github.com/subgentic/coral-app/releases"
+  "release_url": "https://github.com/cdknorow/coral/releases"
 }
 ```
 

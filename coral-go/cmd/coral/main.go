@@ -116,7 +116,7 @@ func main() {
 			time.Sleep(5 * time.Second)
 			latest := routes.FetchLatestVersion()
 			if latest != "" && latest != config.Version {
-				log.Printf("[UPDATE] New version available: v%s (you have v%s) — %s", latest, config.Version, "https://github.com/subgentic/coral-app/releases")
+				log.Printf("[UPDATE] New version available: v%s (you have v%s) — %s", latest, config.Version, "https://github.com/cdknorow/coral/releases")
 			}
 		}()
 	}

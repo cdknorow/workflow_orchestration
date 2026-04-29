@@ -185,9 +185,9 @@ func (h *SystemHandler) Status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var githubReleasesAPI = "https://api.github.com/repos/subgentic/coral-app/releases/latest"
+var githubReleasesAPI = "https://api.github.com/repos/cdknorow/coral/releases/latest"
 
-const githubReleasesURL = "https://github.com/subgentic/coral-app/releases"
+const githubReleasesURL = "https://github.com/cdknorow/coral/releases"
 
 // FetchLatestVersion queries GitHub for the latest release version tag (without "v" prefix).
 // Returns empty string on any error.

@@ -41,8 +41,8 @@ import (
 var iconData []byte
 
 const (
-	githubReleasesAPI = "https://api.github.com/repos/subgentic/coral-app/releases/latest"
-	githubReleasesURL = "https://github.com/subgentic/coral-app/releases"
+	githubReleasesAPI = "https://api.github.com/repos/cdknorow/coral/releases/latest"
+	githubReleasesURL = "https://github.com/cdknorow/coral/releases"
 )
 
 var version = "dev"
