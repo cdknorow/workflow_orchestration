@@ -2,12 +2,11 @@
 
 ## Mission
 
-The Go codebase (`coral-go/`) is the **primary implementation** of Coral. The `coral/` Python submodule is a legacy reference that is no longer authoritative.
+The Go codebase (`coral-go/`) is the **primary implementation** of Coral. The `coral-python/` is a legacy reference that is no longer authoritative.
 
 **RULES:**
 1. The Go codebase is the source of truth. Improve it freely without deferring to Python patterns.
 2. Only modify code under `coral-go/` and `tests/`.
-3. The Python submodule (`coral/`) may be consulted for historical context, but Go decisions take precedence.
 
 ## Testing
 
@@ -133,7 +132,6 @@ Tiers are selected via **compile-time build tags** (not ldflags):
 | `v0.x.x` | prod | skipped |
 | `v0.x.x-dev` | dev | skipped |
 | `v0.x.x-beta` | beta | skipped |
-| `v0.x.x-forDropbox` | beta | skipped |
 | `v0.x.x-windows` | prod | **built** |
 | `v0.x.x-all` | prod | **built** |
 
