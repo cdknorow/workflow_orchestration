@@ -85,27 +85,41 @@ func TestChangedFiles(t *testing.T) {
 		{Filepath: "main.go", Additions: 10, Deletions: 5, Status: "M"},
 		{Filepath: "new.go", Additions: 50, Deletions: 0, Status: "A"},
 	}
-	err := s.ReplaceChangedFiles(ctx, "my-repo", "/tmp/repo", files, &sid)
+	err := s.ReplaceChangedFiles(ctx, "my-repo", "/tmp/repo", files, &sid, "branch_point")
 	require.NoError(t, err)
 
-	result, err := s.GetChangedFiles(ctx, "my-repo", &sid)
+	result, found, err := s.GetChangedFiles(ctx, "my-repo", &sid, "branch_point")
 	require.NoError(t, err)
+	assert.True(t, found)
 	assert.Len(t, result, 2)
 
-	// Replace with new set
+	// Cache miss for a different mode
+	result, found, err = s.GetChangedFiles(ctx, "my-repo", &sid, "previous_commit")
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Nil(t, result)
+
+	// Store a second mode — both caches coexist
 	files2 := []ChangedFile{
 		{Filepath: "only.go", Additions: 1, Deletions: 1, Status: "M"},
 	}
-	err = s.ReplaceChangedFiles(ctx, "my-repo", "/tmp/repo", files2, &sid)
+	err = s.ReplaceChangedFiles(ctx, "my-repo", "/tmp/repo", files2, &sid, "previous_commit")
 	require.NoError(t, err)
 
-	result, err = s.GetChangedFiles(ctx, "my-repo", &sid)
+	result, found, err = s.GetChangedFiles(ctx, "my-repo", &sid, "previous_commit")
 	require.NoError(t, err)
+	assert.True(t, found)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "only.go", result[0].Filepath)
 
-	// File counts
+	// Original mode cache is still intact
+	result, found, err = s.GetChangedFiles(ctx, "my-repo", &sid, "branch_point")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Len(t, result, 2)
+
+	// File counts (across all modes)
 	counts, err := s.GetAllChangedFileCounts(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, counts["sess-1"])
+	assert.Equal(t, 3, counts["sess-1"])
 }

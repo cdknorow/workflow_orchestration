@@ -218,28 +218,31 @@ func (s *GitStore) GetGitSnapshotsForSession(ctx context.Context, sessionID stri
 	return snaps, err
 }
 
-// ReplaceChangedFiles replaces all changed-file records for an agent/session.
-func (s *GitStore) ReplaceChangedFiles(ctx context.Context, agentName, workingDir string, files []ChangedFile, sessionID *string) error {
+// ReplaceChangedFiles replaces changed-file records for an agent/session and diff mode.
+// Each (session, diff_mode) pair is cached independently so switching modes is instant.
+func (s *GitStore) ReplaceChangedFiles(ctx context.Context, agentName, workingDir string, files []ChangedFile, sessionID *string, diffMode string) error {
 	now := nowUTC()
 	return s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
-		// Delete old records
 		if sessionID != nil {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM git_changed_files WHERE session_id = ?", *sessionID); err != nil {
+			if _, err := tx.ExecContext(ctx,
+				"DELETE FROM git_changed_files WHERE session_id = ? AND diff_mode = ?",
+				*sessionID, diffMode); err != nil {
 				return err
 			}
 		} else {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM git_changed_files WHERE agent_name = ? AND session_id IS NULL", agentName); err != nil {
+			if _, err := tx.ExecContext(ctx,
+				"DELETE FROM git_changed_files WHERE agent_name = ? AND session_id IS NULL AND diff_mode = ?",
+				agentName, diffMode); err != nil {
 				return err
 			}
 		}
 
-		// Insert fresh records
 		for _, f := range files {
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO git_changed_files
-				 (agent_name, session_id, working_directory, filepath, additions, deletions, status, recorded_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-				agentName, sessionID, workingDir, f.Filepath, f.Additions, f.Deletions, f.Status, now); err != nil {
+				 (agent_name, session_id, working_directory, filepath, additions, deletions, status, recorded_at, diff_mode)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				agentName, sessionID, workingDir, f.Filepath, f.Additions, f.Deletions, f.Status, now, diffMode); err != nil {
 				return err
 			}
 		}
@@ -247,21 +250,36 @@ func (s *GitStore) ReplaceChangedFiles(ctx context.Context, agentName, workingDi
 	})
 }
 
-// GetChangedFiles returns current changed files for an agent/session.
-func (s *GitStore) GetChangedFiles(ctx context.Context, agentName string, sessionID *string) ([]ChangedFile, error) {
-	var files []ChangedFile
+// GetChangedFiles returns cached changed files for an agent/session and diff mode.
+// The found return value is false when no cache exists for the requested mode
+// (distinct from a cache hit with zero changed files).
+func (s *GitStore) GetChangedFiles(ctx context.Context, agentName string, sessionID *string, diffMode string) (files []ChangedFile, found bool, err error) {
+	var exists bool
 	if sessionID != nil {
-		err := s.db.SelectContext(ctx, &files,
-			`SELECT filepath, additions, deletions, status, recorded_at
-			 FROM git_changed_files WHERE session_id = ? ORDER BY filepath`,
-			*sessionID)
-		return files, err
+		_ = s.db.GetContext(ctx, &exists,
+			`SELECT EXISTS(SELECT 1 FROM git_changed_files WHERE session_id = ? AND diff_mode = ?)`,
+			*sessionID, diffMode)
+	} else {
+		_ = s.db.GetContext(ctx, &exists,
+			`SELECT EXISTS(SELECT 1 FROM git_changed_files WHERE agent_name = ? AND session_id IS NULL AND diff_mode = ?)`,
+			agentName, diffMode)
 	}
-	err := s.db.SelectContext(ctx, &files,
-		`SELECT filepath, additions, deletions, status, recorded_at
-		 FROM git_changed_files WHERE agent_name = ? AND session_id IS NULL ORDER BY filepath`,
-		agentName)
-	return files, err
+	if !exists {
+		return nil, false, nil
+	}
+
+	if sessionID != nil {
+		err = s.db.SelectContext(ctx, &files,
+			`SELECT filepath, additions, deletions, status, recorded_at
+			 FROM git_changed_files WHERE session_id = ? AND diff_mode = ? ORDER BY filepath`,
+			*sessionID, diffMode)
+	} else {
+		err = s.db.SelectContext(ctx, &files,
+			`SELECT filepath, additions, deletions, status, recorded_at
+			 FROM git_changed_files WHERE agent_name = ? AND session_id IS NULL AND diff_mode = ? ORDER BY filepath`,
+			agentName, diffMode)
+	}
+	return files, true, err
 }
 
 // GetAllChangedFileCounts returns file counts per agent/session.

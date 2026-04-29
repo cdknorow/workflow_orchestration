@@ -158,7 +158,7 @@ func (p *GitPoller) PollOnce(ctx context.Context) error {
 					p.logger.Warn("capping changed files", "agent", agent.AgentName, "total", len(changedFiles), "cap", 2000)
 					changedFiles = changedFiles[:2000]
 				}
-				if err := p.store.ReplaceChangedFiles(ctx, agent.AgentName, workdir, changedFiles, sidPtr); err != nil {
+				if err := p.store.ReplaceChangedFiles(ctx, agent.AgentName, workdir, changedFiles, sidPtr, "branch_point"); err != nil {
 					p.logger.Warn("replace changed files failed", "agent", agent.AgentName, "error", err)
 				}
 			}

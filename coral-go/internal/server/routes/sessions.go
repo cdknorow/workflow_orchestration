@@ -873,14 +873,31 @@ func (h *SessionsHandler) resolveGitRoot(ctx context.Context, name, agentType, s
 
 // Files returns changed files for a live agent.
 // GET /api/sessions/live/{name}/files
+// Returns cached results for the user's current diff mode. If no cache
+// exists for that mode, computes fresh results transparently.
 func (h *SessionsHandler) Files(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	sidPtr := querySessionID(r)
-	files, err := h.gs.GetChangedFiles(r.Context(), name, sidPtr)
+
+	diffMode := h.getDiffMode(r.Context())
+	if diffMode == "" {
+		diffMode = "branch_point"
+	}
+
+	files, found, err := h.gs.GetChangedFiles(r.Context(), name, sidPtr, diffMode)
 	if err != nil {
 		files = []store.ChangedFile{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"agent_name": name, "files": files})
+	if found {
+		writeJSON(w, http.StatusOK, map[string]any{"agent_name": name, "files": files, "diff_mode": diffMode})
+		return
+	}
+
+	sid := ""
+	if sidPtr != nil {
+		sid = *sidPtr
+	}
+	h.refreshFilesInner(w, r, name, sid)
 }
 
 // RefreshFiles runs fresh git queries and merges agent Write/Edit events.
@@ -891,8 +908,12 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 		SessionID string `json:"session_id"`
 	}
 	json.NewDecoder(r.Body).Decode(&body)
+	h.refreshFilesInner(w, r, name, body.SessionID)
+}
 
-	workdir := h.resolveGitRoot(r.Context(), name, "", body.SessionID)
+// refreshFilesInner contains the shared logic for computing fresh changed files.
+func (h *SessionsHandler) refreshFilesInner(w http.ResponseWriter, r *http.Request, name, sessionID string) {
+	workdir := h.resolveGitRoot(r.Context(), name, "", sessionID)
 	if workdir == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Could not determine working directory", "files": []any{}})
 		return
@@ -902,7 +923,8 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	base := gitutil.GetDiffBase(ctx, workdir, h.getDiffMode(r.Context()))
+	diffMode := h.getDiffMode(r.Context())
+	base := gitutil.GetDiffBase(ctx, workdir, diffMode)
 	out, err := exec.CommandContext(ctx, "git", "-C", workdir, "diff", base, "--numstat").Output()
 	fileMap := make(map[string]store.ChangedFile)
 	if err != nil {
@@ -953,7 +975,7 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Merge in files from agent Write/Edit events
-	sidPtr := strPtr(body.SessionID)
+	sidPtr := strPtr(sessionID)
 	events, _ := h.ts.ListAgentEvents(r.Context(), name, 200, sidPtr)
 	for _, ev := range events {
 		if ev.ToolName == nil || (*ev.ToolName != "Write" && *ev.ToolName != "Edit") {
@@ -997,8 +1019,8 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Annotate files with agent attribution from agent_events
-	if body.SessionID != "" {
-		if edits, err := h.ts.GetFileEdits(r.Context(), body.SessionID, workdir); err == nil {
+	if sessionID != "" {
+		if edits, err := h.ts.GetFileEdits(r.Context(), sessionID, workdir); err == nil {
 			for fp, agents := range edits {
 				if f, exists := fileMap[fp]; exists {
 					f.Agents = agents
@@ -1022,9 +1044,12 @@ func (h *SessionsHandler) RefreshFiles(w http.ResponseWriter, r *http.Request) {
 	for _, f := range fileMap {
 		files = append(files, f)
 	}
-	h.gs.ReplaceChangedFiles(r.Context(), name, workdir, files, sidPtr)
+	if diffMode == "" {
+		diffMode = "branch_point"
+	}
+	h.gs.ReplaceChangedFiles(r.Context(), name, workdir, files, sidPtr, diffMode)
 
-	writeJSON(w, http.StatusOK, map[string]any{"agent_name": name, "files": files})
+	writeJSON(w, http.StatusOK, map[string]any{"agent_name": name, "files": files, "diff_mode": diffMode})
 }
 
 // Diff returns the unified diff for a single file.

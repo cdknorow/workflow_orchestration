@@ -122,6 +122,7 @@ var columnMigrations = []struct {
 	{"agent_tasks", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"agent_tasks", "display_name", "TEXT"},
 	{"git_snapshots", "pr_number", "INTEGER"},
+	{"git_changed_files", "diff_mode", "TEXT DEFAULT ''"},
 }
 
 const schemaSQL = `
