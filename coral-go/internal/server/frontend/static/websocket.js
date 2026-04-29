@@ -102,6 +102,7 @@ export function connectCoralWs() {
                     if (prev) {
                         if (!s.commands && prev.commands) s.commands = prev.commands;
                         if (!s.branch && prev.branch) s.branch = prev.branch;
+                        if (!s.repo_name && prev.repo_name) s.repo_name = prev.repo_name;
                     }
                 }
             }

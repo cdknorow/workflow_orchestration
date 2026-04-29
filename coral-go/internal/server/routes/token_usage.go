@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/cdknorow/coral/internal/gitutil"
 	"github.com/cdknorow/coral/internal/store"
 )
 
@@ -218,6 +219,10 @@ func (h *TokenUsageHandler) UsageSummaryByBranch(w http.ResponseWriter, r *http.
 	if err != nil {
 		errInternalServer(w, err.Error())
 		return
+	}
+
+	for i := range branches {
+		branches[i].RepoName = gitutil.ParseRepoName(branches[i].RemoteURL)
 	}
 
 	var totalInput, totalOutput, totalCacheRead, totalCacheWrite, totalTokens int64

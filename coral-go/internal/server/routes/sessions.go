@@ -468,8 +468,14 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var branchVal any
+		var repoNameVal any
 		if git != nil {
 			branchVal = git.Branch
+			if git.RemoteURL != nil {
+				if rn := gitutil.ParseRepoName(*git.RemoteURL); rn != "" {
+					repoNameVal = rn
+				}
+			}
 		}
 
 		var iconVal any
@@ -489,6 +495,7 @@ func (h *SessionsHandler) List(w http.ResponseWriter, r *http.Request) {
 			"display_name":       displayNames[sid],
 			"icon":               iconVal,
 			"branch":             branchVal,
+			"repo_name":          repoNameVal,
 			"waiting_for_input":  waiting,
 			"done":               done,
 			"waiting_reason":     nilIf(!waiting, latestEv),
@@ -822,6 +829,11 @@ func (h *SessionsHandler) Info(w http.ResponseWriter, r *http.Request) {
 		result["git_branch"] = git.Branch
 		result["git_commit_hash"] = git.CommitHash
 		result["git_commit_subject"] = git.CommitSubject
+		if git.RemoteURL != nil {
+			if rn := gitutil.ParseRepoName(*git.RemoteURL); rn != "" {
+				result["git_repo"] = rn
+			}
+		}
 	}
 
 	// Include prompt and board info from live session record

@@ -168,3 +168,20 @@ func TestGetDiffBase_NotAGitRepo(t *testing.T) {
 	result := GetDiffBase(ctx, dir, "previous_commit")
 	assert.Equal(t, "HEAD", result, "should return HEAD for non-git directory")
 }
+
+func TestParseRepoName(t *testing.T) {
+	tests := []struct {
+		input, want string
+	}{
+		{"git@github.com:cdknorow/coral.git", "cdknorow/coral"},
+		{"git@github.com:org/repo", "org/repo"},
+		{"https://github.com/cdknorow/coral.git", "cdknorow/coral"},
+		{"https://github.com/cdknorow/coral", "cdknorow/coral"},
+		{"https://gitlab.com/org/sub/repo.git", "org/sub/repo"},
+		{"", ""},
+		{"not-a-url", ""},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, ParseRepoName(tt.input), "ParseRepoName(%q)", tt.input)
+	}
+}

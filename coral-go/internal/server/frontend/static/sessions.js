@@ -93,7 +93,7 @@ export async function selectLiveSession(name, agentType, sessionId) {
         updateSessionSummary(agent.summary);
     }
     captureWrapper.classList.remove("loading-skeleton");
-    updateSessionBranch(agent && agent.branch ? agent.branch : null);
+    updateSessionBranch(agent?.branch || null, agent?.repo_name || null);
     updateWaitingIndicator(agent || {});
     updateTokenUsage(sessionId);
 

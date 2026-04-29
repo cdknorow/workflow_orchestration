@@ -7,6 +7,13 @@ import { getFolderTags, renderFolderTagPills } from './folder_tags.js';
 import { updateSectionVisibility } from './sidebar.js';
 import { syncMobileAgentList } from './mobile.js';
 
+/* ── Helpers ────────────────────────────────────────────────────────── */
+
+function _repoBranch(repoName, branch) {
+    if (repoName && branch) return `${repoName} : ${branch}`;
+    return branch || repoName || '';
+}
+
 /* ── Agent Avatars ──────────────────────────────────────────────────── */
 
 const _roleAvatars = {
@@ -115,7 +122,7 @@ function buildSessionTooltip(s) {
     const lastAction = formatStaleness(s.staleness_seconds);
     const goal = s.summary || "No goal set";
     const status = s.status || "No status";
-    const branch = s.branch || "—";
+    const branch = _repoBranch(s.repo_name, s.branch) || "—";
     const agent = s.agent_type || "claude";
 
     let rows = [
@@ -1529,7 +1536,8 @@ export function renderLiveSessions(sessions) {
         const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
         const boardLink = '';
         const boardWorkDir = boardSessions[0]?.working_directory || '';
-        const boardBranch = boardSessions.find(s => s.branch)?.branch || '';
+        const boardBranchSession = boardSessions.find(s => s.branch);
+        const boardBranch = _repoBranch(boardBranchSession?.repo_name, boardBranchSession?.branch);
         const boardIsSleeping = boardSessions.every(s => s.sleeping);
         const boardSleepIcon = boardIsSleeping ? ' <span class="agent-icon" title="Team is sleeping">🌙</span>' : '';
         const sleepLabel = boardIsSleeping ? 'Wake Team' : 'Sleep Team';
@@ -1688,7 +1696,8 @@ export function renderLiveSessions(sessions) {
                 </button>
             </div>
         </div>`;
-        const groupBranch = sorted.find(s => s.branch)?.branch || "";
+        const groupBranchSession = sorted.find(s => s.branch);
+        const groupBranch = _repoBranch(groupBranchSession?.repo_name, groupBranchSession?.branch);
         const groupBranchLine = groupBranch ? `<div class="group-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</div>` : "";
         const fTags = getFolderTags(groupName);
         const tagDots = renderFolderTagPills(fTags);
@@ -1756,7 +1765,8 @@ export function renderLiveSessions(sessions) {
                 </button>
             </div>
         </div>`;
-        const groupBranch = sorted.find(s => s.branch)?.branch || "";
+        const groupBranchSession = sorted.find(s => s.branch);
+        const groupBranch = _repoBranch(groupBranchSession?.repo_name, groupBranchSession?.branch);
         const groupBranchLine = groupBranch ? `<div class="group-branch-line"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v5a3 3 0 0 0 3 3h1"/><circle cx="6" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/></svg> ${escapeHtml(groupBranch)}</div>` : "";
         const fTags = getFolderTags(groupName);
         const tagDots = renderFolderTagPills(fTags);
@@ -1788,7 +1798,8 @@ export function renderLiveSessions(sessions) {
                 const bChevron = boardCollapsed ? '&#x25B8;' : '&#x25BE;';
                 const boardLink = '';
                 const boardWorkDir = boardSessions[0]?.working_directory || '';
-                const boardBranch = boardSessions.find(s => s.branch)?.branch || '';
+                const boardBranchSession = boardSessions.find(s => s.branch);
+                const boardBranch = _repoBranch(boardBranchSession?.repo_name, boardBranchSession?.branch);
                 const boardIsSleeping = boardSessions.some(s => s.sleeping);
                 const boardSleepIcon = boardIsSleeping ? ' <span class="agent-icon" title="Team is sleeping">🌙</span>' : '';
                 const sleepLabel = boardIsSleeping ? 'Wake Team' : 'Sleep Team';
@@ -2024,7 +2035,8 @@ export function renderHistorySessions(sessions, total, page, pageSize) {
         const agentName = s.display_name || s.agent_name || "";
         const agentTag = agentName ? `<span class="sidebar-agent-name">${escapeHtml(agentName)}</span>` : "";
         const sourceTypeTag = s.source_type ? `<span class="sidebar-source-type">${escapeHtml(s.source_type)}</span>` : "";
-        const branchTag = s.branch ? `<span class="sidebar-branch">${escapeHtml(s.branch)}</span>` : "";
+        const branchDisplay = _repoBranch(s.repo_name, s.branch);
+        const branchTag = branchDisplay ? `<span class="sidebar-branch">${escapeHtml(branchDisplay)}</span>` : "";
         const tagDots = s.tags ? renderSidebarTagDots(s.tags) : "";
         const timeStr = s.last_timestamp ? formatShortTime(s.last_timestamp) : "";
         const timeTag = timeStr ? `<span class="session-time">${escapeHtml(timeStr)}</span>` : "";
@@ -2289,10 +2301,11 @@ export async function showTeamTokenUsage(boardName) {
     content.innerHTML = html;
 }
 
-export function updateSessionBranch(branch) {
+export function updateSessionBranch(branch, repoName) {
     const el = document.getElementById("session-branch");
-    if (branch) {
-        el.querySelector(".branch-text").textContent = branch;
+    const display = _repoBranch(repoName, branch);
+    if (display) {
+        el.querySelector(".branch-text").textContent = display;
         el.style.display = "";
     } else {
         el.style.display = "none";

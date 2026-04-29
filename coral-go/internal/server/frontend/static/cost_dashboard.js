@@ -293,7 +293,8 @@ function _getFilterExtractor(table, field) {
         'agent:agent_name': r => r.display_name || r.agent_name || '',
         'agent:board_name': r => r.board_name || '',
         'team:board_name': r => r.board_name || '(no team)',
-        'branch:branch': r => r.branch || '(unknown)',
+        'branch:branch': r => (r.repo_name && r.branch ? `${r.repo_name} : ${r.branch}` : r.branch) || '(unknown)',
+        'branch:board_name': r => r.board_name || '(no team)',
         'task:assigned_to': r => r.assigned_to || '',
         'task:priority': r => r.priority || 'medium',
         'request:model_used': r => r.model_used || '',
@@ -991,9 +992,13 @@ function _renderBranchTable(branches) {
     const container = document.getElementById('cost-by-branch');
     if (!container) return;
 
-    const filtered = _applyColFilters(branches, 'branch', { branch: b => b.branch || '(unknown)' });
+    const filtered = _applyColFilters(branches, 'branch', {
+        branch: b => (b.repo_name && b.branch ? `${b.repo_name} : ${b.branch}` : b.branch) || '(unknown)',
+        board_name: b => b.board_name || '(no team)',
+    });
     const sorted = _sortRows(filtered, 'branch', (b, f) => {
-        if (f === 'branch') return b.branch || '';
+        if (f === 'branch') return (b.repo_name && b.branch ? `${b.repo_name} : ${b.branch}` : b.branch) || '';
+        if (f === 'board_name') return b.board_name || '';
         return b[f] || 0;
     });
 
@@ -1005,6 +1010,7 @@ function _renderBranchTable(branches) {
     let html = `<table class="cost-table">
         <thead><tr>
             ${_sortHeader('branch', 'branch', 'Branch', '', true)}
+            ${_sortHeader('branch', 'board_name', 'Team', '', true)}
             ${_sortHeader('branch', 'pr_number', 'PR', 'cost-col-right')}
             ${_sortHeader('branch', 'num_agents', 'Agents', 'cost-col-right')}
             ${_sortHeader('branch', 'input_tokens', 'Input', 'cost-col-right')}
@@ -1018,12 +1024,14 @@ function _renderBranchTable(branches) {
     const totalCost = branches.reduce((s, b) => s + (b.cost_usd || 0), 0) || 1;
 
     for (const b of sorted) {
-        const name = b.branch || '(unknown)';
+        const name = b.repo_name && b.branch ? `${b.repo_name} : ${b.branch}` : (b.branch || '(unknown)');
+        const teamHtml = b.board_name ? escapeHtml(b.board_name) : '—';
         const prCell = _formatPRLink(b.pr_number, b.remote_url);
         const pct = ((b.cost_usd / totalCost) * 100).toFixed(1);
         const barWidth = Math.max(2, (b.cost_usd / totalCost) * 100);
         html += `<tr>
             <td class="cost-agent-name">${escapeHtml(name)}</td>
+            <td class="cost-agent-team">${teamHtml}</td>
             <td class="cost-col-right">${prCell}</td>
             <td class="cost-col-right">${b.num_agents || 0}</td>
             <td class="cost-col-right">${_formatTokens(b.input_tokens || 0)}</td>

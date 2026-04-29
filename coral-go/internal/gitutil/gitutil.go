@@ -114,6 +114,34 @@ func GetDiffBase(ctx context.Context, workdir, mode string) string {
 	return "HEAD"
 }
 
+// ParseRepoName extracts a short "org/repo" name from a git remote URL.
+// Handles SSH (git@github.com:org/repo.git) and HTTPS (https://github.com/org/repo.git).
+// Returns "" if the URL is empty or unparseable.
+func ParseRepoName(remoteURL string) string {
+	if remoteURL == "" {
+		return ""
+	}
+	u := strings.TrimSuffix(remoteURL, ".git")
+
+	// SSH: git@github.com:org/repo
+	if strings.HasPrefix(u, "git@") {
+		parts := strings.SplitN(u, ":", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+	}
+
+	// HTTPS: https://github.com/org/repo (or any host)
+	if idx := strings.LastIndex(u, "://"); idx >= 0 {
+		path := u[idx+3:]
+		if slashIdx := strings.Index(path, "/"); slashIdx >= 0 {
+			return path[slashIdx+1:]
+		}
+	}
+
+	return ""
+}
+
 // ShowPrefix returns the path prefix of the workdir within the repo (e.g. "subdir/").
 // Returns "" if at the repo root or if git is not available.
 func ShowPrefix(ctx context.Context, workdir string) string {

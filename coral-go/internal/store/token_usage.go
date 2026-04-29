@@ -414,6 +414,8 @@ type BranchUsageSummary struct {
 	Branch           string  `db:"branch" json:"branch"`
 	PRNumber         int     `db:"pr_number" json:"pr_number,omitempty"`
 	RemoteURL        string  `db:"remote_url" json:"remote_url,omitempty"`
+	RepoName         string  `db:"-" json:"repo_name,omitempty"`
+	BoardName        string  `db:"board_name" json:"board_name"`
 	InputTokens      int64   `db:"input_tokens" json:"input_tokens"`
 	OutputTokens     int64   `db:"output_tokens" json:"output_tokens"`
 	CacheReadTokens  int64   `db:"cache_read_tokens" json:"cache_read_tokens"`
@@ -431,6 +433,7 @@ func (s *TokenUsageStore) GetUsageSummaryByBranch(ctx context.Context, since str
 	query := `SELECT gs.branch,
 	          COALESCE(MAX(gs.pr_number), 0) as pr_number,
 	          COALESCE(MAX(gs.remote_url), '') as remote_url,
+	          COALESCE(MAX(t.board_name), '') as board_name,
 	          COALESCE(SUM(t.input_tokens), 0) as input_tokens,
 	          COALESCE(SUM(t.output_tokens), 0) as output_tokens,
 	          COALESCE(SUM(t.cache_read_tokens), 0) as cache_read_tokens,
@@ -459,7 +462,7 @@ func (s *TokenUsageStore) GetUsageSummaryByBranch(ctx context.Context, since str
 		query += " AND gs.branch = ?"
 		args = append(args, branch)
 	}
-	query += ` GROUP BY gs.branch ORDER BY cost_usd DESC`
+	query += ` GROUP BY gs.branch, gs.remote_url, COALESCE(t.board_name, '') ORDER BY cost_usd DESC`
 	var summaries []BranchUsageSummary
 	err := s.db.SelectContext(ctx, &summaries, query, args...)
 	return summaries, err
