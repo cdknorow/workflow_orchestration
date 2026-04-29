@@ -13,9 +13,9 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.23"
           cache-dependency-path: coral-go/go.sum
@@ -53,7 +53,7 @@ jobs:
           tar czf "../coral-linux-amd64-${VERSION}.tar.gz" .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coral-linux-amd64
           path: dist/coral-linux-amd64-*.tar.gz
@@ -63,9 +63,9 @@ jobs:
     if: contains(github.ref_name, '-windows') || contains(github.ref_name, '-all')
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.23"
           cache-dependency-path: coral-go/go.sum
@@ -164,13 +164,13 @@ jobs:
         run: Remove-Item $env:CERT_PATH -ErrorAction SilentlyContinue
 
       - name: Upload MSI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coral-windows-msi
           path: ${{ env.MSI_PATH }}
 
       - name: Upload portable ZIP artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coral-windows-portable
           path: ${{ env.ZIP_PATH }}
@@ -179,9 +179,9 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.23"
           cache-dependency-path: coral-go/go.sum
@@ -353,7 +353,7 @@ jobs:
         run: security delete-keychain "$KEYCHAIN_PATH" || true
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coral-macos-dmg
           path: dist/${{ env.DMG_NAME }}
@@ -364,10 +364,10 @@ jobs:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -382,71 +382,3 @@ jobs:
           for f in artifacts/**/*; do
             [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber
           done
-
-  # ── Publish to public repo (prod tags only) ───────────────────
-  publish-public:
-    if: >-
-      always() && !failure() && !cancelled() &&
-      !contains(github.ref_name, '-dev') &&
-      !contains(github.ref_name, '-beta') &&
-      !contains(github.ref_name, '-forDropbox')
-    needs: [release]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download macOS DMG artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coral-macos-dmg
-          path: artifacts
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coral-linux-amd64
-          path: artifacts
-
-      - name: Publish to subgentic/coral-app
-        env:
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          echo "Publishing $TAG to subgentic/coral-app"
-
-          # Create the release on the public repo
-          gh release create "$TAG" \
-            --repo subgentic/coral-app \
-            --title "$TAG" \
-            --generate-notes \
-            || true
-
-          # Upload the versioned DMG and a stable Coral.dmg for releases/latest/download URLs
-          for f in artifacts/*.dmg; do
-            if [ -f "$f" ]; then
-              echo "Uploading $(basename "$f")..."
-              gh release upload "$TAG" "$f" \
-                --repo subgentic/coral-app \
-                --clobber
-              cp "$f" artifacts/Coral.dmg
-              echo "Uploading stable Coral.dmg..."
-              gh release upload "$TAG" artifacts/Coral.dmg \
-                --repo subgentic/coral-app \
-                --clobber
-            fi
-          done
-
-          # Upload the Linux tarball with a stable name for releases/latest/download URLs
-          for f in artifacts/coral-linux-amd64-*.tar.gz; do
-            if [ -f "$f" ]; then
-              cp "$f" artifacts/coral-linux-amd64.tar.gz
-              echo "Uploading coral-linux-amd64.tar.gz..."
-              gh release upload "$TAG" artifacts/coral-linux-amd64.tar.gz \
-                --repo subgentic/coral-app \
-                --clobber
-            fi
-          done
-
-          # Delete auto-generated source archives (we only distribute binaries)
-          gh release delete-asset "$TAG" "${TAG}.zip" --repo subgentic/coral-app --yes 2>/dev/null || true
-          gh release delete-asset "$TAG" "${TAG}.tar.gz" --repo subgentic/coral-app --yes 2>/dev/null || true
-
-          echo "Published $TAG to subgentic/coral-app"
