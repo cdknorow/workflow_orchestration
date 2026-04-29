@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>Multi-agent orchestration for AI coding tools.</strong>
+  <strong>Coral: Multi-agent orchestration for AI coding tools.</strong>
 </p>
 
 <p align="center">
