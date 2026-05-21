@@ -62,7 +62,10 @@ func TestListPanes_ParsesFormat(t *testing.T) {
 
 func TestNewClient_Defaults(t *testing.T) {
 	c := NewClient()
-	assert.Equal(t, "tmux", c.TmuxBin)
+	// TmuxBin is "tmux" when tmux is on PATH, or a resolved absolute path
+	// from commonTmuxPaths when it's not (e.g. Homebrew at /opt/homebrew/bin
+	// inside an app bundle). Both are valid defaults.
+	assert.Contains(t, append([]string{"tmux"}, commonTmuxPaths...), c.TmuxBin)
 }
 
 func TestFindPane_MatchesBySessionID(t *testing.T) {
